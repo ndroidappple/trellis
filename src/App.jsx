@@ -1,122 +1,135 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useEffect, useState } from 'react'
+import { supabase } from './lib/supabase'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setLoading(false)
+    })
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s)
+    })
+
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  if (loading) return <div className="shell"><p className="muted">Loading…</p></div>
+  if (!session) return <SignIn />
+  return <Connected session={session} />
+}
+
+function SignIn() {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState(null)
+  const [sending, setSending] = useState(false)
+
+  async function sendLink() {
+    if (!email.trim()) return
+    setSending(true)
+    setStatus(null)
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    })
+
+    setSending(false)
+    setStatus(
+      error
+        ? { kind: 'error', text: error.message }
+        : { kind: 'ok', text: 'Check your email for the sign-in link.' }
+    )
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+    <div className="shell">
+      <div className="card">
+        <h1>Trellis</h1>
+        <p className="muted">Sign in to see the week.</p>
+
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && sendLink()}
+        />
+
+        <button onClick={sendLink} disabled={sending}>
+          {sending ? 'Sending…' : 'Email me a link'}
         </button>
-      </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        {status && (
+          <p className={status.kind === 'error' ? 'error' : 'ok'}>{status.text}</p>
+        )}
+      </div>
+    </div>
   )
 }
 
-export default App
+function Connected({ session }) {
+  const [household, setHousehold] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    async function load() {
+      const { data: prof, error: profErr } = await supabase
+        .from('profiles')
+        .select('display_name, household_id')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (profErr) return setError(profErr.message)
+
+      if (!prof) {
+        return setError(
+          'Signed in, but this email is not a member of the household.'
+        )
+      }
+
+      setProfile(prof)
+
+      const { data: hh, error: hhErr } = await supabase
+        .from('household')
+        .select('name')
+        .maybeSingle()
+
+      if (hhErr) return setError(hhErr.message)
+      setHousehold(hh)
+    }
+
+    load()
+  }, [session])
+
+  return (
+    <div className="shell">
+      <div className="card">
+        <h1>{household?.name ?? 'Trellis'}</h1>
+
+        {error ? (
+          <p className="error">{error}</p>
+        ) : (
+          <>
+            <p className="ok">Connected to the database.</p>
+            <p className="muted">
+              Signed in as {profile?.display_name ?? session.user.email}
+            </p>
+          </>
+        )}
+
+        <button className="ghost" onClick={() => supabase.auth.signOut()}>
+          Sign out
+        </button>
+      </div>
+    </div>
+  )
+}

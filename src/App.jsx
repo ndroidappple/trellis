@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
+import WeekGrid from './components/WeekGrid'
 import './App.css'
 
 export default function App() {
@@ -12,16 +13,17 @@ export default function App() {
       setLoading(false)
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s)
-    })
-
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  if (loading) return <div className="shell"><p className="muted">Loading…</p></div>
+  if (loading) return <Shell><p className="muted">Loading…</p></Shell>
   if (!session) return <SignIn />
-  return <Connected session={session} />
+  return <Household session={session} />
+}
+
+function Shell({ children }) {
+  return <div className="shell">{children}</div>
 }
 
 function SignIn() {
@@ -48,11 +50,10 @@ function SignIn() {
   }
 
   return (
-    <div className="shell">
+    <Shell>
       <div className="card">
         <h1>Trellis</h1>
         <p className="muted">Sign in to see the week.</p>
-
         <input
           type="email"
           inputMode="email"
@@ -62,74 +63,63 @@ function SignIn() {
           onChange={(e) => setEmail(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendLink()}
         />
-
         <button onClick={sendLink} disabled={sending}>
           {sending ? 'Sending…' : 'Email me a link'}
         </button>
-
         {status && (
           <p className={status.kind === 'error' ? 'error' : 'ok'}>{status.text}</p>
         )}
       </div>
-    </div>
+    </Shell>
   )
 }
 
-function Connected({ session }) {
-  const [household, setHousehold] = useState(null)
+function Household({ session }) {
   const [profile, setProfile] = useState(null)
+  const [people, setPeople] = useState([])
   const [error, setError] = useState(null)
 
   useEffect(() => {
     async function load() {
-      const { data: prof, error: profErr } = await supabase
+      const { data: me, error: meErr } = await supabase
         .from('profiles')
-        .select('display_name, household_id')
+        .select('id, display_name, color, household_id')
         .eq('id', session.user.id)
         .maybeSingle()
 
-      if (profErr) return setError(profErr.message)
-
-      if (!prof) {
-        return setError(
-          'Signed in, but this email is not a member of the household.'
-        )
+      if (meErr) return setError(meErr.message)
+      if (!me) {
+        return setError('Signed in, but this email is not a member of the household.')
       }
 
-      setProfile(prof)
+      setProfile(me)
 
-      const { data: hh, error: hhErr } = await supabase
-        .from('household')
-        .select('name')
-        .maybeSingle()
+      // RLS already scopes this to the household, so no filter is needed here.
+      const { data: roster } = await supabase
+        .from('profiles')
+        .select('id, display_name, color')
 
-      if (hhErr) return setError(hhErr.message)
-      setHousehold(hh)
+      setPeople(roster ?? [])
     }
 
     load()
   }, [session])
 
-  return (
-    <div className="shell">
-      <div className="card">
-        <h1>{household?.name ?? 'Trellis'}</h1>
-
-        {error ? (
+  if (error) {
+    return (
+      <Shell>
+        <div className="card">
+          <h1>Trellis</h1>
           <p className="error">{error}</p>
-        ) : (
-          <>
-            <p className="ok">Connected to the database.</p>
-            <p className="muted">
-              Signed in as {profile?.display_name ?? session.user.email}
-            </p>
-          </>
-        )}
+          <button className="ghost" onClick={() => supabase.auth.signOut()}>
+            Sign out
+          </button>
+        </div>
+      </Shell>
+    )
+  }
 
-        <button className="ghost" onClick={() => supabase.auth.signOut()}>
-          Sign out
-        </button>
-      </div>
-    </div>
-  )
+  if (!profile) return <Shell><p className="muted">Loading…</p></Shell>
+
+  return <WeekGrid profile={profile} people={people} />
 }

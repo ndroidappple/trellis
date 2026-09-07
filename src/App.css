@@ -1,6 +1,7 @@
 :root {
   --bg: #12140f;
   --card: #1c1f18;
+  --line: #2c3128;
   --ink: #e8e6df;
   --muted: #8d9184;
   --accent: #6b8f71;
@@ -19,7 +20,22 @@ body {
   color: var(--ink);
   font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* The wall is a fixed frame. Nothing should rubber-band or pinch. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
+
+h1, h2 { color: var(--ink); margin: 0; font-weight: 600; }
+h1 { font-size: 30px; letter-spacing: -0.01em; }
+h2 { font-size: 21px; }
+p  { margin: 0; font-size: 17px; line-height: 1.5; }
+
+.muted { color: var(--muted); }
+.ok    { color: var(--accent); }
+.error { color: var(--error); }
+.banner { padding: 8px 20px; }
+
+/* ---------- Sign-in and dialogs ---------- */
 
 .shell {
   min-height: 100%;
@@ -38,39 +54,22 @@ body {
   gap: 16px;
 }
 
-h1 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 34px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-p { margin: 0; font-size: 17px; line-height: 1.5; }
-
-.muted { color: var(--muted); }
-.ok     { color: var(--accent); }
-.error  { color: var(--error); }
-
-input, button {
+input, button, select {
   font: inherit;
   font-size: 17px;
   border-radius: 10px;
-  /* 52px is a comfortable target from arm's length on a wall */
+  /* 52px is a comfortable target from arm's length on a wall. */
   min-height: 52px;
   padding: 0 16px;
 }
 
 input {
   background: #0d0f0b;
-  border: 1px solid #2c3128;
+  border: 1px solid var(--line);
   color: var(--ink);
 }
 
-input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 button {
   background: var(--accent);
@@ -84,7 +83,133 @@ button:disabled { opacity: 0.5; }
 
 button.ghost {
   background: transparent;
-  border: 1px solid #2c3128;
+  border: 1px solid var(--line);
   color: var(--muted);
   font-weight: 400;
 }
+
+button.danger { color: var(--error); border-color: var(--error); }
+
+/* ---------- Week grid ---------- */
+
+.week {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 24px;
+  gap: 16px;
+}
+
+.week-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav { display: flex; gap: 8px; }
+.nav button { min-width: 52px; padding: 0 18px; }
+
+.grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.day {
+  background: var(--card);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid transparent;
+}
+
+.day.today { border-color: var(--accent); }
+
+.day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+}
+
+.dow { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
+.dom { font-size: 22px; font-weight: 600; }
+.today .dow, .today .dom { color: var(--accent); }
+
+.day-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.event {
+  background: #0d0f0b;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--muted);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 400;
+  text-align: left;
+  min-height: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-time { color: var(--muted); font-size: 13px; }
+.event-title { line-height: 1.3; }
+
+/* Google Calendar events land here later: visible, not editable. */
+.event.locked { opacity: 0.72; cursor: default; }
+
+.add {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  font-size: 22px;
+  min-height: 44px;
+  opacity: 0.45;
+}
+
+.day:hover .add { opacity: 1; }
+
+/* ---------- Dialog ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 10;
+}
+
+.dialog { gap: 14px; }
+
+.row { display: flex; align-items: center; gap: 10px; font-size: 17px; }
+.row input[type='checkbox'] { min-height: 0; width: 22px; height: 22px; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.chip {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 400;
+  min-height: 44px;
+}
+
+.chip.on { background: var(--card); color: var(--ink); }
+
+.actions { display: flex; gap: 10px; }
+.actions button { flex: 1; }

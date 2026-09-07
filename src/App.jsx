@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import WeekGrid from './components/WeekGrid'
+import Wall from './components/Wall'
 import './App.css'
 
 export default function App() {
@@ -121,5 +121,5 @@ function Household({ session }) {
 
   if (!profile) return <Shell><p className="muted">Loading…</p></Shell>
 
-  return <WeekGrid profile={profile} people={people} />
+  return <Wall profile={profile} people={people} />
 }

@@ -90,13 +90,55 @@ button.ghost {
 
 button.danger { color: var(--error); border-color: var(--error); }
 
-/* ---------- Week grid ---------- */
+/* ---------- Wall layout ---------- */
 
-.week {
+.wall {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 20px 24px 24px;
+}
+
+.dock {
+  display: flex;
+  gap: 10px;
+  padding: 0 24px 20px;
+  flex-shrink: 0;
+}
+
+.dock-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--ink);
+  font-weight: 400;
+  min-height: 78px;
+  min-width: 168px;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+}
+
+.dock-label {
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dock-value { font-size: 26px; font-weight: 600; }
+.dock-of { color: var(--muted); font-size: 18px; font-weight: 400; }
+
+/* ---------- Week grid ---------- */
+
+.week {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 16px;
   gap: 16px;
 }
 
@@ -213,3 +255,77 @@ button.danger { color: var(--error); border-color: var(--error); }
 
 .actions { display: flex; gap: 10px; }
 .actions button { flex: 1; }
+
+/* ---------- Chores panel ---------- */
+
+.panel { width: min(620px, 100%); gap: 16px; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chore-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.chore {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0d0f0b;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.chore.done .chore-title { color: var(--muted); text-decoration: line-through; }
+
+.chore-title { flex: 1; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+
+.tag {
+  color: var(--muted);
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.check {
+  background: transparent;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 18px;
+  min-height: 44px;
+  width: 44px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.chore.done .check { border-color: var(--accent); }
+
+.who {
+  background: transparent;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 40px;
+  width: 40px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+button.small { min-height: 40px; width: 40px; padding: 0; font-size: 15px; }
+
+.add-row { display: flex; gap: 8px; }
+.add-row input { flex: 1; }

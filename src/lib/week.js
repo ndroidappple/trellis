@@ -1,4 +1,4 @@
-// Date helpers for a Monday-start week.
+// Date helpers for a Sunday-start week.
 //
 // No date library on purpose. This runs on a 2018 iPad and the whole job is a
 // few dozen lines. Everything here works in the device's local timezone, which
@@ -10,12 +10,10 @@ export function startOfDay(date) {
   return d
 }
 
-/** The Monday on or before the given date. */
+/** The Sunday on or before the given date. */
 export function startOfWeek(date) {
   const d = startOfDay(date)
-  const day = d.getDay() // 0 = Sunday
-  const shift = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + shift)
+  d.setDate(d.getDate() - d.getDay())
   return d
 }
 
@@ -39,26 +37,25 @@ export function isToday(date) {
 
 /** The seven Date objects for the week containing `date`. */
 export function weekDays(date) {
-  const monday = startOfWeek(date)
-  return Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+  const sunday = startOfWeek(date)
+  return Array.from({ length: 7 }, (_, i) => addDays(sunday, i))
 }
 
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export function dayName(date) {
-  const i = date.getDay()
-  return DAY_NAMES[i === 0 ? 6 : i - 1]
+  return DAY_NAMES[date.getDay()]
 }
 
 /** "March 3 – 9" or "March 30 – April 5" */
 export function weekLabel(date) {
-  const monday = startOfWeek(date)
-  const sunday = addDays(monday, 6)
+  const sunday = startOfWeek(date)
+  const saturday = addDays(sunday, 6)
   const month = (d) => d.toLocaleDateString(undefined, { month: 'long' })
 
-  return month(monday) === month(sunday)
-    ? `${month(monday)} ${monday.getDate()} – ${sunday.getDate()}`
-    : `${month(monday)} ${monday.getDate()} – ${month(sunday)} ${sunday.getDate()}`
+  return month(sunday) === month(saturday)
+    ? `${month(sunday)} ${sunday.getDate()} – ${saturday.getDate()}`
+    : `${month(sunday)} ${sunday.getDate()} – ${month(saturday)} ${saturday.getDate()}`
 }
 
 /** "7:30 PM", or "7 PM" when it's on the hour. */

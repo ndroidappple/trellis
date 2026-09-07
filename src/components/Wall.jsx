@@ -1,10 +1,11 @@
 import WeekGrid from './WeekGrid'
 import ChoresCard from './ChoresCard'
+import ListCard from './ListCard'
+import MealsCard from './MealsCard'
 
 /**
  * The wall layout: week grid on top, a dock of collapsed cards along the
- * bottom. Lists and meals join the dock in later slices, and the section
- * toggles will decide which of them render here.
+ * bottom. Section toggles come next and will decide which of these render.
  */
 export default function Wall({ profile, people }) {
   return (
@@ -13,6 +14,9 @@ export default function Wall({ profile, people }) {
 
       <div className="dock">
         <ChoresCard profile={profile} people={people} />
+        <ListCard kind="shopping" label="Shopping" profile={profile} />
+        <ListCard kind="todo" label="To-do" profile={profile} />
+        <MealsCard profile={profile} />
       </div>
     </div>
   )

@@ -1,0 +1,86 @@
+.board {
+  height: 100vh;
+  height: 100dvh;
+  background: var(--plaster);
+  color: var(--ink);
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px 24px;
+  gap: 16px;
+
+  /* Kiosk: nothing on the wall should rubber-band or select. */
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.board__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 52px;
+}
+
+/* Deliberately quiet — you already know what week it is. */
+.board__range {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.board__header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.board__sync {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.board__sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--person-a);
+}
+
+.board__step {
+  font: inherit;
+  font-size: 20px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  cursor: pointer;
+}
+
+.board__step:focus-visible {
+  outline: 3px solid var(--person-a);
+  outline-offset: 2px;
+}
+
+.board__week {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

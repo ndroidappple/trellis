@@ -1,0 +1,18 @@
+.person-badge {
+  width: var(--badge);
+  height: var(--badge);
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--person-ink);
+  background: var(--person-shared);
+}
+
+.person-badge--a { background: var(--person-a); }
+.person-badge--b { background: var(--person-b); }
+.person-badge--shared { background: var(--person-shared); }

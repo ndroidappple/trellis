@@ -1,0 +1,137 @@
+.week-grid {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-slat);
+  min-height: 0;
+}
+
+.day-row {
+  flex: 1 1 0;
+  background: var(--slat-face);
+  border-radius: var(--radius-slat);
+  border-left: 8px solid var(--rule);
+  display: flex;
+  align-items: stretch;
+  padding: 10px 14px 10px 0;
+
+  /* Both matter: without them a heavy day blows the grid out past the
+     screen instead of collapsing to "+N more". */
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Today takes a bit over twice an ordinary row's share, at every level.
+   Keep this in sync with WEIGHTED_ROWS in useDetailLevel.ts. */
+.day-row--today {
+  flex: 2.4 1 0;
+  background: var(--today-face);
+  border-left: 14px solid var(--ink);
+  box-shadow: 0 1px 0 var(--rule);
+  padding-top: 14px;
+}
+
+.day-row__rail {
+  width: 124px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0 0 18px;
+}
+
+.day-row--today .day-row__rail {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding-left: 14px;
+}
+
+.day-row__dom {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: var(--size-dom);
+  line-height: 1;
+  color: var(--ink-soft);
+}
+
+.day-row__dow {
+  font-size: 17px;
+  color: var(--ink-soft);
+}
+
+.day-row--today .day-row__dom { font-size: var(--size-dom-today); color: var(--ink); }
+.day-row--today .day-row__dow { font-size: 20px; color: var(--ink); }
+
+[data-detail='open'] .day-row--today .day-row__dom {
+  font-size: var(--size-dom-today-open);
+}
+
+.day-row__badge {
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.day-row__events {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--gap-chip);
+  min-width: 0;
+}
+
+.day-row__more {
+  align-self: center;
+  font-size: 19px;
+  color: var(--ink-soft);
+  padding: 0 6px;
+}
+
+.day-row__invite {
+  align-self: center;
+  font-size: 19px;
+  color: var(--ink-faint);
+}
+
+.day-row__add {
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px dashed var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.day-row__add:focus-visible {
+  outline: 3px solid var(--person-a);
+  outline-offset: 2px;
+}
+
+.day-row__add-meal {
+  align-self: center;
+  border-radius: 999px;
+  border: 1px dashed var(--meal-rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 15px;
+  padding: 8px 14px;
+  min-height: 40px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.day-row__add-meal:focus-visible {
+  outline: 3px solid var(--person-a);
+  outline-offset: 2px;
+}

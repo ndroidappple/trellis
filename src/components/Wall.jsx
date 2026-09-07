@@ -1,22 +1,733 @@
-import WeekGrid from './WeekGrid'
-import ChoresCard from './ChoresCard'
-import ListCard from './ListCard'
-import MealsCard from './MealsCard'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import {
+  addDays,
+  dayName,
+  isSameDay,
+  isToday,
+  startOfWeek,
+  timeLabel,
+  toDateInputValue,
+  toInputValue,
+  weekDays,
+} from '../lib/week'
+import { formatCents, weekCost } from '../lib/cost'
+import { Board } from './Board'
+import { ChecklistRow } from './ChecklistRow'
+
+const MEAL_PLAN_QUERY = `
+  id, on_date, slot, is_leftover,
+  recipe:recipes (
+    id, title, cost_confidence,
+    ingredients:recipe_ingredients (
+      purchase_qty, manual_cost_cents,
+      product:products ( id, name, pre_tax_cents, tax_rate_bps )
+    )
+  )
+`
 
 /**
- * The wall layout: week grid on top, a dock of collapsed cards along the
- * bottom. Section toggles come next and will decide which of these render.
+ * The board layout. Chores and shopping get full panels; meals show up as
+ * chips in the week itself (kind: 'meal') plus a grocery total in the
+ * shopping panel's cart footer — this design has no dedicated meals section
+ * or recipe picker, so meal planning stays read-only here for now.
  */
 export default function Wall({ profile, people }) {
-  return (
-    <div className="wall">
-      <WeekGrid profile={profile} people={people} />
+  const [anchor, setAnchor] = useState(() => startOfWeek(new Date()))
+  const [events, setEvents] = useState([])
+  const [chores, setChores] = useState([])
+  const [shoppingItems, setShoppingItems] = useState([])
+  const [mealPlan, setMealPlan] = useState([])
+  const [recipes, setRecipes] = useState([])
+  const [staples, setStaples] = useState([])
+  const [budget, setBudget] = useState(12000)
+  const [editing, setEditing] = useState(null)
+  const [mealEditing, setMealEditing] = useState(null) // an on_date string, or null
+  const [error, setError] = useState(null)
 
-      <div className="dock">
-        <ChoresCard profile={profile} people={people} />
-        <ListCard kind="shopping" label="Shopping" profile={profile} />
-        <ListCard kind="todo" label="To-do" profile={profile} />
-        <MealsCard profile={profile} />
+  // 'a' and 'b' are positional, not personal — see tokens.css. Ordering by
+  // id keeps the assignment stable across reloads for a two-person household.
+  const orderedPeople = useMemo(
+    () => [...people].sort((x, y) => x.id.localeCompare(y.id)),
+    [people]
+  )
+
+  const personFor = useCallback(
+    (ownerId) => {
+      if (!ownerId) return 'shared'
+      const idx = orderedPeople.findIndex((p) => p.id === ownerId)
+      return idx === 0 ? 'a' : idx === 1 ? 'b' : 'shared'
+    },
+    [orderedPeople]
+  )
+
+  const initialsForPerson = useCallback(
+    (letter) => {
+      const a = orderedPeople[0]?.display_name?.slice(0, 1)?.toUpperCase() ?? 'A'
+      const b = orderedPeople[1]?.display_name?.slice(0, 1)?.toUpperCase() ?? 'B'
+      if (letter === 'a') return a
+      if (letter === 'b') return b
+      return `${a}${b}`
+    },
+    [orderedPeople]
+  )
+
+  // ---------------------------------------------------------------- events
+
+  const loadEvents = useCallback(async () => {
+    const from = startOfWeek(anchor)
+    const to = addDays(from, 7)
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .gte('starts_at', from.toISOString())
+      .lt('starts_at', to.toISOString())
+      .order('starts_at', { ascending: true })
+
+    if (error) setError(error.message)
+    else {
+      setEvents(data ?? [])
+      setError(null)
+    }
+  }, [anchor])
+
+  useEffect(() => {
+    loadEvents()
+  }, [loadEvents])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('events-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => loadEvents())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [loadEvents])
+
+  // ---------------------------------------------------------------- chores
+
+  const weekStart = startOfWeek(new Date())
+
+  function choreIsDone(chore) {
+    if (!chore.completed_at) return false
+    if (chore.recurrence === 'once') return true
+    return new Date(chore.completed_at) >= weekStart
+  }
+
+  const loadChores = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('chores')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (error) setError(error.message)
+    else {
+      setChores(data ?? [])
+      setError(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadChores()
+  }, [loadChores])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('chores-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chores' }, () => loadChores())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [loadChores])
+
+  async function toggleChore(chore) {
+    const next = choreIsDone(chore) ? null : new Date().toISOString()
+    setChores((cs) => cs.map((c) => (c.id === chore.id ? { ...c, completed_at: next } : c)))
+    const { error } = await supabase.from('chores').update({ completed_at: next }).eq('id', chore.id)
+    if (error) {
+      setError(error.message)
+      loadChores()
+    }
+  }
+
+  async function addChore(title) {
+    const { error } = await supabase.from('chores').insert({
+      household_id: profile.household_id,
+      title,
+      recurrence: 'weekly',
+      sort_order: chores.length,
+    })
+    if (error) setError(error.message)
+    else loadChores()
+  }
+
+  async function removeChore(chore) {
+    setChores((cs) => cs.filter((c) => c.id !== chore.id))
+    await supabase.from('chores').delete().eq('id', chore.id)
+  }
+
+  // -------------------------------------------------------------- shopping
+
+  const loadShopping = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('list_items')
+      .select('*')
+      .eq('list', 'shopping')
+      .order('created_at', { ascending: true })
+
+    if (error) setError(error.message)
+    else {
+      setShoppingItems(data ?? [])
+      setError(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadShopping()
+  }, [loadShopping])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('list-shopping-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'list_items' }, () => loadShopping())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [loadShopping])
+
+  async function toggleShopping(item) {
+    const next = !item.checked
+    setShoppingItems((xs) => xs.map((x) => (x.id === item.id ? { ...x, checked: next } : x)))
+    const { error } = await supabase.from('list_items').update({ checked: next }).eq('id', item.id)
+    if (error) {
+      setError(error.message)
+      loadShopping()
+    }
+  }
+
+  async function addShopping(body) {
+    const { error } = await supabase.from('list_items').insert({
+      household_id: profile.household_id,
+      list: 'shopping',
+      body,
+      added_by: profile.id,
+    })
+    if (error) setError(error.message)
+    else loadShopping()
+  }
+
+  async function removeShopping(item) {
+    setShoppingItems((xs) => xs.filter((x) => x.id !== item.id))
+    await supabase.from('list_items').delete().eq('id', item.id)
+  }
+
+  // ------------------------------------------------------------------ meals
+
+  const loadMeals = useCallback(async () => {
+    const from = toDateInputValue(startOfWeek(anchor))
+    const to = toDateInputValue(addDays(startOfWeek(anchor), 7))
+
+    const [planRes, recipeRes, stapleRes, hhRes] = await Promise.all([
+      supabase.from('meal_plan').select(MEAL_PLAN_QUERY).gte('on_date', from).lt('on_date', to),
+      supabase
+        .from('recipes')
+        .select('id, title, servings_min, servings_max, cook_minutes, effort, status')
+        .neq('status', 'retired')
+        .order('title'),
+      supabase
+        .from('staples')
+        .select('weekly_qty, included, manual_unit_cents, product:products ( pre_tax_cents, tax_rate_bps )'),
+      supabase.from('household').select('weekly_budget_cents').maybeSingle(),
+    ])
+
+    const firstError = planRes.error || recipeRes.error || stapleRes.error || hhRes.error
+    if (firstError) return setError(firstError.message)
+
+    setError(null)
+    setMealPlan(planRes.data ?? [])
+    setRecipes(recipeRes.data ?? [])
+    setStaples(stapleRes.data ?? [])
+    if (hhRes.data) setBudget(hhRes.data.weekly_budget_cents)
+  }, [anchor])
+
+  useEffect(() => {
+    loadMeals()
+  }, [loadMeals])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('meal-plan-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meal_plan' }, () => loadMeals())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [loadMeals])
+
+  const cost = useMemo(() => weekCost(mealPlan, staples), [mealPlan, staples])
+
+  const mealEntryFor = useCallback(
+    (date) => mealPlan.find((p) => p.on_date === date && p.slot === 'dinner'),
+    [mealPlan]
+  )
+
+  async function pickMeal(date, recipeId) {
+    const payload = {
+      household_id: profile.household_id,
+      on_date: date,
+      slot: 'dinner',
+      recipe_id: recipeId,
+      is_leftover: false,
+    }
+    const { error } = await supabase.from('meal_plan').upsert(payload, { onConflict: 'household_id,on_date,slot' })
+    if (error) setError(error.message)
+    else loadMeals()
+  }
+
+  async function toggleMealLeftover(entry) {
+    const { error } = await supabase.from('meal_plan').update({ is_leftover: !entry.is_leftover }).eq('id', entry.id)
+    if (error) setError(error.message)
+    else loadMeals()
+  }
+
+  async function clearMeal(entry) {
+    await supabase.from('meal_plan').delete().eq('id', entry.id)
+    loadMeals()
+    setMealEditing(null)
+  }
+
+  // ------------------------------------------------------------ board data
+
+  const days = useMemo(
+    () =>
+      weekDays(anchor).map((d) => {
+        const iso = toDateInputValue(d)
+
+        const dayEvents = events
+          .filter((e) => isSameDay(new Date(e.starts_at), d))
+          .map((e) => ({
+            id: e.id,
+            title: e.title,
+            meta: e.all_day ? undefined : timeLabel(new Date(e.starts_at)),
+            person: personFor(e.owner_id),
+            kind: 'event',
+          }))
+
+        const meal = mealPlan.find((p) => p.on_date === iso && p.slot === 'dinner')
+        if (meal?.recipe) {
+          dayEvents.push({
+            id: `meal:${meal.id}`,
+            title: meal.recipe.title,
+            meta: meal.is_leftover ? 'Leftovers' : 'Cooking tonight',
+            kind: 'meal',
+          })
+        }
+
+        return {
+          date: iso,
+          dayOfMonth: d.getDate(),
+          dayOfWeek: d.toLocaleDateString(undefined, { weekday: 'long' }),
+          shortDayOfWeek: dayName(d),
+          isToday: isToday(d),
+          events: dayEvents,
+        }
+      }),
+    [anchor, events, mealPlan, personFor]
+  )
+
+  function rangeLabel() {
+    const sunday = startOfWeek(anchor)
+    const saturday = addDays(sunday, 6)
+    const month = (d) => d.toLocaleDateString(undefined, { month: 'long' })
+    const start = `Sunday, ${month(sunday)} ${sunday.getDate()}`
+    const end =
+      month(sunday) === month(saturday)
+        ? `Saturday, ${saturday.getDate()}`
+        : `Saturday, ${month(saturday)} ${saturday.getDate()}`
+    return `${start} – ${end}`
+  }
+
+  function handleEventPress(id) {
+    if (id.startsWith('meal:')) {
+      const planId = id.slice('meal:'.length)
+      const entry = mealPlan.find((p) => p.id === planId)
+      if (entry) setMealEditing(entry.on_date)
+      return
+    }
+    const ev = events.find((e) => e.id === id)
+    if (ev) setEditing(ev)
+  }
+
+  function handleAddDay(dateIso) {
+    setEditing({ _day: new Date(`${dateIso}T00:00`), owner_id: profile.id })
+  }
+
+  function handleAddMeal(dateIso) {
+    setMealEditing(dateIso)
+  }
+
+  const choresDone = chores.filter(choreIsDone).length
+  const shoppingRemaining = shoppingItems.filter((i) => !i.checked).length
+
+  const choresFull = (
+    <div className="panel-rows">
+      {chores.length === 0 && <p className="muted">Nothing yet.</p>}
+      {chores.map((c) => (
+        <div key={c.id} className="panel-row">
+          <ChecklistRow
+            id={c.id}
+            label={c.title}
+            when={c.recurrence === 'once' ? 'One-off' : undefined}
+            done={choreIsDone(c)}
+            person={c.assignee_id ? personFor(c.assignee_id) : undefined}
+            initials={c.assignee_id ? initialsForPerson(personFor(c.assignee_id)) : undefined}
+            onToggle={() => toggleChore(c)}
+          />
+          <button className="panel-row__remove" onClick={() => removeChore(c)} aria-label={`Remove ${c.title}`}>
+            ×
+          </button>
+        </div>
+      ))}
+      <AddRow placeholder="Add a chore" onAdd={addChore} />
+    </div>
+  )
+
+  const choresCompact = (
+    <div className="panel-strip">
+      {chores
+        .filter((c) => !choreIsDone(c))
+        .slice(0, 4)
+        .map((c) => (
+          <span key={c.id} className="panel-chip">
+            {c.title}
+          </span>
+        ))}
+      {chores.length > 0 && choresDone === chores.length && <span className="muted">All done</span>}
+    </div>
+  )
+
+  const shoppingFull = (
+    <>
+      <div className="panel-list">
+        {shoppingItems.length === 0 && <p className="muted">Empty.</p>}
+        {shoppingItems.map((i) => (
+          <div key={i.id} className="panel-row">
+            <ChecklistRow
+              id={i.id}
+              label={i.body}
+              done={i.checked}
+              density="item"
+              onToggle={() => toggleShopping(i)}
+            />
+            <button
+              className="panel-row__remove"
+              onClick={() => removeShopping(i)}
+              aria-label={`Remove ${i.body}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      <AddRow placeholder="Add to shopping list" onAdd={addShopping} />
+      <div className="panel-cart">
+        <span className="panel-cart__label">Groceries this week</span>
+        <span className="panel-cart__figure">
+          {formatCents(cost.totalCents)}
+          <span className="of"> / {formatCents(budget)}</span>
+        </span>
+      </div>
+    </>
+  )
+
+  const shoppingCompact = (
+    <div className="panel-strip">
+      <span className="panel-chip">{shoppingRemaining} to buy</span>
+      <span className="panel-chip">{formatCents(cost.totalCents)} groceries</span>
+    </div>
+  )
+
+  return (
+    <>
+      {error && <p className="error banner">{error}</p>}
+
+      <Board
+        rangeLabel={rangeLabel()}
+        syncLabel="Live"
+        days={days}
+        settings={{ chores: 'full', shopping: 'full' }}
+        chores={choresFull}
+        choresCompact={choresCompact}
+        choresCount={`${choresDone} of ${chores.length} done`}
+        shopping={shoppingFull}
+        shoppingCompact={shoppingCompact}
+        shoppingCount={`${shoppingRemaining} to buy`}
+        onPrevWeek={() => setAnchor(addDays(anchor, -7))}
+        onNextWeek={() => setAnchor(addDays(anchor, 7))}
+        onEventPress={handleEventPress}
+        onAddDay={handleAddDay}
+        onAddMeal={handleAddMeal}
+      />
+
+      {editing && (
+        <EventEditor
+          initial={editing}
+          profile={profile}
+          people={orderedPeople}
+          personFor={personFor}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            loadEvents()
+          }}
+        />
+      )}
+
+      {mealEditing && (
+        <MealEditor
+          date={mealEditing}
+          entry={mealEntryFor(mealEditing)}
+          recipes={recipes}
+          onPick={(recipeId) => pickMeal(mealEditing, recipeId)}
+          onToggleLeftover={() => toggleMealLeftover(mealEntryFor(mealEditing))}
+          onClear={() => clearMeal(mealEntryFor(mealEditing))}
+          onClose={() => setMealEditing(null)}
+        />
+      )}
+    </>
+  )
+}
+
+function AddRow({ placeholder, onAdd }) {
+  const [value, setValue] = useState('')
+
+  function submit() {
+    if (!value.trim()) return
+    onAdd(value.trim())
+    setValue('')
+  }
+
+  return (
+    <div className="panel-add">
+      <input
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && submit()}
+      />
+      <button className="ghost" onClick={submit}>
+        Add
+      </button>
+    </div>
+  )
+}
+
+function EventEditor({ initial, profile, people, personFor, onClose, onSaved }) {
+  const isNew = !initial.id
+  const base = initial._day ?? new Date(initial.starts_at)
+
+  const [title, setTitle] = useState(initial.title ?? '')
+  const [allDay, setAllDay] = useState(initial.all_day ?? false)
+  const [when, setWhen] = useState(() => {
+    if (initial.all_day) return toDateInputValue(base)
+    if (isNew) {
+      const d = new Date(base)
+      d.setHours(18, 0, 0, 0)
+      return toInputValue(d)
+    }
+    return toInputValue(new Date(initial.starts_at))
+  })
+  const [ownerId, setOwnerId] = useState(initial.owner_id ?? profile.id)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  function toggleAllDay(next) {
+    setAllDay(next)
+    const current = when.includes('T') ? new Date(when) : new Date(`${when}T18:00`)
+    setWhen(next ? toDateInputValue(current) : toInputValue(current))
+  }
+
+  async function save() {
+    if (!title.trim()) return setError('Give it a title.')
+    setBusy(true)
+    setError(null)
+
+    const startsAt = allDay ? new Date(`${when}T00:00`) : new Date(when)
+
+    const payload = {
+      household_id: profile.household_id,
+      title: title.trim(),
+      starts_at: startsAt.toISOString(),
+      all_day: allDay,
+      owner_id: ownerId,
+    }
+
+    const { error } = isNew
+      ? await supabase.from('events').insert(payload)
+      : await supabase.from('events').update(payload).eq('id', initial.id)
+
+    setBusy(false)
+    if (error) setError(error.message)
+    else onSaved()
+  }
+
+  async function remove() {
+    setBusy(true)
+    const { error } = await supabase.from('events').delete().eq('id', initial.id)
+    setBusy(false)
+    if (error) setError(error.message)
+    else onSaved()
+  }
+
+  function colorFor(personId) {
+    const letter = personFor(personId)
+    if (letter === 'a') return 'var(--person-a)'
+    if (letter === 'b') return 'var(--person-b)'
+    return 'var(--person-shared)'
+  }
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
+        <h2>{isNew ? 'New event' : 'Edit event'}</h2>
+
+        <input
+          autoFocus
+          placeholder="What is it?"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && save()}
+        />
+
+        <input type={allDay ? 'date' : 'datetime-local'} value={when} onChange={(e) => setWhen(e.target.value)} />
+
+        <label className="row">
+          <input type="checkbox" checked={allDay} onChange={(e) => toggleAllDay(e.target.checked)} />
+          <span>All day</span>
+        </label>
+
+        <div className="chips">
+          {people.map((p) => (
+            <button
+              key={p.id}
+              className={p.id === ownerId ? 'chip on' : 'chip'}
+              style={{ borderColor: colorFor(p.id) }}
+              onClick={() => setOwnerId(p.id)}
+            >
+              {p.display_name}
+            </button>
+          ))}
+        </div>
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="actions">
+          <button onClick={save} disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+          {!isNew && (
+            <button className="ghost danger" onClick={remove} disabled={busy}>
+              Delete
+            </button>
+          )}
+          <button className="ghost" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function dayLabel(dateIso) {
+  const d = new Date(`${dateIso}T00:00`)
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+}
+
+/**
+ * Scoped to one day's dinner, matching how EventEditor is scoped to one
+ * event — rather than the old whole-week "This week" panel. Opens straight
+ * into the recipe search when there's no meal yet; drops into a summary
+ * view (leftovers toggle, change, clear) once one is picked.
+ */
+function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, onClose }) {
+  const [picking, setPicking] = useState(!entry?.recipe)
+  const [q, setQ] = useState('')
+
+  useEffect(() => {
+    if (entry?.recipe) setPicking(false)
+  }, [entry])
+
+  if (picking) {
+    const shown = recipes.filter((r) => r.title.toLowerCase().includes(q.trim().toLowerCase()))
+
+    return (
+      <div className="scrim" onClick={onClose}>
+        <div className="card dialog" onClick={(e) => e.stopPropagation()}>
+          <h2>Pick a meal</h2>
+          <p className="muted">{dayLabel(date)}</p>
+
+          <input
+            autoFocus
+            placeholder="Search recipes"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+
+          <div className="list-scroll">
+            {shown.map((r) => (
+              <button key={r.id} className="list-button" onClick={() => onPick(r.id)}>
+                <span>{r.title}</span>
+                <span className="muted meta">
+                  {r.servings_min
+                    ? `${r.servings_min}${r.servings_max && r.servings_max !== r.servings_min ? `-${r.servings_max}` : ''} servings`
+                    : ''}
+                  {r.cook_minutes ? ` · ${r.cook_minutes} min` : ''}
+                  {r.status === 'conditional' ? ' · conditional' : ''}
+                </span>
+              </button>
+            ))}
+            {shown.length === 0 && <p className="muted">Nothing matches.</p>}
+          </div>
+
+          <div className="actions">
+            {entry?.recipe && (
+              <button className="ghost" onClick={() => setPicking(false)}>
+                Back
+              </button>
+            )}
+            <button className="ghost" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
+        <h2>{dayLabel(date)}</h2>
+        <p>
+          {entry.recipe.title}
+          {entry.recipe.cost_confidence === 'unknown' && <span className="tag"> unpriced</span>}
+        </p>
+
+        <div className="chips">
+          <button className={entry.is_leftover ? 'chip' : 'chip on'} onClick={onToggleLeftover}>
+            Cook
+          </button>
+          <button className={entry.is_leftover ? 'chip on' : 'chip'} onClick={onToggleLeftover}>
+            Leftovers
+          </button>
+        </div>
+
+        <div className="actions">
+          <button onClick={() => setPicking(true)}>Change meal</button>
+          <button className="ghost danger" onClick={onClear}>
+            Clear
+          </button>
+          <button className="ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -1,0 +1,70 @@
+/*
+ * Trellis design tokens.
+ * Import once, at the top of main.tsx, before any component CSS.
+ *
+ * Fonts are self-hosted so a cold boot after a router restart doesn't render
+ * in Times for four seconds. Install and import alongside this file:
+ *   npm i @fontsource-variable/fraunces @fontsource/figtree
+ *   import '@fontsource-variable/fraunces';
+ *   import '@fontsource/figtree/400.css';
+ *   import '@fontsource/figtree/500.css';
+ *   import '@fontsource/figtree/600.css';
+ */
+
+:root {
+  /* --- surfaces --- */
+  --plaster: #DCDCCC;      /* the wall behind everything */
+  --slat-face: #E7E7D9;    /* day rows, panels */
+  --today-face: #F3F1E2;   /* today's row only */
+  --rule: #C4C4B0;         /* hairlines, borders, unchecked boxes */
+
+  /* --- ink --- */
+  --ink: #2E2B23;
+  --ink-soft: #55513F;     /* ~6:1 on --slat-face; safe for small text */
+  --ink-faint: #8A866F;    /* decorative only, never load-bearing text */
+
+  /* --- people ---
+   * Deliberately positional, not named. Who is A and who is B is data,
+   * not CSS, so re-assigning them later touches one row in Supabase
+   * rather than fifty selectors.
+   */
+  --person-a: #3F7A5E;
+  --person-b: #9C5F3E;
+  --person-shared: #6B6450;
+  --person-ink: #F6F5EC;   /* text on top of any person colour */
+
+  /* --- meals read as a material, not as a person --- */
+  --meal-tint: rgba(63, 122, 94, 0.10);
+  --meal-rule: rgba(63, 122, 94, 0.28);
+
+  /* Not part of the board itself — used by sign-in and error states. */
+  --error: #B5453A;
+
+  --chip-face: rgba(255, 255, 255, 0.62);
+  --row-face: rgba(255, 255, 255, 0.50);
+
+  /* --- type --- */
+  --font-display: 'Fraunces Variable', Fraunces, Georgia, serif;
+  --font-text: Figtree, system-ui, sans-serif;
+
+  /* Wall sizes. These assume a 12.9" iPad in portrait, read from across a
+   * kitchen. Nothing here should shrink without testing at that distance. */
+  --size-event: 23px;
+  --size-event-mid: 24px;
+  --size-event-open: 26px;
+  --size-meta: 17px;
+  --size-detail: 16px;
+  --size-dom: 30px;
+  --size-dom-today: 62px;
+  --size-dom-today-open: 78px;
+  --size-panel-title: 26px;
+  --size-row: 22px;
+
+  /* --- geometry --- */
+  --tap-min: 52px;         /* nothing tappable goes below this */
+  --badge: 30px;
+  --gap-slat: 7px;
+  --gap-chip: 8px;
+  --radius-slat: 4px 8px 8px 4px;
+  --radius-panel: 10px;
+}

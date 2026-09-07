@@ -1,51 +1,39 @@
-:root {
-  --bg: #12140f;
-  --card: #1c1f18;
-  --line: #2c3128;
-  --ink: #e8e6df;
-  --muted: #8d9184;
-  --accent: #6b8f71;
-  --error: #c98a7a;
-}
-
-* { box-sizing: border-box; }
-
-html, body, #root {
-  height: 100%;
-  margin: 0;
-}
+/* Sign-in, the household error screen, and the event editor still use this
+   base set. The week/dock/panel visuals now live in Board.css and friends —
+   see src/tokens.css for the shared design tokens they draw on. */
 
 body {
-  background: var(--bg);
+  background: var(--plaster);
   color: var(--ink);
-  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-family: var(--font-text);
   -webkit-font-smoothing: antialiased;
-  /* The wall is a fixed frame. Nothing should rubber-band or pinch. */
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
 
-h1, h2 { color: var(--ink); margin: 0; font-weight: 600; }
+h1, h2 { color: var(--ink); margin: 0; font-weight: 500; font-family: var(--font-display); }
 h1 { font-size: 30px; letter-spacing: -0.01em; }
 h2 { font-size: 21px; }
 p  { margin: 0; font-size: 17px; line-height: 1.5; }
 
-.muted { color: var(--muted); }
-.ok    { color: var(--accent); }
+.muted { color: var(--ink-soft); }
+.ok    { color: var(--person-a); }
 .error { color: var(--error); }
 .banner { padding: 8px 20px; }
 
-/* ---------- Sign-in and dialogs ---------- */
+/* ---------- Sign-in, error screen, event editor ---------- */
 
 .shell {
   min-height: 100%;
   display: grid;
   place-items: center;
   padding: 32px;
+  background: var(--plaster);
 }
 
 .card {
-  background: var(--card);
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
   border-radius: 16px;
   padding: 40px;
   width: min(460px, 100%);
@@ -59,22 +47,22 @@ input, button, select {
   font-size: 17px;
   border-radius: 10px;
   /* 52px is a comfortable target from arm's length on a wall. */
-  min-height: 52px;
+  min-height: var(--tap-min);
   padding: 0 16px;
 }
 
 input {
-  background: #0d0f0b;
-  border: 1px solid var(--line);
+  background: #fff;
+  border: 1px solid var(--rule);
   color: var(--ink);
 }
 
-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+input:focus { outline: 2px solid var(--person-a); outline-offset: 1px; }
 
 button {
-  background: var(--accent);
+  background: var(--person-a);
   border: none;
-  color: #0d0f0b;
+  color: var(--person-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -83,153 +71,19 @@ button:disabled { opacity: 0.5; }
 
 button.ghost {
   background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
   font-weight: 400;
 }
 
 button.danger { color: var(--error); border-color: var(--error); }
 
-/* ---------- Wall layout ---------- */
-
-.wall {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.dock {
-  display: flex;
-  gap: 10px;
-  padding: 0 24px 20px;
-  flex-shrink: 0;
-}
-
-.dock-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  color: var(--ink);
-  font-weight: 400;
-  min-height: 78px;
-  min-width: 168px;
-  padding: 0 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 2px;
-}
-
-.dock-label {
-  color: var(--muted);
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.dock-value { font-size: 26px; font-weight: 600; }
-.dock-of { color: var(--muted); font-size: 18px; font-weight: 400; }
-
-/* ---------- Week grid ---------- */
-
-.week {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 20px 24px 16px;
-  gap: 16px;
-}
-
-.week-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.nav { display: flex; gap: 8px; }
-.nav button { min-width: 52px; padding: 0 18px; }
-
-.grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 10px;
-  min-height: 0;
-}
-
-.day {
-  background: var(--card);
-  border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border: 1px solid transparent;
-}
-
-.day.today { border-color: var(--accent); }
-
-.day-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 12px 14px 8px;
-}
-
-.dow { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
-.dom { font-size: 22px; font-weight: 600; }
-.today .dow, .today .dom { color: var(--accent); }
-
-.day-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.event {
-  background: #0d0f0b;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--muted);
-  border-radius: 8px;
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 400;
-  text-align: left;
-  min-height: 0;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.event-time { color: var(--muted); font-size: 13px; }
-.event-title { line-height: 1.3; }
-
-/* Google Calendar events land here later: visible, not editable. */
-.event.locked { opacity: 0.72; cursor: default; }
-
-.add {
-  background: transparent;
-  color: var(--muted);
-  border: none;
-  font-size: 22px;
-  min-height: 44px;
-  opacity: 0.45;
-}
-
-.day:hover .add { opacity: 1; }
-
-/* ---------- Dialog ---------- */
+/* ---------- Dialog (event editor) ---------- */
 
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.45);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -245,169 +99,64 @@ button.danger { color: var(--error); border-color: var(--error); }
 
 .chip {
   background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
   font-weight: 400;
   min-height: 44px;
 }
 
-.chip.on { background: var(--card); color: var(--ink); }
+.chip.on { background: var(--today-face); color: var(--ink); border-color: var(--person-a); }
 
 .actions { display: flex; gap: 10px; }
 .actions button { flex: 1; }
 
-/* ---------- Chores panel ---------- */
+/* ---------- Panel add-row / remove buttons ----------
+   Board's chores and shopping content is ours to fill; these support the
+   add-item input and per-row delete that ChecklistRow doesn't provide. */
 
-.panel { width: min(620px, 100%); gap: 16px; }
-
-.panel-head {
+.panel-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.chore-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 52vh;
-  overflow-y: auto;
-}
-
-.chore {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #0d0f0b;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-
-.chore.done .chore-title { color: var(--muted); text-decoration: line-through; }
-
-.chore-title { flex: 1; font-size: 17px; display: flex; align-items: center; gap: 8px; }
-
-.tag {
-  color: var(--muted);
-  font-size: 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 2px 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.check {
-  background: transparent;
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  color: var(--accent);
-  font-size: 18px;
-  min-height: 44px;
-  width: 44px;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.chore.done .check { border-color: var(--accent); }
-
-.who {
-  background: transparent;
-  border: 2px solid var(--line);
-  border-radius: 999px;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-  min-height: 40px;
-  width: 40px;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-button.small { min-height: 40px; width: 40px; padding: 0; font-size: 15px; }
-
-.add-row { display: flex; gap: 8px; }
-.add-row input { flex: 1; }
-
-/* ---------- List panel ---------- */
-
-.divider {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-top: 1px solid var(--line);
-  margin-top: 6px;
-  padding-top: 10px;
-  font-size: 14px;
-}
-
-button.small-wide {
-  min-height: 38px;
-  padding: 0 14px;
-  font-size: 15px;
-}
-
-/* ---------- Meals and budget ---------- */
-
-.panel.wide { width: min(760px, 100%); }
-
-.dock-value.over { color: var(--error); }
-
-.projection {
-  background: #0d0f0b;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
   gap: 6px;
 }
 
-.proj-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 17px;
-}
+.panel-row > .checklist-row { flex: 1; }
 
-.proj-row.total {
-  border-top: 1px solid var(--line);
-  margin-top: 6px;
-  padding-top: 10px;
-  font-weight: 600;
-}
-
-.fine { font-size: 13px; line-height: 1.45; margin-top: 4px; }
-
-.meal-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #0d0f0b;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 12px;
-}
-
-.meal-day {
-  color: var(--muted);
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  width: 46px;
+.panel-row__remove {
   flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 16px;
+  padding: 0;
 }
 
-button.pick {
-  flex: 1;
-  text-align: left;
-  min-height: 44px;
-  border-style: dashed;
+.panel-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 
-.recipe-row {
-  background: #0d0f0b;
-  border: 1px solid var(--line);
+.panel-add input { flex: 1; min-height: 44px; font-size: 16px; }
+.panel-add button { min-height: 44px; }
+
+/* ---------- Recipe picker (inside the meal editor dialog) ---------- */
+
+.list-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.list-button {
+  background: transparent;
+  border: 1px solid var(--rule);
   border-radius: 10px;
   color: var(--ink);
   font-weight: 400;
@@ -418,6 +167,17 @@ button.pick {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  width: 100%;
 }
 
-.meta { font-size: 13px; }
+.list-button .meta { font-size: 13px; }
+
+.tag {
+  color: var(--ink-soft);
+  font-size: 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

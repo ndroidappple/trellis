@@ -1,0 +1,76 @@
+.event-chip {
+  font-family: var(--font-text);
+  text-align: left;
+  cursor: pointer;
+
+  background: var(--chip-face);
+  border: 0;
+  border-left: 4px solid var(--person-shared);
+  border-radius: 3px;
+  padding: 9px 14px 9px 12px;
+  min-height: 56px;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+
+  font-size: var(--size-event);
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.event-chip:focus-visible {
+  outline: 3px solid var(--person-a);
+  outline-offset: 2px;
+}
+
+.event-chip--a { border-left-color: var(--person-a); }
+.event-chip--b { border-left-color: var(--person-b); }
+.event-chip--shared { border-left-color: var(--person-shared); }
+
+.event-chip__body { min-width: 0; }
+.event-chip__title { display: block; }
+
+.event-chip__meta {
+  display: block;
+  font-size: var(--size-meta);
+  color: var(--ink-soft);
+  margin-top: 3px;
+}
+
+.event-chip__detail {
+  display: block;
+  font-size: var(--size-detail);
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+
+/* Meals are a material, not a person: tinted face, hairlines top and bottom,
+   no left rule, no badge. */
+.event-chip--meal {
+  background: var(--meal-tint);
+  border-left-color: transparent;
+  border-top: 1px solid var(--meal-rule);
+  border-bottom: 1px solid var(--meal-rule);
+  border-radius: 2px;
+}
+
+/* --- detail levels: extra space buys information, not padding --- */
+
+[data-detail='mid'] .event-chip {
+  font-size: var(--size-event-mid);
+  min-height: 64px;
+  padding: 11px 16px 11px 14px;
+}
+
+[data-detail='open'] .event-chip {
+  font-size: var(--size-event-open);
+  min-height: 72px;
+  padding: 11px 16px 11px 14px;
+}
+
+[data-detail='mid'] .day-row--today .event-chip { font-size: 27px; min-height: 74px; }
+[data-detail='open'] .day-row--today .event-chip { font-size: 30px; min-height: 84px; }
+.day-row--today .event-chip { min-height: 68px; font-size: 26px; }
+.day-row--today .event-chip__meta { font-size: 18px; }

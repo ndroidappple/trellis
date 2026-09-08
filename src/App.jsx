@@ -74,20 +74,27 @@ function SignIn() {
     setStatus(null)
 
     // Which `type` a code verifies under depends on how Supabase issued it,
-    // and getting it wrong costs another rate-limited email to retry. Trying
-    // the second on failure is cheaper than making someone wait an hour to
-    // find out. On success `onAuthStateChange` in App swaps the screen.
-    let { error } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'email' })
-    if (error) {
-      ;({ error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token,
-        type: 'magiclink',
-      }))
+    // so both are tried. On success `onAuthStateChange` in App swaps the
+    // screen out from under this.
+    //
+    // Both failures are reported, not just the last one: the two messages
+    // distinguish causes that look identical from the outside. "Token has
+    // expired or is invalid" from both means a stale or mistyped code, while
+    // one succeeding as far as a different complaint points at the type
+    // rather than the code. There are no devtools on the wall, so whatever
+    // this line says is the entire diagnosis.
+    const failures = []
+
+    for (const type of ['email', 'magiclink']) {
+      const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token, type })
+      if (!error) return setBusy(false)
+
+      failures.push(`${type} → ${error.message}${error.status ? ` (${error.status})` : ''}`)
+      console.error('[trellis] verifyOtp failed', { type, error })
     }
 
     setBusy(false)
-    if (error) setStatus({ kind: 'error', text: error.message })
+    setStatus({ kind: 'error', text: failures.join('  |  ') })
   }
 
   return (

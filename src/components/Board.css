@@ -58,6 +58,21 @@
   background: var(--person-a);
 }
 
+/* The only status worth reading from across the kitchen is "don't trust
+   this". Live and connecting stay quiet; offline earns colour and weight. */
+.board__sync[data-sync='connecting'] .board__sync-dot {
+  background: var(--ink-faint);
+}
+
+.board__sync[data-sync='offline'] .board__sync-dot {
+  background: var(--error);
+}
+
+.board__sync[data-sync='offline'] {
+  color: var(--error);
+  font-weight: 500;
+}
+
 .board__step {
   font: inherit;
   font-size: 20px;

@@ -10,9 +10,13 @@ export interface SectionSettings {
   shopping: SectionMode;
 }
 
+/** Whether the board can currently be trusted to be current. */
+export type SyncState = 'live' | 'connecting' | 'offline';
+
 interface Props {
   rangeLabel: string;          // "Sunday, March 3 – Saturday, March 9"
-  syncLabel: string;           // "Updated 2 minutes ago"
+  syncLabel: string;           // "Live", "Offline · 7:41 PM"
+  syncState?: SyncState;
   days: DayData[];
   settings: SectionSettings;
   chores: ReactNode;
@@ -37,7 +41,7 @@ export function Board(props: Props) {
       <header className="board__header">
         <p className="board__range">{props.rangeLabel}</p>
         <div className="board__header-right">
-          <span className="board__sync">
+          <span className="board__sync" data-sync={props.syncState ?? 'live'}>
             <span className="board__sync-dot" aria-hidden="true" />
             {props.syncLabel}
           </span>

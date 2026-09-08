@@ -21,6 +21,17 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
 .error { color: var(--error); }
 .banner { padding: 8px 20px; }
 
+/* The crash screen is the only debugger a wall-mounted iPad has, so the
+   message has to fit and wrap rather than run off the card. */
+.crash-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
 /* ---------- Sign-in, error screen, event editor ---------- */
 
 .shell {

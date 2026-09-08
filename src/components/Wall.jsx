@@ -4,7 +4,6 @@ import {
   addDays,
   dayName,
   isSameDay,
-  isToday,
   startOfWeek,
   timeLabel,
   toDateInputValue,
@@ -12,12 +11,23 @@ import {
   weekDays,
 } from '../lib/week'
 import { weekCost } from '../lib/cost'
+import { useToday } from '../hooks/useToday'
+import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 
 const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full' }
 const LONG_PRESS_MS = 650
+
+/**
+ * How far a finger may drift before a long-press is treated as a drag.
+ * A fingertip resting on glass emits a steady dribble of pointermove events;
+ * cancelling on any movement at all made the settings dialog nearly
+ * impossible to open on the actual iPad while working fine with a held-still
+ * mouse.
+ */
+const LONG_PRESS_SLOP_PX = 12
 
 const MEAL_PLAN_QUERY = `
   id, on_date, slot, is_leftover,
@@ -37,7 +47,9 @@ const MEAL_PLAN_QUERY = `
  * or recipe picker, so meal planning stays read-only here for now.
  */
 export default function Wall({ profile, people }) {
-  const [anchor, setAnchor] = useState(() => startOfWeek(new Date()))
+  const today = useToday()
+  const [anchor, setAnchor] = useState(() => startOfWeek(today))
+  const [lastSync, setLastSync] = useState(null)
   const [events, setEvents] = useState([])
   const [chores, setChores] = useState([])
   const [shoppingItems, setShoppingItems] = useState([])
@@ -78,6 +90,23 @@ export default function Wall({ profile, people }) {
     [orderedPeople]
   )
 
+  // When the date rolls over, follow it — but only if the board was showing
+  // the week that just ended. Someone who deliberately paged forward (on a
+  // phone, say) shouldn't have the view yanked out from under them; the wall
+  // itself is virtually always sitting on the current week, which is the case
+  // that matters.
+  const lastTodayRef = useRef(today)
+
+  useEffect(() => {
+    const previous = lastTodayRef.current
+    lastTodayRef.current = today
+    if (previous === today) return
+
+    setAnchor((current) =>
+      isSameDay(startOfWeek(current), startOfWeek(previous)) ? startOfWeek(today) : current
+    )
+  }, [today])
+
   // ---------------------------------------------------------------- events
 
   const loadEvents = useCallback(async () => {
@@ -94,6 +123,7 @@ export default function Wall({ profile, people }) {
     else {
       setEvents(data ?? [])
       setError(null)
+      setLastSync(new Date())
     }
   }, [anchor])
 
@@ -101,23 +131,23 @@ export default function Wall({ profile, people }) {
     loadEvents()
   }, [loadEvents])
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('events-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => loadEvents())
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [loadEvents])
+  const eventsStatus = useRealtimeTable('events-sync', 'events', loadEvents)
 
   // ---------------------------------------------------------------- chores
 
-  const weekStart = startOfWeek(new Date())
+  // Derived from `today` rather than a fresh `new Date()` per render, so
+  // weekly chores actually uncheck themselves when Sunday arrives instead of
+  // waiting for some unrelated change to force a re-render.
+  const weekStart = useMemo(() => startOfWeek(today), [today])
 
-  function choreIsDone(chore) {
-    if (!chore.completed_at) return false
-    if (chore.recurrence === 'once') return true
-    return new Date(chore.completed_at) >= weekStart
-  }
+  const choreIsDone = useCallback(
+    (chore) => {
+      if (!chore.completed_at) return false
+      if (chore.recurrence === 'once') return true
+      return new Date(chore.completed_at) >= weekStart
+    },
+    [weekStart]
+  )
 
   const loadChores = useCallback(async () => {
     const { data, error } = await supabase
@@ -130,6 +160,7 @@ export default function Wall({ profile, people }) {
     else {
       setChores(data ?? [])
       setError(null)
+      setLastSync(new Date())
     }
   }, [])
 
@@ -137,13 +168,7 @@ export default function Wall({ profile, people }) {
     loadChores()
   }, [loadChores])
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('chores-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chores' }, () => loadChores())
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [loadChores])
+  const choresStatus = useRealtimeTable('chores-sync', 'chores', loadChores)
 
   async function toggleChore(chore) {
     const next = choreIsDone(chore) ? null : new Date().toISOString()
@@ -184,6 +209,7 @@ export default function Wall({ profile, people }) {
     else {
       setShoppingItems(data ?? [])
       setError(null)
+      setLastSync(new Date())
     }
   }, [])
 
@@ -191,13 +217,7 @@ export default function Wall({ profile, people }) {
     loadShopping()
   }, [loadShopping])
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('list-shopping-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'list_items' }, () => loadShopping())
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [loadShopping])
+  const shoppingStatus = useRealtimeTable('list-shopping-sync', 'list_items', loadShopping)
 
   async function toggleShopping(item) {
     const next = !item.checked
@@ -252,19 +272,14 @@ export default function Wall({ profile, people }) {
     setRecipes(recipeRes.data ?? [])
     setStaples(stapleRes.data ?? [])
     if (hhRes.data) setBudget(hhRes.data.weekly_budget_cents)
+    setLastSync(new Date())
   }, [anchor])
 
   useEffect(() => {
     loadMeals()
   }, [loadMeals])
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('meal-plan-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meal_plan' }, () => loadMeals())
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [loadMeals])
+  const mealsStatus = useRealtimeTable('meal-plan-sync', 'meal_plan', loadMeals)
 
   const cost = useMemo(() => weekCost(mealPlan, staples), [mealPlan, staples])
 
@@ -314,13 +329,47 @@ export default function Wall({ profile, people }) {
     loadSettings()
   }, [loadSettings])
 
+  const settingsStatus = useRealtimeTable('household-settings-sync', 'household', loadSettings)
+
+  // ------------------------------------------------------------------ sync
+  //
+  // Realtime is the only thing keeping the wall current, and it is not
+  // reliable on a device that sleeps: the socket can be gone long before the
+  // channel notices. So the board reports the real channel state rather than
+  // a hardcoded "Live", and refetches outright whenever the iPad wakes or the
+  // network comes back — cheaper than reasoning about whether the socket
+  // survived, and correct either way.
+
+  const syncState = combineStatus([
+    eventsStatus,
+    choresStatus,
+    shoppingStatus,
+    mealsStatus,
+    settingsStatus,
+  ])
+
+  const refetchAll = useCallback(() => {
+    loadEvents()
+    loadChores()
+    loadShopping()
+    loadMeals()
+    loadSettings()
+  }, [loadEvents, loadChores, loadShopping, loadMeals, loadSettings])
+
   useEffect(() => {
-    const channel = supabase
-      .channel('household-settings-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'household' }, () => loadSettings())
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [loadSettings])
+    function onWake() {
+      if (document.visibilityState !== 'visible') return
+      refetchAll()
+    }
+
+    document.addEventListener('visibilitychange', onWake)
+    window.addEventListener('online', refetchAll)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onWake)
+      window.removeEventListener('online', refetchAll)
+    }
+  }, [refetchAll])
 
   async function updateSetting(key, mode) {
     const next = { ...settings, [key]: mode }
@@ -336,15 +385,33 @@ export default function Wall({ profile, people }) {
   }
 
   const pressTimer = useRef(null)
+  const pressOrigin = useRef(null)
 
-  function handlePressStart() {
+  function handlePressStart(e) {
     if (editing || mealEditing || settingsOpen) return
+    // Holding a "+" button shouldn't also summon settings behind the dialog
+    // it opens.
+    if (e.target.closest?.('button, input, a, label')) return
+
+    pressOrigin.current = { x: e.clientX, y: e.clientY }
     pressTimer.current = setTimeout(() => setSettingsOpen(true), LONG_PRESS_MS)
+  }
+
+  function handlePressMove(e) {
+    const origin = pressOrigin.current
+    if (!origin) return
+    if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > LONG_PRESS_SLOP_PX) {
+      handlePressEnd()
+    }
   }
 
   function handlePressEnd() {
     clearTimeout(pressTimer.current)
+    pressTimer.current = null
+    pressOrigin.current = null
   }
+
+  useEffect(() => () => clearTimeout(pressTimer.current), [])
 
   // ------------------------------------------------------------ board data
 
@@ -378,11 +445,13 @@ export default function Wall({ profile, people }) {
           dayOfMonth: d.getDate(),
           dayOfWeek: d.toLocaleDateString(undefined, { weekday: 'long' }),
           shortDayOfWeek: dayName(d),
-          isToday: isToday(d),
+          // Against `today` from the clock hook, not a fresh `new Date()` —
+          // that's what makes the highlight move at midnight.
+          isToday: isSameDay(d, today),
           events: dayEvents,
         }
       }),
-    [anchor, events, mealPlan, personFor]
+    [anchor, events, mealPlan, personFor, today]
   )
 
   function rangeLabel() {
@@ -443,14 +512,15 @@ export default function Wall({ profile, people }) {
       className="board-wrapper"
       onPointerDown={handlePressStart}
       onPointerUp={handlePressEnd}
-      onPointerMove={handlePressEnd}
+      onPointerMove={handlePressMove}
       onPointerCancel={handlePressEnd}
     >
       {error && <p className="error banner">{error}</p>}
 
       <Board
         rangeLabel={rangeLabel()}
-        syncLabel="Live"
+        syncLabel={syncText(syncState, lastSync)}
+        syncState={syncState}
         days={days}
         settings={settings}
         chores={<ChoresPanel mode="full" {...choresPanelProps} />}
@@ -498,6 +568,18 @@ export default function Wall({ profile, people }) {
       )}
     </div>
   )
+}
+
+/**
+ * What the header says about itself. "Live" appears only when every channel is
+ * actually subscribed; once anything drops, the board says so and offers the
+ * last time it managed to read from Supabase — which is the number you want
+ * when deciding whether to trust what's on the wall.
+ */
+function syncText(state, lastSync) {
+  if (state === 'live') return 'Live'
+  if (state === 'connecting') return 'Connecting…'
+  return lastSync ? `Offline · ${timeLabel(lastSync)}` : 'Offline'
 }
 
 function EventEditor({ initial, profile, people, personFor, onClose, onSaved }) {

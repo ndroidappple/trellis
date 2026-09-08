@@ -215,14 +215,14 @@ link. Settled the hard way; the constraints below are all load-bearing.
 
 ## Open items from the last session
 
-- Slice 9 on the actual iPad: long-press with a fingertip, full-screen Home
-  Screen launch, and the 180ms sheet transition are all confirmed good. The
-  midnight rollover showed the right day on 8 Sep, but the app had almost
-  certainly reloaded overnight (several deploys, plus being opened and
-  closed), so that is consistent with the timer working rather than proof of
-  it. **The Live/Offline header states are still untested** — put the iPad in
-  Airplane Mode and watch the header go red within a minute, then return to
-  "Live" on reconnect.
+- Slice 9 is verified on the wall (8 Sep 2026): long-press with a fingertip,
+  full-screen Home Screen launch, the 180ms sheet transition, and the
+  Live/Offline header — Airplane Mode flips it to Offline and it recovers on
+  reconnect. The midnight rollover showed the correct day, but the app had
+  almost certainly reloaded overnight, and a reload produces the right day
+  whether or not the timer fired; treat it as consistent rather than proven.
+  A quiet night with no deploys would settle it, though nothing depends on
+  settling it.
 - No test runner. `cost.js`, `week.js` and `useToday`'s date maths are pure
   and worth covering; checking them this session meant hand-rolling an
   esbuild + node harness, which is the signal to just add vitest.

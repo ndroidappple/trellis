@@ -26,14 +26,32 @@ function Shell({ children }) {
   return <div className="shell">{children}</div>
 }
 
+/**
+ * Sign-in is a 6-digit code typed into the app, not a link tapped in Mail.
+ *
+ * The link cannot work on the wall. On iOS a Home Screen web app has its own
+ * storage container, and tapping a link in Mail opens the *default browser* —
+ * so the session is created in Safari while the app that asked for it stays
+ * signed out. You then request another email and repeat, which is a fast way
+ * through Supabase's built-in email rate limit.
+ *
+ * A code has no such hop: whichever surface asked for it is the one that ends
+ * up signed in. Same flow on the wall, a phone, or a laptop.
+ *
+ * Requires `{{ .Token }}` in the Supabase "Magic Link" email template.
+ * `emailRedirectTo` is still passed so that a template which also includes
+ * `{{ .ConfirmationURL }}` keeps working in an ordinary browser.
+ */
 function SignIn() {
   const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [stage, setStage] = useState('email') // 'email' | 'code'
   const [status, setStatus] = useState(null)
-  const [sending, setSending] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-  async function sendLink() {
+  async function sendCode() {
     if (!email.trim()) return
-    setSending(true)
+    setBusy(true)
     setStatus(null)
 
     const { error } = await supabase.auth.signInWithOtp({
@@ -41,31 +59,90 @@ function SignIn() {
       options: { emailRedirectTo: window.location.origin },
     })
 
-    setSending(false)
-    setStatus(
-      error
-        ? { kind: 'error', text: error.message }
-        : { kind: 'ok', text: 'Check your email for the sign-in link.' }
-    )
+    setBusy(false)
+
+    if (error) return setStatus({ kind: 'error', text: error.message })
+
+    setStage('code')
+    setStatus({ kind: 'ok', text: 'Check your email for a 6-digit code.' })
+  }
+
+  async function verifyCode() {
+    const token = code.trim()
+    if (!token) return
+    setBusy(true)
+    setStatus(null)
+
+    // Which `type` a code verifies under depends on how Supabase issued it,
+    // and getting it wrong costs another rate-limited email to retry. Trying
+    // the second on failure is cheaper than making someone wait an hour to
+    // find out. On success `onAuthStateChange` in App swaps the screen.
+    let { error } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'email' })
+    if (error) {
+      ;({ error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token,
+        type: 'magiclink',
+      }))
+    }
+
+    setBusy(false)
+    if (error) setStatus({ kind: 'error', text: error.message })
   }
 
   return (
     <Shell>
       <div className="card">
         <h1>Trellis</h1>
-        <p className="muted">Sign in to see the week.</p>
-        <input
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendLink()}
-        />
-        <button onClick={sendLink} disabled={sending}>
-          {sending ? 'Sending…' : 'Email me a link'}
-        </button>
+
+        {stage === 'email' ? (
+          <>
+            <p className="muted">Sign in to see the week.</p>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && sendCode()}
+            />
+            <button onClick={sendCode} disabled={busy}>
+              {busy ? 'Sending…' : 'Email me a code'}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="muted">Enter the code sent to {email.trim()}.</p>
+            <input
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              // Lets iOS offer the code from Mail without leaving the app.
+              autoComplete="one-time-code"
+              placeholder="123456"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              onKeyDown={(e) => e.key === 'Enter' && verifyCode()}
+            />
+            <button onClick={verifyCode} disabled={busy}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+            <button
+              className="ghost"
+              disabled={busy}
+              onClick={() => {
+                setStage('email')
+                setCode('')
+                setStatus(null)
+              }}
+            >
+              Use a different email
+            </button>
+          </>
+        )}
+
         {status && (
           <p className={status.kind === 'error' ? 'error' : 'ok'}>{status.text}</p>
         )}

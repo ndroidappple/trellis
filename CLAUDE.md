@@ -33,7 +33,8 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
 
 ## Architecture
 
-- `src/App.jsx` — auth gate (Supabase magic-link email OTP) → `Wall`
+- `src/App.jsx` — auth gate (8-digit emailed code, see "Authentication")
+  → `Wall`
 - `src/components/Wall.jsx` — the orchestrator. Owns all Supabase
   fetching/mutation (events, chores, shopping list, meal plan) and feeds
   it into the presentational `Board` component. Also defines the
@@ -175,49 +176,45 @@ invisible, on a Mac browser window shorter than the iPad this was tuned
 for). If you add new flex children to `Board`/`WeekGrid`/`SectionPanel`,
 give them a real computed minimum, not `min-height: 0`.
 
+## Authentication
+
+Sign-in is an **8-digit code emailed and typed into the app** — not a magic
+link. Settled the hard way; the constraints below are all load-bearing.
+
+- **The link cannot sign in the wall.** On iOS a Home Screen web app has its
+  own storage container, separate from Safari. Tapping a link in Mail opens
+  the *default browser*, so the session is created in Safari while the app
+  that asked for it stays signed out. Requesting another email repeats it.
+  A code has no browser hop, so whichever surface asked for it is the one
+  that ends up signed in.
+- **Codes are 8 digits here, not the usual 6.** Length is a Supabase project
+  setting (Auth → Providers → Email) and `CODE_LENGTH` in `App.jsx` mirrors
+  it — keep them in step. An earlier `maxLength={6}` truncated the code and
+  submitted an invalid token, which Supabase reports as "Token has expired
+  or is invalid": identical wording to a genuinely stale token, and it sent
+  a whole evening after a mail-scanner theory that was wrong. **Any future
+  "invalid token" should start by checking what the client actually
+  submitted, not why it might have expired.**
+- **The email template carries `{{ .Token }}` and not
+  `{{ .ConfirmationURL }}`.** Those are the same one-time token in two
+  forms, and a link that anything prefetches is a link that spends the
+  token. Each new send also invalidates the previous one, so only the newest
+  email is ever valid — older ones look identical and are dead.
+- **Email goes through custom SMTP** (Gmail, App Password,
+  smtp.gmail.com:587). Two reasons: Supabase's built-in sender is rate
+  limited to a handful per hour and blocks sign-in entirely once tripped,
+  and on the free tier custom SMTP is the *only* way to edit the templates
+  at all — the dashboard gates template editing behind it, offering Pro as
+  the alternative. Gmail suits a two-person household better than Resend,
+  whose free tier won't send to a second person without a verified domain.
+- **Sessions are per-origin.** `localhost`, a LAN IP, and the Vercel domain
+  are three different logins, and the Home Screen app is separate again. The
+  wall runs from the Vercel URL so it survives the Mac being asleep.
+  `persistSession` + `autoRefreshToken` mean it should not need signing in
+  again.
+
 ## Open items from the last session
 
-- **Magic-link sign-in can't sign in the Home Screen app.** On iOS a
-  standalone web app has its own storage container, separate from Safari.
-  Tapping the emailed link opens the *default browser*, so the session lands
-  in Safari and the wall app stays signed out — request another email, same
-  result. Fix is to stop using the link: Supabase's `signInWithOtp` also
-  issues a 6-digit code, so put `{{ .Token }}` in the Magic Link email
-  template and verify in-app with
-  `verifyOtp({ email, token, type: 'email' })`. No browser hop, session
-  lands in the app that asked for it.
-
-  **This project's codes are 8 digits, not 6.** OTP length is a Supabase
-  project setting (Auth → Providers → Email); `CODE_LENGTH` in `App.jsx`
-  mirrors it and the two must be kept in step. The input originally had
-  `maxLength={6}`, so the code was silently truncated and submitted as an
-  invalid token — which Supabase reports as "Token has expired or is
-  invalid", indistinguishable from a genuinely stale token. The symptom
-  pointed at expiry and cost an evening chasing a mail-scanner prefetch
-  theory that was wrong. Any future "invalid token" should start by checking
-  what the client actually submitted, not why it might have expired.
-
-  Prefer `{{ .Token }}` alone in the template over shipping it alongside
-  `{{ .ConfirmationURL }}` — they are the same one-time token in two forms,
-  and a link that anything prefetches is a link that spends the token. Also
-  note each new send invalidates the previous one, so only the newest email
-  is ever valid; older ones look identical and are dead.
-- **Supabase's built-in email is rate-limited and not for production** — a
-  handful of sends per hour on shared infrastructure (exact number under
-  Auth → Rate Limits in the dashboard). This is what "email rate exceeded"
-  is, and it blocks sign-in entirely once tripped.
-
-  Custom SMTP fixes it, and on the free tier it is also the *only* way to
-  edit the email templates — the dashboard gates template editing behind
-  "set up custom SMTP", with Pro offered as the alternative. So SMTP is
-  required for the `{{ .Token }}` change above, not merely nice to have.
-  Gmail with an App Password (smtp.gmail.com:587, ~500/day, any recipient,
-  free) suits a two-person household better than Resend, whose free tier
-  can't send to a second person's address without a verified domain.
-- **Sessions are per-origin, and every URL is a different origin.**
-  `localhost:5173`, the LAN IP, and a Vercel domain each need their own
-  sign-in, and the Home Screen app is separate again. Decide the wall's
-  permanent URL *before* spending sign-ins on it.
 - Slice 9 is still unverified on the actual iPad — long-press with a
   fingertip, the Live/Offline header states, and the midnight rollover.
   Full-screen Home Screen launch *is* confirmed working.

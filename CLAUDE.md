@@ -189,9 +189,16 @@ give them a real computed minimum, not `min-height: 0`.
   `emailRedirectTo` and expects `detectSessionInUrl`.
 - **Supabase's built-in email is rate-limited and not for production** — a
   handful of sends per hour on shared infrastructure (exact number under
-  Auth → Rate Limits in the dashboard). Needs custom SMTP (Resend, Postmark,
-  SES) before the wall is something two people rely on. This is what "email
-  rate exceeded" is.
+  Auth → Rate Limits in the dashboard). This is what "email rate exceeded"
+  is, and it blocks sign-in entirely once tripped.
+
+  Custom SMTP fixes it, and on the free tier it is also the *only* way to
+  edit the email templates — the dashboard gates template editing behind
+  "set up custom SMTP", with Pro offered as the alternative. So SMTP is
+  required for the `{{ .Token }}` change above, not merely nice to have.
+  Gmail with an App Password (smtp.gmail.com:587, ~500/day, any recipient,
+  free) suits a two-person household better than Resend, whose free tier
+  can't send to a second person's address without a verified domain.
 - **Sessions are per-origin, and every URL is a different origin.**
   `localhost:5173`, the LAN IP, and a Vercel domain each need their own
   sign-in, and the Home Screen app is separate again. Decide the wall's

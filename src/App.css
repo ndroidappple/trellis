@@ -180,6 +180,53 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
 
 /* ---------- Recipe picker (inside the meal editor dialog) ---------- */
 
+/* ---------- Day view ---------- */
+
+.day-view__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day-view__heading {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ---------- Touch feedback ----------
+   A tap that produces no immediate visual response reads as a web page that
+   might not have registered it. Native apps answer instantly, before any
+   data moves. These are deliberately fast and small: enough to feel
+   acknowledged, not enough to read as animation. */
+
+.card button:active,
+.list-button:active,
+.chip:active {
+  transform: scale(0.985);
+}
+
+.card button,
+.list-button,
+.chip {
+  transition: transform 70ms ease, background-color 90ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card button,
+  .list-button,
+  .chip {
+    transition: none;
+  }
+
+  .card button:active,
+  .list-button:active,
+  .chip:active {
+    transform: none;
+  }
+}
+
 .list-scroll {
   display: flex;
   flex-direction: column;

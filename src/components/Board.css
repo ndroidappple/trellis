@@ -66,6 +66,25 @@
   background: var(--person-a);
 }
 
+/* Appears only when the board is off the current week, so its presence is
+   itself the signal that you've navigated away. */
+.board__today {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 16px;
+  padding: 7px 16px;
+  min-height: 0;
+  cursor: pointer;
+}
+
+.board__today:active {
+  background: var(--slat-face);
+  color: var(--ink);
+}
+
 /* The only status worth reading from across the kitchen is "don't trust
    this". Live and connecting stay quiet; offline earns colour and weight. */
 .board__sync[data-sync='connecting'] .board__sync-dot {

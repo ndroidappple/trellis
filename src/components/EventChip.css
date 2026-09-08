@@ -74,3 +74,12 @@
 [data-detail='open'] .day-row--today .event-chip { font-size: 30px; min-height: 84px; }
 .day-row--today .event-chip { min-height: 68px; font-size: 26px; }
 .day-row--today .event-chip__meta { font-size: 18px; }
+
+/* Instant acknowledgement on tap — see the note in App.css. */
+.event-chip { transition: transform 70ms ease; }
+.event-chip:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .event-chip { transition: none; }
+  .event-chip:active { transform: none; }
+}

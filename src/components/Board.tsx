@@ -30,6 +30,9 @@ interface Props {
   onEventPress?: (id: string) => void;
   onAddDay?: (date: string) => void;
   onAddMeal?: (date: string) => void;
+  onOpenDay?: (date: string) => void;
+  /** Absent while the board is already showing the current week. */
+  onToday?: () => void;
   initialsFor?: (person: Person) => string;
 }
 
@@ -45,6 +48,14 @@ export function Board(props: Props) {
             <span className="board__sync-dot" aria-hidden="true" />
             {props.syncLabel}
           </span>
+          {/* Only ever shown when it would do something. Paging away from
+              the current week on a phone otherwise leaves no way back
+              except counting arrow taps. */}
+          {props.onToday && (
+            <button className="board__today" onClick={props.onToday}>
+              Today
+            </button>
+          )}
           <button className="board__step" aria-label="Previous week" onClick={props.onPrevWeek}>‹</button>
           <button className="board__step" aria-label="Next week" onClick={props.onNextWeek}>›</button>
         </div>
@@ -59,6 +70,7 @@ export function Board(props: Props) {
           onEventPress={props.onEventPress}
           onAddDay={props.onAddDay}
           onAddMeal={props.onAddMeal}
+          onOpenDay={props.onOpenDay}
         />
       </div>
 

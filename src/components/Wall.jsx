@@ -59,6 +59,7 @@ export default function Wall({ profile, people }) {
   const [budget, setBudget] = useState(12000)
   const [editing, setEditing] = useState(null)
   const [mealEditing, setMealEditing] = useState(null) // an on_date string, or null
+  const [dayViewing, setDayViewing] = useState(null) // an on_date string, or null
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState(null)
@@ -387,14 +388,24 @@ export default function Wall({ profile, people }) {
   const pressTimer = useRef(null)
   const pressOrigin = useRef(null)
 
+  /**
+   * A long press still ends in a click, and the board is now tappable — so
+   * without this, opening settings by holding a day row also opens that day
+   * underneath the settings dialog.
+   */
+  const swallowNextClick = useRef(false)
+
   function handlePressStart(e) {
-    if (editing || mealEditing || settingsOpen) return
+    if (editing || mealEditing || dayViewing || settingsOpen) return
     // Holding a "+" button shouldn't also summon settings behind the dialog
     // it opens.
     if (e.target.closest?.('button, input, a, label')) return
 
     pressOrigin.current = { x: e.clientX, y: e.clientY }
-    pressTimer.current = setTimeout(() => setSettingsOpen(true), LONG_PRESS_MS)
+    pressTimer.current = setTimeout(() => {
+      swallowNextClick.current = true
+      setSettingsOpen(true)
+    }, LONG_PRESS_MS)
   }
 
   function handlePressMove(e) {
@@ -485,6 +496,21 @@ export default function Wall({ profile, people }) {
     setMealEditing(dateIso)
   }
 
+  function handleOpenDay(dateIso) {
+    if (swallowNextClick.current) {
+      swallowNextClick.current = false
+      return
+    }
+    setDayViewing(dateIso)
+  }
+
+  const isCurrentWeek = isSameDay(startOfWeek(anchor), startOfWeek(today))
+
+  const dayEventsFor = (dateIso) =>
+    events
+      .filter((e) => isSameDay(new Date(e.starts_at), new Date(`${dateIso}T00:00`)))
+      .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+
   const choresDone = chores.filter(choreIsDone).length
   const shoppingRemaining = shoppingItems.filter((i) => !i.checked).length
 
@@ -531,9 +557,11 @@ export default function Wall({ profile, people }) {
         shoppingCount={`${shoppingRemaining} to buy`}
         onPrevWeek={() => setAnchor(addDays(anchor, -7))}
         onNextWeek={() => setAnchor(addDays(anchor, 7))}
+        onToday={isCurrentWeek ? undefined : () => setAnchor(startOfWeek(today))}
         onEventPress={handleEventPress}
         onAddDay={handleAddDay}
         onAddMeal={handleAddMeal}
+        onOpenDay={handleOpenDay}
         initialsFor={initialsForPerson}
       />
 
@@ -563,9 +591,97 @@ export default function Wall({ profile, people }) {
         />
       )}
 
+      {dayViewing && (
+        <DayView
+          date={dayViewing}
+          events={dayEventsFor(dayViewing)}
+          meal={mealEntryFor(dayViewing)}
+          peopleById={orderedPeople}
+          onEventPress={(ev) => {
+            setDayViewing(null)
+            setEditing(ev)
+          }}
+          onAddEvent={() => {
+            setDayViewing(null)
+            handleAddDay(dayViewing)
+          }}
+          onEditMeal={() => {
+            setDayViewing(null)
+            setMealEditing(dayViewing)
+          }}
+          onClose={() => setDayViewing(null)}
+        />
+      )}
+
       {settingsOpen && (
         <SettingsPanel settings={settings} onChange={updateSetting} onClose={() => setSettingsOpen(false)} />
       )}
+    </div>
+  )
+}
+
+/**
+ * Everything on one day, with nothing collapsed.
+ *
+ * The week grid is a summary — it has to be, seven days sharing one screen —
+ * and at the tight detail level it hides events behind "+N more" with no way
+ * to reach them. This is where the day is actually legible: every event in
+ * time order, the meal, and the two things you'd want to do next.
+ */
+function DayView({
+  date,
+  events,
+  meal,
+  peopleById,
+  onEventPress,
+  onAddEvent,
+  onEditMeal,
+  onClose,
+}) {
+  const nameFor = (ownerId) => peopleById.find((p) => p.id === ownerId)?.display_name
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
+        <h2>{dayLabel(date)}</h2>
+
+        <div className="day-view__section">
+          <span className="day-view__heading">Dinner</span>
+          <button className="list-button" onClick={onEditMeal}>
+            <span>{meal?.recipe ? meal.recipe.title : 'Nothing planned'}</span>
+            <span className="muted meta">
+              {meal?.recipe ? (meal.is_leftover ? 'Leftovers' : 'Cooking') : 'Tap to plan'}
+            </span>
+          </button>
+        </div>
+
+        <div className="day-view__section">
+          <span className="day-view__heading">
+            {events.length === 1 ? '1 event' : `${events.length} events`}
+          </span>
+
+          {events.length === 0 && <p className="muted">Nothing scheduled.</p>}
+
+          <div className="list-scroll">
+            {events.map((ev) => (
+              <button key={ev.id} className="list-button" onClick={() => onEventPress(ev)}>
+                <span>{ev.title}</span>
+                <span className="muted meta">
+                  {ev.all_day ? 'All day' : timeLabel(new Date(ev.starts_at))}
+                  {nameFor(ev.owner_id) ? ` · ${nameFor(ev.owner_id)}` : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="actions">
+          <button onClick={onAddEvent}>Add event</button>
+          <button className="ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -727,8 +843,11 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
           <h2>Pick a meal</h2>
           <p className="muted">{dayLabel(date)}</p>
 
+          {/* No autoFocus. Picking a meal starts by *reading* the list, and
+              an unrequested keyboard covers half of it on an iPad. The field
+              is there when someone wants to narrow things down; until they
+              tap it, the list is the interface. */}
           <input
-            autoFocus
             placeholder="Search recipes"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -774,11 +893,23 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
           {entry.recipe.cost_confidence === 'unknown' && <span className="tag"> unpriced</span>}
         </p>
 
+        {/* These read as a two-state choice, so they have to behave like
+            one. Both used to call the same toggle, which meant tapping the
+            option that was already selected silently switched to the other
+            — picking "Cook" on a cook night turned it into leftovers. */}
         <div className="chips">
-          <button className={entry.is_leftover ? 'chip' : 'chip on'} onClick={onToggleLeftover}>
+          <button
+            className={entry.is_leftover ? 'chip' : 'chip on'}
+            aria-pressed={!entry.is_leftover}
+            onClick={() => entry.is_leftover && onToggleLeftover()}
+          >
             Cook
           </button>
-          <button className={entry.is_leftover ? 'chip on' : 'chip'} onClick={onToggleLeftover}>
+          <button
+            className={entry.is_leftover ? 'chip on' : 'chip'}
+            aria-pressed={entry.is_leftover}
+            onClick={() => !entry.is_leftover && onToggleLeftover()}
+          >
             Leftovers
           </button>
         </div>

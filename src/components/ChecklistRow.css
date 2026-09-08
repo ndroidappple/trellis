@@ -69,3 +69,12 @@
 }
 
 .checklist-row--item .checklist-row__box { width: 26px; height: 26px; }
+
+/* Instant acknowledgement on tap — see the note in App.css. */
+.checklist-row { transition: transform 70ms ease; }
+.checklist-row:active { transform: scale(0.99); }
+
+@media (prefers-reduced-motion: reduce) {
+  .checklist-row { transition: none; }
+  .checklist-row:active { transform: none; }
+}

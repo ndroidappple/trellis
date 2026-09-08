@@ -24,30 +24,53 @@ interface Props {
   onAddDay?: (date: string) => void;
   /** Shown only on days with no meal chip yet. */
   onAddMeal?: (date: string) => void;
+  /** Opens the whole day. The row itself is the target, so a tap anywhere
+      that isn't already a control gets there. */
+  onOpenDay?: (date: string) => void;
 }
 
-function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal }: {
+function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: {
   day: DayData;
   level: DetailLevel;
   initialsFor?: (person: Person) => string;
   onEventPress?: (id: string) => void;
   onAddDay?: (date: string) => void;
   onAddMeal?: (date: string) => void;
+  onOpenDay?: (date: string) => void;
 }) {
   const limit = visibleChipCount(level);
   const shown = day.events.slice(0, limit);
   const hidden = day.events.length - shown.length;
   const hasMeal = day.events.some((e) => e.kind === 'meal');
 
+  const openDay = () => onOpenDay?.(day.date);
+
+  /** Controls inside the row keep their own action instead of falling
+      through to the row's "open this day". */
+  const only = (fn: () => void) => (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    fn();
+  };
+
   return (
-    <section className={`day-row${day.isToday ? ' day-row--today' : ''}`}>
-      <div className="day-row__rail">
+    <section
+      className={`day-row${day.isToday ? ' day-row--today' : ''}`}
+      onClick={openDay}
+    >
+      {/* A real button so the day is reachable by keyboard and to AT, since
+          the row itself is a plain region with a convenience click. */}
+      <button
+        type="button"
+        className="day-row__rail"
+        aria-label={`Open ${day.dayOfWeek} ${day.dayOfMonth}`}
+        onClick={only(openDay)}
+      >
         <span className="day-row__dom">{day.dayOfMonth}</span>
         <span className="day-row__dow">
           {day.isToday ? day.dayOfWeek : day.shortDayOfWeek}
         </span>
         {day.isToday && <span className="day-row__badge">Today</span>}
-      </div>
+      </button>
 
       <div className="day-row__events">
         {shown.map((event) => (
@@ -60,7 +83,19 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal }: 
           />
         ))}
 
-        {hidden > 0 && <span className="day-row__more">+{hidden} more</span>}
+        {/* Was a plain span, which made everything it counted unreachable:
+            on a busy day at the tight level the collapsed events could not
+            be opened, seen, or even counted accurately by tapping. */}
+        {hidden > 0 && (
+          <button
+            type="button"
+            className="day-row__more"
+            aria-label={`Show ${hidden} more on ${day.dayOfWeek} ${day.dayOfMonth}`}
+            onClick={only(openDay)}
+          >
+            +{hidden} more
+          </button>
+        )}
 
         {/* An empty evening is information, but only worth saying when
             there's room to say it. */}
@@ -75,7 +110,7 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal }: 
             type="button"
             className="day-row__add-meal"
             aria-label={`Plan dinner on ${day.dayOfMonth}`}
-            onClick={() => onAddMeal(day.date)}
+            onClick={only(() => onAddMeal(day.date))}
           >
             + Dinner
           </button>
@@ -86,7 +121,7 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal }: 
             type="button"
             className="day-row__add"
             aria-label={`Add event on ${day.dayOfMonth}`}
-            onClick={() => onAddDay(day.date)}
+            onClick={only(() => onAddDay(day.date))}
           >
             +
           </button>
@@ -96,7 +131,7 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal }: 
   );
 }
 
-export function WeekGrid({ days, level, initialsFor, onEventPress, onAddDay, onAddMeal }: Props) {
+export function WeekGrid({ days, level, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: Props) {
   return (
     <div className="week-grid">
       {days.map((day) => (
@@ -108,6 +143,7 @@ export function WeekGrid({ days, level, initialsFor, onEventPress, onAddDay, onA
           onEventPress={onEventPress}
           onAddDay={onAddDay}
           onAddMeal={onAddMeal}
+          onOpenDay={onOpenDay}
         />
       ))}
     </div>

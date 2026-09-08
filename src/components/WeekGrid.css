@@ -37,6 +37,22 @@
   padding-top: 14px;
 }
 
+/* The whole row opens the day, so it needs to look like it will. */
+.day-row {
+  cursor: pointer;
+  transition: background-color 90ms ease;
+}
+
+.day-row:active {
+  background: var(--today-face);
+}
+
+.day-row--today:active {
+  filter: brightness(0.98);
+}
+
+/* A button now, so the day is keyboard-reachable — but it must keep looking
+   like the typographic rail it is, not like a control. */
 .day-row__rail {
   width: 124px;
   flex-shrink: 0;
@@ -44,6 +60,17 @@
   align-items: baseline;
   gap: 10px;
   padding: 4px 0 0 18px;
+
+  background: none;
+  border: 0;
+  margin: 0;
+  min-height: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .day-row--today .day-row__rail {
@@ -92,11 +119,27 @@
   min-width: 0;
 }
 
+/* Now a control rather than a label, because what it counts is otherwise
+   unreachable. Underlined so it reads as "there is more behind this" — at
+   a glance across a kitchen, quiet grey text looks like a caption. */
 .day-row__more {
   align-self: center;
   font-size: 19px;
   color: var(--ink-soft);
-  padding: 0 6px;
+  padding: 0 10px;
+
+  background: none;
+  border: 0;
+  min-height: 0;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--rule);
+}
+
+.day-row__more:active {
+  color: var(--ink);
 }
 
 .day-row__invite {

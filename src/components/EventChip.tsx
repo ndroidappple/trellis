@@ -37,7 +37,16 @@ export function EventChip({ event, level, initialsFor, onPress }: Props) {
   ].join(' ');
 
   return (
-    <button type="button" className={classes} onClick={() => onPress?.(id)}>
+    <button
+      type="button"
+      className={classes}
+      // The row behind this opens the whole day; tapping a specific event
+      // means that event, not the day it happens to sit in.
+      onClick={(e) => {
+        e.stopPropagation();
+        onPress?.(id);
+      }}
+    >
       {!isMeal && person && <PersonBadge person={person} initials={initials} />}
       <span className="event-chip__body">
         <span className="event-chip__title">{title}</span>

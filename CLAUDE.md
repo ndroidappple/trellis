@@ -187,16 +187,20 @@ give them a real computed minimum, not `min-height: 0`.
   `verifyOtp({ email, token, type: 'email' })`. No browser hop, session
   lands in the app that asked for it.
 
-  **The template must contain `{{ .Token }}` and NOT
-  `{{ .ConfirmationURL }}`.** Those are the same one-time token in two
-  forms, not two independent options. Mail providers and security scanners
-  fetch links in incoming mail to scan them, and that fetch redeems the
-  link and spends the token — so the typed code is already dead, presenting
-  as "Token has expired or is invalid" within seconds of the mail arriving.
-  Shipping a template with both cost an evening here.
+  **Don't assume the code is six digits.** OTP length is a project setting
+  and the token is not guaranteed numeric. The code-entry input had
+  `maxLength={6}` and stripped non-digits, so a longer code was silently
+  truncated and rejected — which surfaces as "Token has expired or is
+  invalid", indistinguishable from a genuinely stale token, and sent us
+  hunting a mail-scanner theory that was wrong. The input now strips only
+  whitespace. Any "invalid token" report should start by checking what was
+  actually submitted, not why it might have expired.
 
-  Each new send also invalidates the previous token, so only the newest
-  email is ever valid; old ones in the inbox look identical and are dead.
+  Prefer `{{ .Token }}` alone in the template over shipping it alongside
+  `{{ .ConfirmationURL }}` — they are the same one-time token in two forms,
+  and a link that anything prefetches is a link that spends the token. Also
+  note each new send invalidates the previous one, so only the newest email
+  is ever valid; older ones look identical and are dead.
 - **Supabase's built-in email is rate-limited and not for production** — a
   handful of sends per hour on shared infrastructure (exact number under
   Auth → Rate Limits in the dashboard). This is what "email rate exceeded"

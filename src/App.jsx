@@ -121,16 +121,29 @@ function SignIn() {
         ) : (
           <>
             <p className="muted">Enter the code sent to {email.trim()}.</p>
+            {/*
+              Deliberately unconstrained. An earlier version capped this at 6
+              characters and stripped non-digits, on the assumption that
+              Supabase codes are always six digits — they are not. OTP length
+              is a project setting, so a longer or alphanumeric code was
+              silently truncated and then rejected as invalid, which reads
+              exactly like an expired token and sent us hunting the wrong bug.
+              Only whitespace is removed, so a pasted code with a stray space
+              still works.
+            */}
             <input
               autoFocus
               type="text"
-              inputMode="numeric"
+              inputMode="text"
               // Lets iOS offer the code from Mail without leaving the app.
               autoComplete="one-time-code"
-              placeholder="123456"
-              maxLength={6}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="Paste or type the code"
+              maxLength={12}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => setCode(e.target.value.replace(/\s/g, ''))}
               onKeyDown={(e) => e.key === 'Enter' && verifyCode()}
             />
             <button onClick={verifyCode} disabled={busy}>

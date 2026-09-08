@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useDetailLevel } from '../hooks/useDetailLevel';
 import { WeekGrid, type DayData } from './WeekGrid';
 import { SectionDock, SectionPanel, type SectionMode } from './SectionPanel';
+import type { Person } from './PersonBadge';
 import './Board.css';
 
 export interface SectionSettings {
@@ -25,6 +26,7 @@ interface Props {
   onEventPress?: (id: string) => void;
   onAddDay?: (date: string) => void;
   onAddMeal?: (date: string) => void;
+  initialsFor?: (person: Person) => string;
 }
 
 export function Board(props: Props) {
@@ -49,6 +51,7 @@ export function Board(props: Props) {
         <WeekGrid
           days={props.days}
           level={level}
+          initialsFor={props.initialsFor}
           onEventPress={props.onEventPress}
           onAddDay={props.onAddDay}
           onAddMeal={props.onAddMeal}

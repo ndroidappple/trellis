@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   addDays,
@@ -11,9 +11,13 @@ import {
   toInputValue,
   weekDays,
 } from '../lib/week'
-import { formatCents, weekCost } from '../lib/cost'
+import { weekCost } from '../lib/cost'
 import { Board } from './Board'
-import { ChecklistRow } from './ChecklistRow'
+import ChoresPanel from './ChoresPanel'
+import ShoppingPanel from './ShoppingPanel'
+
+const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full' }
+const LONG_PRESS_MS = 650
 
 const MEAL_PLAN_QUERY = `
   id, on_date, slot, is_leftover,
@@ -43,6 +47,8 @@ export default function Wall({ profile, people }) {
   const [budget, setBudget] = useState(12000)
   const [editing, setEditing] = useState(null)
   const [mealEditing, setMealEditing] = useState(null) // an on_date string, or null
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState(null)
 
   // 'a' and 'b' are positional, not personal — see tokens.css. Ordering by
@@ -292,6 +298,54 @@ export default function Wall({ profile, people }) {
     setMealEditing(null)
   }
 
+  // -------------------------------------------------------------- settings
+  //
+  // board_settings lives on the household row, so the wall and everyone's
+  // phone read the same layout. Opened with a long-press on the board
+  // rather than a header button — this is a kiosk, not a settings-heavy app.
+
+  const loadSettings = useCallback(async () => {
+    const { data, error } = await supabase.from('household').select('board_settings').maybeSingle()
+    if (error) return setError(error.message)
+    if (data?.board_settings) setSettings({ ...DEFAULT_SETTINGS, ...data.board_settings })
+  }, [])
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('household-settings-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'household' }, () => loadSettings())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [loadSettings])
+
+  async function updateSetting(key, mode) {
+    const next = { ...settings, [key]: mode }
+    setSettings(next)
+    const { error } = await supabase
+      .from('household')
+      .update({ board_settings: next })
+      .eq('id', profile.household_id)
+    if (error) {
+      setError(error.message)
+      loadSettings()
+    }
+  }
+
+  const pressTimer = useRef(null)
+
+  function handlePressStart() {
+    if (editing || mealEditing || settingsOpen) return
+    pressTimer.current = setTimeout(() => setSettingsOpen(true), LONG_PRESS_MS)
+  }
+
+  function handlePressEnd() {
+    clearTimeout(pressTimer.current)
+  }
+
   // ------------------------------------------------------------ board data
 
   const days = useMemo(
@@ -365,104 +419,52 @@ export default function Wall({ profile, people }) {
   const choresDone = chores.filter(choreIsDone).length
   const shoppingRemaining = shoppingItems.filter((i) => !i.checked).length
 
-  const choresFull = (
-    <div className="panel-rows">
-      {chores.length === 0 && <p className="muted">Nothing yet.</p>}
-      {chores.map((c) => (
-        <div key={c.id} className="panel-row">
-          <ChecklistRow
-            id={c.id}
-            label={c.title}
-            when={c.recurrence === 'once' ? 'One-off' : undefined}
-            done={choreIsDone(c)}
-            person={c.assignee_id ? personFor(c.assignee_id) : undefined}
-            initials={c.assignee_id ? initialsForPerson(personFor(c.assignee_id)) : undefined}
-            onToggle={() => toggleChore(c)}
-          />
-          <button className="panel-row__remove" onClick={() => removeChore(c)} aria-label={`Remove ${c.title}`}>
-            ×
-          </button>
-        </div>
-      ))}
-      <AddRow placeholder="Add a chore" onAdd={addChore} />
-    </div>
-  )
+  const choresPanelProps = {
+    chores,
+    choreIsDone,
+    personFor,
+    initialsForPerson,
+    onToggle: toggleChore,
+    onAdd: addChore,
+    onRemove: removeChore,
+  }
 
-  const choresCompact = (
-    <div className="panel-strip">
-      {chores
-        .filter((c) => !choreIsDone(c))
-        .slice(0, 4)
-        .map((c) => (
-          <span key={c.id} className="panel-chip">
-            {c.title}
-          </span>
-        ))}
-      {chores.length > 0 && choresDone === chores.length && <span className="muted">All done</span>}
-    </div>
-  )
-
-  const shoppingFull = (
-    <>
-      <div className="panel-list">
-        {shoppingItems.length === 0 && <p className="muted">Empty.</p>}
-        {shoppingItems.map((i) => (
-          <div key={i.id} className="panel-row">
-            <ChecklistRow
-              id={i.id}
-              label={i.body}
-              done={i.checked}
-              density="item"
-              onToggle={() => toggleShopping(i)}
-            />
-            <button
-              className="panel-row__remove"
-              onClick={() => removeShopping(i)}
-              aria-label={`Remove ${i.body}`}
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
-      <AddRow placeholder="Add to shopping list" onAdd={addShopping} />
-      <div className="panel-cart">
-        <span className="panel-cart__label">Groceries this week</span>
-        <span className="panel-cart__figure">
-          {formatCents(cost.totalCents)}
-          <span className="of"> / {formatCents(budget)}</span>
-        </span>
-      </div>
-    </>
-  )
-
-  const shoppingCompact = (
-    <div className="panel-strip">
-      <span className="panel-chip">{shoppingRemaining} to buy</span>
-      <span className="panel-chip">{formatCents(cost.totalCents)} groceries</span>
-    </div>
-  )
+  const shoppingPanelProps = {
+    items: shoppingItems,
+    cost,
+    budget,
+    onToggle: toggleShopping,
+    onAdd: addShopping,
+    onRemove: removeShopping,
+  }
 
   return (
-    <>
+    <div
+      className="board-wrapper"
+      onPointerDown={handlePressStart}
+      onPointerUp={handlePressEnd}
+      onPointerMove={handlePressEnd}
+      onPointerCancel={handlePressEnd}
+    >
       {error && <p className="error banner">{error}</p>}
 
       <Board
         rangeLabel={rangeLabel()}
         syncLabel="Live"
         days={days}
-        settings={{ chores: 'full', shopping: 'full' }}
-        chores={choresFull}
-        choresCompact={choresCompact}
+        settings={settings}
+        chores={<ChoresPanel mode="full" {...choresPanelProps} />}
+        choresCompact={<ChoresPanel mode="compact" {...choresPanelProps} />}
         choresCount={`${choresDone} of ${chores.length} done`}
-        shopping={shoppingFull}
-        shoppingCompact={shoppingCompact}
+        shopping={<ShoppingPanel mode="full" {...shoppingPanelProps} />}
+        shoppingCompact={<ShoppingPanel mode="compact" {...shoppingPanelProps} />}
         shoppingCount={`${shoppingRemaining} to buy`}
         onPrevWeek={() => setAnchor(addDays(anchor, -7))}
         onNextWeek={() => setAnchor(addDays(anchor, 7))}
         onEventPress={handleEventPress}
         onAddDay={handleAddDay}
         onAddMeal={handleAddMeal}
+        initialsFor={initialsForPerson}
       />
 
       {editing && (
@@ -490,30 +492,10 @@ export default function Wall({ profile, people }) {
           onClose={() => setMealEditing(null)}
         />
       )}
-    </>
-  )
-}
 
-function AddRow({ placeholder, onAdd }) {
-  const [value, setValue] = useState('')
-
-  function submit() {
-    if (!value.trim()) return
-    onAdd(value.trim())
-    setValue('')
-  }
-
-  return (
-    <div className="panel-add">
-      <input
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && submit()}
-      />
-      <button className="ghost" onClick={submit}>
-        Add
-      </button>
+      {settingsOpen && (
+        <SettingsPanel settings={settings} onChange={updateSetting} onClose={() => setSettingsOpen(false)} />
+      )}
     </div>
   )
 }
@@ -724,6 +706,44 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
           <button className="ghost danger" onClick={onClear}>
             Clear
           </button>
+          <button className="ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const MODE_LABELS = { full: 'Full', compact: 'Compact', off: 'Off' }
+const MODE_OPTIONS = ['full', 'compact', 'off']
+const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping' }
+
+function SettingsPanel({ settings, onChange, onClose }) {
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
+        <h2>Board settings</h2>
+        <p className="muted">Hold anywhere on the board to reopen this.</p>
+
+        {Object.keys(SECTION_LABELS).map((key) => (
+          <div key={key} className="settings-row">
+            <span className="settings-row__label">{SECTION_LABELS[key]}</span>
+            <div className="chips">
+              {MODE_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  className={settings[key] === opt ? 'chip on' : 'chip'}
+                  onClick={() => onChange(key, opt)}
+                >
+                  {MODE_LABELS[opt]}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div className="actions">
           <button className="ghost" onClick={onClose}>
             Close
           </button>

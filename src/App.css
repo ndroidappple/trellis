@@ -42,7 +42,14 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
   gap: 16px;
 }
 
-input, button, select {
+/* Scoped to .card (sign-in, error screen, event/meal editor dialogs) —
+   this must NOT be a bare element selector. An earlier version styled
+   every <button> on the page, including Board's own circular "+" buttons,
+   whose min-height it overrode into an ellipse. */
+
+.card input,
+.card button,
+.card select {
   font: inherit;
   font-size: 17px;
   border-radius: 10px;
@@ -51,15 +58,15 @@ input, button, select {
   padding: 0 16px;
 }
 
-input {
+.card input {
   background: #fff;
   border: 1px solid var(--rule);
   color: var(--ink);
 }
 
-input:focus { outline: 2px solid var(--person-a); outline-offset: 1px; }
+.card input:focus { outline: 2px solid var(--person-a); outline-offset: 1px; }
 
-button {
+.card button {
   background: var(--person-a);
   border: none;
   color: var(--person-ink);
@@ -67,16 +74,16 @@ button {
   cursor: pointer;
 }
 
-button:disabled { opacity: 0.5; }
+.card button:disabled { opacity: 0.5; }
 
-button.ghost {
+.card button.ghost {
   background: transparent;
   border: 1px solid var(--rule);
   color: var(--ink-soft);
   font-weight: 400;
 }
 
-button.danger { color: var(--error); border-color: var(--error); }
+.card button.danger { color: var(--error); border-color: var(--error); }
 
 /* ---------- Dialog (event editor) ---------- */
 
@@ -97,12 +104,14 @@ button.danger { color: var(--error); border-color: var(--error); }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* No min-height here — it's a <button> inside .card, so .card button's
+   var(--tap-min) (52px) already wins on specificity. Redeclaring a smaller
+   value here would be dead code that quietly lies about the real size. */
 .chip {
   background: transparent;
   border: 1px solid var(--rule);
   color: var(--ink-soft);
   font-weight: 400;
-  min-height: 44px;
 }
 
 .chip.on { background: var(--today-face); color: var(--ink); border-color: var(--person-a); }
@@ -124,8 +133,11 @@ button.danger { color: var(--error); border-color: var(--error); }
 
 .panel-row__remove {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  /* Below var(--tap-min) on purpose — it's a secondary, low-frequency
+     action next to a 52px+ primary row — but 36px was under even Apple's
+     44px absolute floor for a touch target and too easy to miss on a wall. */
+  width: 44px;
+  height: 44px;
   min-height: 0;
   border-radius: 50%;
   border: 1px solid var(--rule);
@@ -171,6 +183,21 @@ button.danger { color: var(--error); border-color: var(--error); }
 }
 
 .list-button .meta { font-size: 13px; }
+
+/* ---------- Settings dialog ---------- */
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-row__label {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 19px;
+}
 
 .tag {
   color: var(--ink-soft);

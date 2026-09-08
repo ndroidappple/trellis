@@ -19,10 +19,14 @@
   overflow: hidden;
 }
 
-/* Fixed heights on purpose. The week is the flexible element; the panels
-   declare what they need and the week takes the remainder. */
-.section-panel--full { height: 448px; }
-.section-panel--compact { height: 112px; padding: 14px 22px; }
+/* Declared heights on purpose — the week is the flexible element and the
+   panels take what they need, not the remainder. clamp() keeps the 448px /
+   112px figures as the ceiling (what they're tuned for: a 12.9" iPad in
+   portrait) but lets them shrink on a shorter screen — a laptop browser
+   window, or a phone checking settings — instead of starving the week grid
+   down to unreadable slivers. */
+.section-panel--full { height: clamp(220px, 36vh, 448px); }
+.section-panel--compact { height: clamp(84px, 9vh, 112px); padding: 14px 22px; }
 
 .section-panel h2 {
   font-family: var(--font-display);

@@ -78,7 +78,12 @@
 .board__week {
   flex: 1 1 auto;
   display: flex;
-  min-height: 0;
+  /* 6 ordinary rows at their own 84px floor + today's 190px floor + the
+     6 gaps between them (--gap-slat) — the real minimum the week grid
+     needs, not a guess. Below this, the dock (which has its own clamp()
+     floor) gets clipped by .board's overflow:hidden before the week does —
+     the week is the important element here, not the dock. */
+  min-height: calc(6 * 84px + 190px + 6 * var(--gap-slat));
 }
 
 @media (prefers-reduced-motion: reduce) {

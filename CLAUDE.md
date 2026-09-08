@@ -177,9 +177,28 @@ give them a real computed minimum, not `min-height: 0`.
 
 ## Open items from the last session
 
-- Slice 9 is unverified on the actual iPad. The midnight rollover was
-  checked as arithmetic and the offline states as code paths — neither has
-  been watched happening on the wall.
+- **Magic-link sign-in can't sign in the Home Screen app.** On iOS a
+  standalone web app has its own storage container, separate from Safari.
+  Tapping the emailed link opens the *default browser*, so the session lands
+  in Safari and the wall app stays signed out — request another email, same
+  result. Fix is to stop using the link: Supabase's `signInWithOtp` also
+  issues a 6-digit code, so put `{{ .Token }}` in the Magic Link email
+  template and verify in-app with
+  `verifyOtp({ email, token, type: 'email' })`. No browser hop, session
+  lands in the app that asked for it. `App.jsx` currently passes
+  `emailRedirectTo` and expects `detectSessionInUrl`.
+- **Supabase's built-in email is rate-limited and not for production** — a
+  handful of sends per hour on shared infrastructure (exact number under
+  Auth → Rate Limits in the dashboard). Needs custom SMTP (Resend, Postmark,
+  SES) before the wall is something two people rely on. This is what "email
+  rate exceeded" is.
+- **Sessions are per-origin, and every URL is a different origin.**
+  `localhost:5173`, the LAN IP, and a Vercel domain each need their own
+  sign-in, and the Home Screen app is separate again. Decide the wall's
+  permanent URL *before* spending sign-ins on it.
+- Slice 9 is still unverified on the actual iPad — long-press with a
+  fingertip, the Live/Offline header states, and the midnight rollover.
+  Full-screen Home Screen launch *is* confirmed working.
 - No test runner. `cost.js`, `week.js` and `useToday`'s date maths are pure
   and worth covering; checking them this session meant hand-rolling an
   esbuild + node harness, which is the signal to just add vitest.

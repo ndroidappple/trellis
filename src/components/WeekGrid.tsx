@@ -1,4 +1,5 @@
 import { EventChip, type EventChipData } from './EventChip';
+import { SkeletonChips } from './Skeleton';
 import { visibleChipCount, type DetailLevel } from '../hooks/useDetailLevel';
 import type { Person } from './PersonBadge';
 import './WeekGrid.css';
@@ -18,6 +19,8 @@ export interface DayData {
 interface Props {
   days: DayData[];
   level: DetailLevel;
+  /** Placeholders instead of the empty state, until real data has landed. */
+  loading?: boolean;
   initialsFor?: (person: Person) => string;
   onEventPress?: (id: string) => void;
   /** The design has no other way to create an event, so a day tap needs one. */
@@ -29,9 +32,10 @@ interface Props {
   onOpenDay?: (date: string) => void;
 }
 
-function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: {
+function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: {
   day: DayData;
   level: DetailLevel;
+  loading?: boolean;
   initialsFor?: (person: Person) => string;
   onEventPress?: (id: string) => void;
   onAddDay?: (date: string) => void;
@@ -73,7 +77,12 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal, on
       </button>
 
       <div className="day-row__events">
-        {shown.map((event) => (
+        {/* While loading, the row shows placeholders instead of its empty
+            state — "Nothing planned" on a week that hasn't arrived yet is a
+            statement of fact the board has no business making. */}
+        {loading && <SkeletonChips count={day.isToday ? 2 : 1} />}
+
+        {!loading && shown.map((event) => (
           <EventChip
             key={event.id}
             event={event}
@@ -86,7 +95,7 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal, on
         {/* Was a plain span, which made everything it counted unreachable:
             on a busy day at the tight level the collapsed events could not
             be opened, seen, or even counted accurately by tapping. */}
-        {hidden > 0 && (
+        {!loading && hidden > 0 && (
           <button
             type="button"
             className="day-row__more"
@@ -99,13 +108,13 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal, on
 
         {/* An empty evening is information, but only worth saying when
             there's room to say it. */}
-        {level === 'open' && day.events.length <= 1 && (
+        {!loading && level === 'open' && day.events.length <= 1 && (
           <span className="day-row__invite">
             {day.events.length === 0 ? 'Nothing planned' : 'Nothing else planned'}
           </span>
         )}
 
-        {onAddMeal && !hasMeal && (
+        {!loading && onAddMeal && !hasMeal && (
           <button
             type="button"
             className="day-row__add-meal"
@@ -116,7 +125,7 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal, on
           </button>
         )}
 
-        {onAddDay && (
+        {!loading && onAddDay && (
           <button
             type="button"
             className="day-row__add"
@@ -131,7 +140,7 @@ function DayRow({ day, level, initialsFor, onEventPress, onAddDay, onAddMeal, on
   );
 }
 
-export function WeekGrid({ days, level, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: Props) {
+export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: Props) {
   return (
     <div className="week-grid">
       {days.map((day) => (
@@ -139,6 +148,7 @@ export function WeekGrid({ days, level, initialsFor, onEventPress, onAddDay, onA
           key={day.date}
           day={day}
           level={level}
+          loading={loading}
           initialsFor={initialsFor}
           onEventPress={onEventPress}
           onAddDay={onAddDay}

@@ -1,4 +1,5 @@
 import { ChecklistRow } from './ChecklistRow'
+import { SkeletonRows } from './Skeleton'
 import AddRow from './AddRow'
 
 /**
@@ -8,6 +9,7 @@ import AddRow from './AddRow'
  */
 export default function ChoresPanel({
   mode,
+  loading,
   chores,
   choreIsDone,
   personFor,
@@ -16,6 +18,18 @@ export default function ChoresPanel({
   onAdd,
   onRemove,
 }) {
+  if (loading) {
+    return mode === 'compact' ? (
+      <div className="panel-strip">
+        <SkeletonRows count={1} />
+      </div>
+    ) : (
+      <div className="panel-rows">
+        <SkeletonRows count={4} />
+      </div>
+    )
+  }
+
   if (mode === 'compact') {
     const pending = chores.filter((c) => !choreIsDone(c))
     const allDone = chores.length > 0 && pending.length === 0

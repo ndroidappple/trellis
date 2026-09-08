@@ -28,6 +28,17 @@
 .section-panel--full { height: clamp(220px, 36vh, 448px); }
 .section-panel--compact { height: clamp(84px, 9vh, 112px); padding: 14px 22px; }
 
+/* One column with two panels in it — the full/compact mix. Stacked, a
+   448px full panel plus a compact one plus the gap asks for ~576px, and the
+   board has roughly 490px left after the week grid takes its floor. The
+   difference was simply clipped by .board's overflow:hidden, with the lower
+   panel's bottom rows unreachable and no scrollbar to hint at it. Shortening
+   the full panel here is what makes the arrangement actually fit; the
+   panel's own content scrolls for anything longer. */
+.section-dock[data-cols='1'][data-stack='2'] .section-panel--full {
+  height: clamp(180px, 26vh, 340px);
+}
+
 .section-panel h2 {
   font-family: var(--font-display);
   font-optical-sizing: auto;
@@ -52,11 +63,17 @@
 
 /* --- shared layouts for panel contents --- */
 
+/* These were overflow:hidden, which silently amputated any list longer than
+   the panel — no scrollbar, no fade, no indication the rest existed.
+   overscroll-behavior keeps a flick inside the panel from rubber-banding the
+   whole board, which on a wall-mounted kiosk looks like the app coming
+   loose. */
 .panel-rows {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .panel-list {
@@ -67,7 +84,8 @@
   gap: 6px 14px;
   align-content: start;
   margin-top: 6px;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* Full-width shopping panel gets four columns instead of two. */
@@ -96,6 +114,8 @@
 
 .panel-chip .person-badge { width: 26px; height: 26px; font-size: 13px; }
 
+/* A button now — tapping cycles total / remaining / percent — but it has to
+   keep reading as a footer figure, not a control. */
 .panel-cart {
   border-top: 1px solid var(--rule);
   margin-top: 12px;
@@ -103,6 +123,38 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+
+  width: 100%;
+  background: none;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+  min-height: 0;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.panel-cart:active .panel-cart__figure {
+  color: var(--ink-soft);
+}
+
+/* Over budget is worth noticing, but this is a household grocery list, not
+   an alarm — colour only, no weight change or icon. */
+.panel-cart__figure.is-over {
+  color: var(--error);
+}
+
+.panel-cart__caveat {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--ink-faint);
 }
 
 .panel-cart__label { font-size: 18px; color: var(--ink-soft); }

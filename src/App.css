@@ -126,17 +126,29 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* No min-height here — it's a <button> inside .card, so .card button's
-   var(--tap-min) (52px) already wins on specificity. Redeclaring a smaller
-   value here would be dead code that quietly lies about the real size. */
-.chip {
+/* Scoped to `.card` on purpose. `.card button` sets the primary green fill,
+   and a bare `.chip` (0,1,0) loses to it (0,1,1) — so unselected chips were
+   rendering as solid green while `.chip.on` (0,2,0) won and rendered pale.
+   That inverted the whole control: the *unselected* option was the loud one.
+   Matching specificity is what makes selected mean selected.
+
+   No min-height here — .card button's var(--tap-min) (52px) already applies,
+   and redeclaring a smaller value would quietly lie about the real size. */
+.card .chip {
   background: transparent;
   border: 1px solid var(--rule);
   color: var(--ink-soft);
   font-weight: 400;
 }
 
-.chip.on { background: var(--today-face); color: var(--ink); border-color: var(--person-a); }
+/* Selected is the filled one. Conventional, and the only reading that
+   survives being glanced at from across a room. */
+.card .chip.on {
+  background: var(--person-a);
+  border-color: var(--person-a);
+  color: var(--person-ink);
+  font-weight: 500;
+}
 
 .actions { display: flex; gap: 10px; }
 .actions button { flex: 1; }
@@ -233,25 +245,98 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
   gap: 8px;
   max-height: 46vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.list-button {
+/* ---------- Undo ---------- */
+
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 20;
+
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  max-width: min(560px, calc(100vw - 48px));
+
+  background: var(--ink);
+  color: var(--person-ink);
+  border-radius: 12px;
+  padding: 14px 16px 14px 20px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  animation: undo-rise 160ms ease-out;
+}
+
+@keyframes undo-rise {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .undo-toast { animation: none; }
+}
+
+.undo-toast__message {
+  font-size: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo-toast__action {
   background: transparent;
+  border: 1px solid rgba(246, 245, 236, 0.35);
+  border-radius: 8px;
+  color: var(--person-ink);
+  font-family: var(--font-text);
+  font-size: 17px;
+  font-weight: 600;
+  padding: 0 18px;
+  min-height: var(--tap-min);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.undo-toast__action:active {
+  background: rgba(246, 245, 236, 0.15);
+}
+
+/* Same specificity trap as .chip — as a bare class this lost to
+   `.card button` and every recipe rendered as a solid green block with the
+   servings/cook-time line in --ink-soft on top of it. Grey on green is both
+   unreadable and unpleasant, and it made a list of twenty recipes read as a
+   wall of buttons rather than as a list. These are choices in a list: quiet
+   surface, ink text, and let the titles do the work. */
+.card .list-button {
+  background: var(--row-face);
   border: 1px solid var(--rule);
   border-radius: 10px;
   color: var(--ink);
   font-weight: 400;
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 14px;
   min-height: 56px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
 }
 
-.list-button .meta { font-size: 13px; }
+.card .list-button:active {
+  background: var(--today-face);
+  border-color: var(--person-a);
+}
+
+/* Was 13px, which is small for arm's length and read as fine print. */
+.card .list-button .meta {
+  font-size: 15px;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
 
 /* ---------- Settings dialog ---------- */
 

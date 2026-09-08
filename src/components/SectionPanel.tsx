@@ -43,7 +43,11 @@ export function SectionDock({ modes, children }: {
   const cols = on.length === 2 && on.every((m) => m === 'full') ? 2 : 1;
 
   return (
-    <div className="section-dock" data-cols={cols}>
+    // `data-stack` is how many panels are actually on. Two panels stacked in
+    // one column ask for more height than the board has left once the week
+    // grid takes its floor, so the CSS uses this to shorten a full panel in
+    // that arrangement rather than let it be clipped.
+    <div className="section-dock" data-cols={cols} data-stack={on.length}>
       {children}
     </div>
   );

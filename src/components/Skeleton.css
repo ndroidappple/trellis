@@ -1,0 +1,81 @@
+/*
+ * Loading placeholders.
+ *
+ * A slow breath rather than the usual fast shimmer sweep. This board is
+ * furniture — it sits in a kitchen all day — and a bright gradient racing
+ * across it every second would be the most animated thing in the room.
+ * Two and a half seconds, low contrast, and it reads as "not yet" without
+ * demanding attention.
+ */
+
+@keyframes skeleton-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}
+
+.skeleton-bar,
+.skeleton-chip,
+.skeleton-box {
+  display: block;
+  background: var(--rule);
+  border-radius: 6px;
+  animation: skeleton-breathe 2.5s ease-in-out infinite;
+}
+
+.skeleton-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-chip);
+  align-items: center;
+}
+
+.skeleton-chip {
+  /* Matches EventChip's own minimum so nothing shifts when data lands. */
+  min-height: 56px;
+  width: 210px;
+  border-radius: 10px;
+  background: var(--chip-face);
+  border: 1px solid var(--rule);
+}
+
+.day-row--today .skeleton-chip {
+  min-height: 68px;
+  width: 260px;
+}
+
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.skeleton-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+/* Staggered, so the panel breathes as a group rather than pulsing in
+   lockstep like a warning light. */
+.skeleton-row:nth-child(2) .skeleton-bar { animation-delay: 0.18s; }
+.skeleton-row:nth-child(3) .skeleton-bar { animation-delay: 0.36s; }
+.skeleton-row:nth-child(4) .skeleton-bar { animation-delay: 0.54s; }
+.skeleton-chip:nth-child(2) { animation-delay: 0.2s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar,
+  .skeleton-chip,
+  .skeleton-box {
+    animation: none;
+    opacity: 0.7;
+  }
+}

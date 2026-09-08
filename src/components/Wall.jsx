@@ -9,7 +9,9 @@ import {
   toDateInputValue,
   toInputValue,
   weekDays,
+  weekLabel,
 } from '../lib/week'
+import { daysInYear, daysLeftInYear, dayOfYear, fiscalWeek, yearProgress } from '../lib/year'
 import { weekCost } from '../lib/cost'
 import { useToday } from '../hooks/useToday'
 import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
@@ -17,8 +19,46 @@ import { Board } from './Board'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 
-const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full' }
+const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full', flourish: 'week' }
 const LONG_PRESS_MS = 650
+
+/**
+ * Long enough that someone can cross a kitchen to reach it. A phone's
+ * five-second undo assumes the screen is already in your hand; this one
+ * frequently isn't.
+ */
+const UNDO_MS = 9000
+
+/**
+ * Optional asides for the header's second line — the board having a bit of
+ * character rather than telling you anything you need.
+ *
+ * Tapping the line cycles them, and the same list drives the settings
+ * dialog. Deliberately not advertised: someone poking at the board finds
+ * them, someone reading the week never notices they exist.
+ */
+const FLOURISHES = [
+  { id: 'off', label: 'Off', render: () => null },
+  { id: 'week', label: 'Week', render: (d) => `Week ${fiscalWeek(d)}` },
+  {
+    id: 'progress',
+    label: 'Year %',
+    render: (d) => `${yearProgress(d)}% through ${d.getFullYear()}`,
+  },
+  {
+    id: 'daysLeft',
+    label: 'Days left',
+    render: (d) => {
+      const n = daysLeftInYear(d)
+      return n === 0 ? 'Last day of the year' : `${n} days left in ${d.getFullYear()}`
+    },
+  },
+  {
+    id: 'dayOfYear',
+    label: 'Day no.',
+    render: (d) => `Day ${dayOfYear(d)} of ${daysInYear(d.getFullYear())}`,
+  },
+]
 
 /**
  * How far a finger may drift before a long-press is treated as a drag.
@@ -63,6 +103,29 @@ export default function Wall({ profile, people }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState(null)
+  const [undo, setUndo] = useState(null) // { message, run } while offered
+  const [loaded, setLoaded] = useState({})
+
+  /**
+   * Marked on first settle of each domain, success or failure. Failure counts
+   * deliberately: a board stuck in placeholders forever is worse than one
+   * showing an error, and the error banner covers that case.
+   */
+  const markLoaded = useCallback((key) => {
+    setLoaded((l) => (l[key] ? l : { ...l, [key]: true }))
+  }, [])
+
+  const booted = loaded.events && loaded.chores && loaded.shopping && loaded.meals
+
+  const undoTimer = useRef(null)
+
+  const offerUndo = useCallback((message, run) => {
+    clearTimeout(undoTimer.current)
+    setUndo({ message, run })
+    undoTimer.current = setTimeout(() => setUndo(null), UNDO_MS)
+  }, [])
+
+  useEffect(() => () => clearTimeout(undoTimer.current), [])
 
   // 'a' and 'b' are positional, not personal — see tokens.css. Ordering by
   // id keeps the assignment stable across reloads for a two-person household.
@@ -126,7 +189,8 @@ export default function Wall({ profile, people }) {
       setError(null)
       setLastSync(new Date())
     }
-  }, [anchor])
+    markLoaded('events')
+  }, [anchor, markLoaded])
 
   useEffect(() => {
     loadEvents()
@@ -163,7 +227,8 @@ export default function Wall({ profile, people }) {
       setError(null)
       setLastSync(new Date())
     }
-  }, [])
+    markLoaded('chores')
+  }, [markLoaded])
 
   useEffect(() => {
     loadChores()
@@ -194,7 +259,28 @@ export default function Wall({ profile, people }) {
 
   async function removeChore(chore) {
     setChores((cs) => cs.filter((c) => c.id !== chore.id))
-    await supabase.from('chores').delete().eq('id', chore.id)
+
+    const { error } = await supabase.from('chores').delete().eq('id', chore.id)
+    if (error) {
+      setError(error.message)
+      return loadChores()
+    }
+
+    // Restored as a new row rather than the same id — nothing references a
+    // chore by id, and the alternative is a soft-delete column for a
+    // two-person to-do list.
+    offerUndo(`Deleted “${chore.title}”`, async () => {
+      const { error: undoError } = await supabase.from('chores').insert({
+        household_id: chore.household_id,
+        title: chore.title,
+        recurrence: chore.recurrence,
+        sort_order: chore.sort_order,
+        assignee_id: chore.assignee_id ?? null,
+        completed_at: chore.completed_at ?? null,
+      })
+      if (undoError) setError(undoError.message)
+      loadChores()
+    })
   }
 
   // -------------------------------------------------------------- shopping
@@ -212,7 +298,8 @@ export default function Wall({ profile, people }) {
       setError(null)
       setLastSync(new Date())
     }
-  }, [])
+    markLoaded('shopping')
+  }, [markLoaded])
 
   useEffect(() => {
     loadShopping()
@@ -243,7 +330,24 @@ export default function Wall({ profile, people }) {
 
   async function removeShopping(item) {
     setShoppingItems((xs) => xs.filter((x) => x.id !== item.id))
-    await supabase.from('list_items').delete().eq('id', item.id)
+
+    const { error } = await supabase.from('list_items').delete().eq('id', item.id)
+    if (error) {
+      setError(error.message)
+      return loadShopping()
+    }
+
+    offerUndo(`Removed “${item.body}”`, async () => {
+      const { error: undoError } = await supabase.from('list_items').insert({
+        household_id: item.household_id,
+        list: item.list,
+        body: item.body,
+        added_by: item.added_by,
+        checked: item.checked,
+      })
+      if (undoError) setError(undoError.message)
+      loadShopping()
+    })
   }
 
   // ------------------------------------------------------------------ meals
@@ -266,6 +370,7 @@ export default function Wall({ profile, people }) {
     ])
 
     const firstError = planRes.error || recipeRes.error || stapleRes.error || hhRes.error
+    markLoaded('meals')
     if (firstError) return setError(firstError.message)
 
     setError(null)
@@ -274,7 +379,7 @@ export default function Wall({ profile, people }) {
     setStaples(stapleRes.data ?? [])
     if (hhRes.data) setBudget(hhRes.data.weekly_budget_cents)
     setLastSync(new Date())
-  }, [anchor])
+  }, [anchor, markLoaded])
 
   useEffect(() => {
     loadMeals()
@@ -465,16 +570,23 @@ export default function Wall({ profile, people }) {
     [anchor, events, mealPlan, personFor, today]
   )
 
-  function rangeLabel() {
-    const sunday = startOfWeek(anchor)
-    const saturday = addDays(sunday, 6)
-    const month = (d) => d.toLocaleDateString(undefined, { month: 'long' })
-    const start = `Sunday, ${month(sunday)} ${sunday.getDate()}`
-    const end =
-      month(sunday) === month(saturday)
-        ? `Saturday, ${saturday.getDate()}`
-        : `Saturday, ${month(saturday)} ${saturday.getDate()}`
-    return `${start} – ${end}`
+  // Today, not the week on screen — the big line is a fact about the room,
+  // and stays put while you page around.
+  const todayLabel = today.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+
+  const flourishIndex = Math.max(
+    0,
+    FLOURISHES.findIndex((f) => f.id === (settings.flourish ?? 'week'))
+  )
+
+  const flourishText = FLOURISHES[flourishIndex].render(today)
+
+  function cycleFlourish() {
+    updateSetting('flourish', FLOURISHES[(flourishIndex + 1) % FLOURISHES.length].id)
   }
 
   function handleEventPress(id) {
@@ -515,6 +627,7 @@ export default function Wall({ profile, people }) {
   const shoppingRemaining = shoppingItems.filter((i) => !i.checked).length
 
   const choresPanelProps = {
+    loading: !booted,
     chores,
     choreIsDone,
     personFor,
@@ -525,6 +638,7 @@ export default function Wall({ profile, people }) {
   }
 
   const shoppingPanelProps = {
+    loading: !booted,
     items: shoppingItems,
     cost,
     budget,
@@ -544,17 +658,21 @@ export default function Wall({ profile, people }) {
       {error && <p className="error banner">{error}</p>}
 
       <Board
-        rangeLabel={rangeLabel()}
+        todayLabel={todayLabel}
+        rangeLabel={weekLabel(anchor)}
+        flourish={flourishText}
+        onCycleFlourish={cycleFlourish}
         syncLabel={syncText(syncState, lastSync)}
         syncState={syncState}
         days={days}
+        loading={!booted}
         settings={settings}
         chores={<ChoresPanel mode="full" {...choresPanelProps} />}
         choresCompact={<ChoresPanel mode="compact" {...choresPanelProps} />}
-        choresCount={`${choresDone} of ${chores.length} done`}
+        choresCount={booted ? `${choresDone} of ${chores.length} done` : undefined}
         shopping={<ShoppingPanel mode="full" {...shoppingPanelProps} />}
         shoppingCompact={<ShoppingPanel mode="compact" {...shoppingPanelProps} />}
-        shoppingCount={`${shoppingRemaining} to buy`}
+        shoppingCount={booted ? `${shoppingRemaining} to buy` : undefined}
         onPrevWeek={() => setAnchor(addDays(anchor, -7))}
         onNextWeek={() => setAnchor(addDays(anchor, 7))}
         onToday={isCurrentWeek ? undefined : () => setAnchor(startOfWeek(today))}
@@ -576,6 +694,19 @@ export default function Wall({ profile, people }) {
             setEditing(null)
             loadEvents()
           }}
+          onDeleted={(ev) =>
+            offerUndo(`Deleted “${ev.title}”`, async () => {
+              const { error: undoError } = await supabase.from('events').insert({
+                household_id: ev.household_id,
+                title: ev.title,
+                starts_at: ev.starts_at,
+                all_day: ev.all_day,
+                owner_id: ev.owner_id,
+              })
+              if (undoError) setError(undoError.message)
+              loadEvents()
+            })
+          }
         />
       )}
 
@@ -615,6 +746,27 @@ export default function Wall({ profile, people }) {
 
       {settingsOpen && (
         <SettingsPanel settings={settings} onChange={updateSetting} onClose={() => setSettingsOpen(false)} />
+      )}
+
+      {/* Deletion on a shared wall is the one action nobody can take back by
+          hand — the other person's chore is simply gone, with no record it
+          existed. A confirm dialog would tax every correct deletion to
+          prevent the rare wrong one; this taxes none of them. */}
+      {undo && (
+        <div className="undo-toast" role="status">
+          <span className="undo-toast__message">{undo.message}</span>
+          <button
+            className="undo-toast__action"
+            onClick={() => {
+              clearTimeout(undoTimer.current)
+              const restore = undo.run
+              setUndo(null)
+              restore()
+            }}
+          >
+            Undo
+          </button>
+        </div>
       )}
     </div>
   )
@@ -698,7 +850,7 @@ function syncText(state, lastSync) {
   return lastSync ? `Offline · ${timeLabel(lastSync)}` : 'Offline'
 }
 
-function EventEditor({ initial, profile, people, personFor, onClose, onSaved }) {
+function EventEditor({ initial, profile, people, personFor, onClose, onSaved, onDeleted }) {
   const isNew = !initial.id
   const base = initial._day ?? new Date(initial.starts_at)
 
@@ -751,8 +903,9 @@ function EventEditor({ initial, profile, people, personFor, onClose, onSaved }) 
     setBusy(true)
     const { error } = await supabase.from('events').delete().eq('id', initial.id)
     setBusy(false)
-    if (error) setError(error.message)
-    else onSaved()
+    if (error) return setError(error.message)
+    onDeleted?.(initial)
+    onSaved()
   }
 
   function colorFor(personId) {
@@ -955,6 +1108,24 @@ function SettingsPanel({ settings, onChange, onClose }) {
             </div>
           </div>
         ))}
+
+        {/* The header line cycles these on tap too. This is here so the set
+            is discoverable once you've found the settings at all, rather
+            than only by tapping the header repeatedly and guessing. */}
+        <div className="settings-row">
+          <span className="settings-row__label">Header aside</span>
+          <div className="chips">
+            {FLOURISHES.map((f) => (
+              <button
+                key={f.id}
+                className={(settings.flourish ?? 'week') === f.id ? 'chip on' : 'chip'}
+                onClick={() => onChange('flourish', f.id)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="actions">
           <button className="ghost" onClick={onClose}>

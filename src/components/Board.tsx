@@ -14,10 +14,18 @@ export interface SectionSettings {
 export type SyncState = 'live' | 'connecting' | 'offline';
 
 interface Props {
-  rangeLabel: string;          // "Sunday, March 3 – Saturday, March 9"
+  /** Today, always — not the week being viewed. "Sunday, March 3". */
+  todayLabel: string;
+  rangeLabel: string;          // "March 3 – 9"
+  /** Optional aside: "Week 10", "19% through 2026". Null when switched off. */
+  flourish?: string | null;
+  /** Advances the flourish. Deliberately undiscoverable until tapped. */
+  onCycleFlourish?: () => void;
   syncLabel: string;           // "Live", "Offline · 7:41 PM"
   syncState?: SyncState;
   days: DayData[];
+  /** First load hasn't landed yet — show placeholders, not empty states. */
+  loading?: boolean;
   settings: SectionSettings;
   chores: ReactNode;
   choresCompact: ReactNode;
@@ -42,7 +50,25 @@ export function Board(props: Props) {
   return (
     <div className="board" data-detail={level}>
       <header className="board__header">
-        <p className="board__range">{props.rangeLabel}</p>
+        {/* Today is the thing you read from across the room, so it gets the
+            size. The week being viewed is context and sits underneath. */}
+        <div className="board__heading">
+          <p className="board__today-label">{props.todayLabel}</p>
+          <button
+            type="button"
+            className="board__sub"
+            onClick={props.onCycleFlourish}
+            aria-label="Change what this line shows"
+          >
+            <span>{props.rangeLabel}</span>
+            {props.flourish && (
+              <>
+                <span className="board__sub-dot" aria-hidden="true">·</span>
+                <span className="board__flourish">{props.flourish}</span>
+              </>
+            )}
+          </button>
+        </div>
         <div className="board__header-right">
           <span className="board__sync" data-sync={props.syncState ?? 'live'}>
             <span className="board__sync-dot" aria-hidden="true" />
@@ -66,6 +92,7 @@ export function Board(props: Props) {
         <WeekGrid
           days={props.days}
           level={level}
+          loading={props.loading}
           initialsFor={props.initialsFor}
           onEventPress={props.onEventPress}
           onAddDay={props.onAddDay}

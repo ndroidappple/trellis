@@ -215,9 +215,14 @@ link. Settled the hard way; the constraints below are all load-bearing.
 
 ## Open items from the last session
 
-- Slice 9 is still unverified on the actual iPad — long-press with a
-  fingertip, the Live/Offline header states, and the midnight rollover.
-  Full-screen Home Screen launch *is* confirmed working.
+- Slice 9 on the actual iPad: long-press with a fingertip, full-screen Home
+  Screen launch, and the 180ms sheet transition are all confirmed good. The
+  midnight rollover showed the right day on 8 Sep, but the app had almost
+  certainly reloaded overnight (several deploys, plus being opened and
+  closed), so that is consistent with the timer working rather than proof of
+  it. **The Live/Offline header states are still untested** — put the iPad in
+  Airplane Mode and watch the header go red within a minute, then return to
+  "Live" on reconnect.
 - No test runner. `cost.js`, `week.js` and `useToday`'s date maths are pure
   and worth covering; checking them this session meant hand-rolling an
   esbuild + node harness, which is the signal to just add vitest.

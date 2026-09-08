@@ -187,14 +187,15 @@ give them a real computed minimum, not `min-height: 0`.
   `verifyOtp({ email, token, type: 'email' })`. No browser hop, session
   lands in the app that asked for it.
 
-  **Don't assume the code is six digits.** OTP length is a project setting
-  and the token is not guaranteed numeric. The code-entry input had
-  `maxLength={6}` and stripped non-digits, so a longer code was silently
-  truncated and rejected — which surfaces as "Token has expired or is
-  invalid", indistinguishable from a genuinely stale token, and sent us
-  hunting a mail-scanner theory that was wrong. The input now strips only
-  whitespace. Any "invalid token" report should start by checking what was
-  actually submitted, not why it might have expired.
+  **This project's codes are 8 digits, not 6.** OTP length is a Supabase
+  project setting (Auth → Providers → Email); `CODE_LENGTH` in `App.jsx`
+  mirrors it and the two must be kept in step. The input originally had
+  `maxLength={6}`, so the code was silently truncated and submitted as an
+  invalid token — which Supabase reports as "Token has expired or is
+  invalid", indistinguishable from a genuinely stale token. The symptom
+  pointed at expiry and cost an evening chasing a mail-scanner prefetch
+  theory that was wrong. Any future "invalid token" should start by checking
+  what the client actually submitted, not why it might have expired.
 
   Prefer `{{ .Token }}` alone in the template over shipping it alongside
   `{{ .ConfirmationURL }}` — they are the same one-time token in two forms,

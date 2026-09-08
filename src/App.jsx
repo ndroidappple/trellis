@@ -3,6 +3,14 @@ import { supabase } from './lib/supabase'
 import Wall from './components/Wall'
 import './App.css'
 
+/**
+ * Length of the emailed sign-in code. Set by Supabase under
+ * Auth → Providers → Email, currently 8 — it is a project setting, not a
+ * universal 6, and assuming otherwise silently truncates the code into an
+ * invalid token. Keep the two in step if it's ever changed there.
+ */
+const CODE_LENGTH = 8
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -69,7 +77,7 @@ function SignIn() {
 
   async function verifyCode() {
     const token = code.trim()
-    if (!token) return
+    if (token.length !== CODE_LENGTH) return
     setBusy(true)
     setStatus(null)
 
@@ -122,31 +130,30 @@ function SignIn() {
           <>
             <p className="muted">Enter the code sent to {email.trim()}.</p>
             {/*
-              Deliberately unconstrained. An earlier version capped this at 6
-              characters and stripped non-digits, on the assumption that
-              Supabase codes are always six digits — they are not. OTP length
-              is a project setting, so a longer or alphanumeric code was
-              silently truncated and then rejected as invalid, which reads
-              exactly like an expired token and sent us hunting the wrong bug.
-              Only whitespace is removed, so a pasted code with a stray space
-              still works.
+              This project issues 8-digit numeric codes. OTP length is a
+              Supabase project setting, not a universal 6 — an earlier
+              version assumed six and silently truncated the code, which
+              Supabase then rejected as an invalid token. That reads exactly
+              like an expired one, so the symptom pointed away from the
+              cause. If sign-in ever starts failing again, check the length
+              here against Auth → Providers → Email before anything else.
             */}
             <input
               autoFocus
               type="text"
-              inputMode="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               // Lets iOS offer the code from Mail without leaving the app.
               autoComplete="one-time-code"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="Paste or type the code"
-              maxLength={12}
+              placeholder="12345678"
+              maxLength={CODE_LENGTH}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\s/g, ''))}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
               onKeyDown={(e) => e.key === 'Enter' && verifyCode()}
             />
-            <button onClick={verifyCode} disabled={busy}>
+            {/* Submitting a half-typed code is what produced the "invalid
+                token" dead end, so the button simply won't do it. */}
+            <button onClick={verifyCode} disabled={busy || code.length !== CODE_LENGTH}>
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
             <button

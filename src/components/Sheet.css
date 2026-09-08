@@ -1,0 +1,195 @@
+/*
+ * Full-screen sheets. See Sheet.jsx for why only some surfaces get one.
+ */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+
+  background: var(--plaster);
+  color: var(--ink);
+  font-family: var(--font-text);
+
+  display: flex;
+  flex-direction: column;
+
+  /* Same safe-area treatment as .board — a sheet covers the whole screen,
+     including the space under the status bar. */
+  padding: calc(20px + env(safe-area-inset-top, 0px))
+           calc(24px + env(safe-area-inset-right, 0px))
+           calc(24px + env(safe-area-inset-bottom, 0px))
+           calc(24px + env(safe-area-inset-left, 0px));
+  gap: 18px;
+
+  animation: sheet-in 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Rises rather than fades in from nowhere: the direction is what says
+   "a layer arrived on top" instead of "the page changed". */
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet { animation: none; }
+}
+
+.sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 auto;
+}
+
+.sheet__titles {
+  min-width: 0;
+}
+
+.sheet__title {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 34px;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.sheet__subtitle {
+  margin: 2px 0 0;
+  font-size: 18px;
+  color: var(--ink-soft);
+}
+
+.sheet__close {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 19px;
+  font-weight: 500;
+  padding: 0 24px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.sheet__close:active {
+  background: var(--slat-face);
+}
+
+.sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sheet__footer {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+}
+
+.sheet__footer button {
+  flex: 1;
+  font-family: var(--font-text);
+  font-size: 19px;
+  font-weight: 600;
+  min-height: var(--tap-min);
+  border-radius: 10px;
+  border: none;
+  background: var(--person-a);
+  color: var(--person-ink);
+  cursor: pointer;
+}
+
+.sheet__footer button.ghost {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* --- content shared by the sheets --- */
+
+.sheet__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sheet__heading {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Rows in a sheet get more room than the dialog version — that extra space
+   is most of the reason these two surfaces became sheets. */
+.sheet-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 16px 18px;
+  min-height: 72px;
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 21px;
+  cursor: pointer;
+  transition: transform 70ms ease, background-color 90ms ease;
+}
+
+.sheet-row:active {
+  transform: scale(0.99);
+  background: var(--today-face);
+  border-color: var(--person-a);
+}
+
+.sheet-row__meta {
+  font-size: 17px;
+  color: var(--ink-soft);
+}
+
+.sheet__empty {
+  font-size: 19px;
+  color: var(--ink-faint);
+}
+
+.sheet__search {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 19px;
+  min-height: var(--tap-min);
+  padding: 0 16px;
+}
+
+.sheet__search:focus {
+  outline: 2px solid var(--person-a);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-row { transition: none; }
+  .sheet-row:active { transform: none; }
+}

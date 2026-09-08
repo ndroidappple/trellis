@@ -14,7 +14,7 @@ body {
 h1, h2 { color: var(--ink); margin: 0; font-weight: 500; font-family: var(--font-display); }
 h1 { font-size: 30px; letter-spacing: -0.01em; }
 h2 { font-size: 21px; }
-p  { margin: 0; font-size: 17px; line-height: 1.5; }
+p  { margin: 0; font-size: 18px; line-height: 1.5; }
 
 .muted { color: var(--ink-soft); }
 .ok    { color: var(--person-a); }
@@ -25,7 +25,7 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
    devtools, so it has to wrap and stay selectable rather than run off the
    edge of the card. */
 .card .error {
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.45;
   overflow-wrap: anywhere;
   -webkit-user-select: text;
@@ -36,7 +36,7 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
    message has to fit and wrap rather than run off the card. */
 .crash-detail {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.45;
   overflow-wrap: anywhere;
   max-height: 40vh;
@@ -73,7 +73,7 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
 .card button,
 .card select {
   font: inherit;
-  font-size: 17px;
+  font-size: 18px;
   border-radius: 10px;
   /* 52px is a comfortable target from arm's length on a wall. */
   min-height: var(--tap-min);
@@ -121,7 +121,7 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
 
 .dialog { gap: 14px; }
 
-.row { display: flex; align-items: center; gap: 10px; font-size: 17px; }
+.row { display: flex; align-items: center; gap: 10px; font-size: 18px; }
 .row input[type='checkbox'] { min-height: 0; width: 22px; height: 22px; }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -177,7 +177,8 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
   border: 1px solid var(--rule);
   background: transparent;
   color: var(--ink-soft);
-  font-size: 16px;
+  /* The glyph itself, not the button — 16px was a barely-visible speck. */
+  font-size: 20px;
   padding: 0;
 }
 
@@ -187,25 +188,10 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
   margin-top: 8px;
 }
 
-.panel-add input { flex: 1; min-height: 44px; font-size: 16px; }
-.panel-add button { min-height: 44px; }
+.panel-add input { flex: 1; min-height: var(--tap-min); font-size: 17px; }
+.panel-add button { min-height: var(--tap-min); font-size: 18px; }
 
 /* ---------- Recipe picker (inside the meal editor dialog) ---------- */
-
-/* ---------- Day view ---------- */
-
-.day-view__section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.day-view__heading {
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
 
 /* ---------- Touch feedback ----------
    A tap that produces no immediate visual response reads as a web page that
@@ -280,7 +266,7 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
 }
 
 .undo-toast__message {
-  font-size: 17px;
+  font-size: 18px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -292,7 +278,7 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
   border-radius: 8px;
   color: var(--person-ink);
   font-family: var(--font-text);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   padding: 0 18px;
   min-height: var(--tap-min);
@@ -333,7 +319,7 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
 
 /* Was 13px, which is small for arm's length and read as fine print. */
 .card .list-button .meta {
-  font-size: 15px;
+  font-size: 17px;
   color: var(--ink-soft);
   font-weight: 400;
 }
@@ -353,12 +339,15 @@ p  { margin: 0; font-size: 17px; line-height: 1.5; }
   font-size: 19px;
 }
 
+/* "unpriced" on a meal — small, but it qualifies a money figure, so it has
+   to be readable rather than decorative. 12px uppercase was a smudge. */
 .tag {
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: 16px;
   border: 1px solid var(--rule);
   border-radius: 6px;
-  padding: 2px 6px;
+  padding: 3px 8px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }

@@ -90,7 +90,7 @@
 }
 
 .day-row__dow {
-  font-size: 17px;
+  font-size: 19px;
   color: var(--ink-soft);
 }
 
@@ -103,7 +103,7 @@
 
 .day-row__badge {
   margin-top: 10px;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--ink-soft);
   border: 1px solid var(--rule);
   border-radius: 999px;
@@ -130,7 +130,8 @@
 
   background: none;
   border: 0;
-  min-height: 0;
+  /* A control, so it gets a control's target even though it reads as text. */
+  min-height: var(--tap-min);
   font-family: inherit;
   cursor: pointer;
   text-decoration: underline;
@@ -175,8 +176,8 @@
   border: 1px dashed var(--meal-rule);
   background: transparent;
   color: var(--ink-soft);
-  font-size: 15px;
-  padding: 8px 14px;
+  font-size: 18px;
+  padding: 8px 16px;
   min-height: var(--tap-min);
   cursor: pointer;
   flex-shrink: 0;

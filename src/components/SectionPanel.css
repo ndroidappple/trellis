@@ -112,7 +112,7 @@
   min-height: 46px;
 }
 
-.panel-chip .person-badge { width: 26px; height: 26px; font-size: 13px; }
+.panel-chip .person-badge { width: 30px; height: 30px; font-size: 15px; }
 
 /* A button now — tapping cycles total / remaining / percent — but it has to
    keep reading as a footer figure, not a control. */
@@ -132,7 +132,7 @@
   border-radius: 0;
   padding-left: 0;
   padding-right: 0;
-  min-height: 0;
+  min-height: 44px;
   color: inherit;
   font-family: inherit;
   text-align: left;
@@ -153,7 +153,7 @@
 
 .panel-cart__caveat {
   margin-top: 6px;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--ink-faint);
 }
 

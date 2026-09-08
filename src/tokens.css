@@ -60,6 +60,15 @@
   --size-panel-title: 26px;
   --size-row: 22px;
 
+  /* Type floor. Everything on this board is read standing at arm's length
+   * from a wall-mounted iPad, not leaning into a laptop — 13-15px type that
+   * looks like tasteful fine print on a desk is genuinely hard to see there.
+   * 17px is the minimum for anything carrying meaning; controls want 18px+.
+   * Below it only: the crash-screen stack trace, and initials inside a
+   * person badge where colour and position already carry the meaning.
+   */
+  --size-min: 17px;
+
   /* --- geometry --- */
   --tap-min: 52px;         /* nothing tappable goes below this */
   --badge: 30px;

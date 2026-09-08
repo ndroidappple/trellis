@@ -16,8 +16,10 @@ import { weekCost } from '../lib/cost'
 import { useToday } from '../hooks/useToday'
 import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
+import Sheet from './Sheet'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
+import './Sheet.css'
 
 const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full', flourish: 'week' }
 const LONG_PRESS_MS = 650
@@ -793,48 +795,39 @@ function DayView({
   const nameFor = (ownerId) => peopleById.find((p) => p.id === ownerId)?.display_name
 
   return (
-    <div className="scrim" onClick={onClose}>
-      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
-        <h2>{dayLabel(date)}</h2>
+    <Sheet
+      title={dayLabel(date)}
+      onClose={onClose}
+      footer={<button onClick={onAddEvent}>Add event</button>}
+    >
+      <div className="sheet__section">
+        <span className="sheet__heading">Dinner</span>
+        <button className="sheet-row" onClick={onEditMeal}>
+          <span>{meal?.recipe ? meal.recipe.title : 'Nothing planned'}</span>
+          <span className="sheet-row__meta">
+            {meal?.recipe ? (meal.is_leftover ? 'Leftovers' : 'Cooking') : 'Tap to plan'}
+          </span>
+        </button>
+      </div>
 
-        <div className="day-view__section">
-          <span className="day-view__heading">Dinner</span>
-          <button className="list-button" onClick={onEditMeal}>
-            <span>{meal?.recipe ? meal.recipe.title : 'Nothing planned'}</span>
-            <span className="muted meta">
-              {meal?.recipe ? (meal.is_leftover ? 'Leftovers' : 'Cooking') : 'Tap to plan'}
+      <div className="sheet__section">
+        <span className="sheet__heading">
+          {events.length === 1 ? '1 event' : `${events.length} events`}
+        </span>
+
+        {events.length === 0 && <p className="sheet__empty">Nothing scheduled.</p>}
+
+        {events.map((ev) => (
+          <button key={ev.id} className="sheet-row" onClick={() => onEventPress(ev)}>
+            <span>{ev.title}</span>
+            <span className="sheet-row__meta">
+              {ev.all_day ? 'All day' : timeLabel(new Date(ev.starts_at))}
+              {nameFor(ev.owner_id) ? ` · ${nameFor(ev.owner_id)}` : ''}
             </span>
           </button>
-        </div>
-
-        <div className="day-view__section">
-          <span className="day-view__heading">
-            {events.length === 1 ? '1 event' : `${events.length} events`}
-          </span>
-
-          {events.length === 0 && <p className="muted">Nothing scheduled.</p>}
-
-          <div className="list-scroll">
-            {events.map((ev) => (
-              <button key={ev.id} className="list-button" onClick={() => onEventPress(ev)}>
-                <span>{ev.title}</span>
-                <span className="muted meta">
-                  {ev.all_day ? 'All day' : timeLabel(new Date(ev.starts_at))}
-                  {nameFor(ev.owner_id) ? ` · ${nameFor(ev.owner_id)}` : ''}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="actions">
-          <button onClick={onAddEvent}>Add event</button>
-          <button className="ghost" onClick={onClose}>
-            Close
-          </button>
-        </div>
+        ))}
       </div>
-    </div>
+    </Sheet>
   )
 }
 
@@ -991,49 +984,38 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
     const shown = recipes.filter((r) => r.title.toLowerCase().includes(q.trim().toLowerCase()))
 
     return (
-      <div className="scrim" onClick={onClose}>
-        <div className="card dialog" onClick={(e) => e.stopPropagation()}>
-          <h2>Pick a meal</h2>
-          <p className="muted">{dayLabel(date)}</p>
+      <Sheet
+        title="Pick a meal"
+        subtitle={dayLabel(date)}
+        onClose={entry?.recipe ? () => setPicking(false) : onClose}
+      >
+        {/* No autoFocus. Picking a meal starts by *reading* the list, and an
+            unrequested keyboard covers half of it on an iPad. The field is
+            there when someone wants to narrow things down; until they tap
+            it, the list is the interface. */}
+        <input
+          className="sheet__search"
+          placeholder="Search recipes"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
 
-          {/* No autoFocus. Picking a meal starts by *reading* the list, and
-              an unrequested keyboard covers half of it on an iPad. The field
-              is there when someone wants to narrow things down; until they
-              tap it, the list is the interface. */}
-          <input
-            placeholder="Search recipes"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-
-          <div className="list-scroll">
-            {shown.map((r) => (
-              <button key={r.id} className="list-button" onClick={() => onPick(r.id)}>
-                <span>{r.title}</span>
-                <span className="muted meta">
-                  {r.servings_min
-                    ? `${r.servings_min}${r.servings_max && r.servings_max !== r.servings_min ? `-${r.servings_max}` : ''} servings`
-                    : ''}
-                  {r.cook_minutes ? ` · ${r.cook_minutes} min` : ''}
-                  {r.status === 'conditional' ? ' · conditional' : ''}
-                </span>
-              </button>
-            ))}
-            {shown.length === 0 && <p className="muted">Nothing matches.</p>}
-          </div>
-
-          <div className="actions">
-            {entry?.recipe && (
-              <button className="ghost" onClick={() => setPicking(false)}>
-                Back
-              </button>
-            )}
-            <button className="ghost" onClick={onClose}>
-              Cancel
+        <div className="sheet__section">
+          {shown.map((r) => (
+            <button key={r.id} className="sheet-row" onClick={() => onPick(r.id)}>
+              <span>{r.title}</span>
+              <span className="sheet-row__meta">
+                {r.servings_min
+                  ? `${r.servings_min}${r.servings_max && r.servings_max !== r.servings_min ? `–${r.servings_max}` : ''} servings`
+                  : ''}
+                {r.cook_minutes ? ` · ${r.cook_minutes} min` : ''}
+                {r.status === 'conditional' ? ' · conditional' : ''}
+              </span>
             </button>
-          </div>
+          ))}
+          {shown.length === 0 && <p className="sheet__empty">Nothing matches.</p>}
         </div>
-      </div>
+      </Sheet>
     )
   }
 

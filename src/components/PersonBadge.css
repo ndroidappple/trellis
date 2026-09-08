@@ -6,7 +6,7 @@
   display: grid;
   place-items: center;
   font-family: var(--font-text);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1;
   color: var(--person-ink);

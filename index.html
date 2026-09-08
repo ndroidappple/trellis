@@ -7,7 +7,25 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <title>wall-planner</title>
+
+    <!--
+      Add to Home Screen, which is the only way to get the wall's full screen.
+      Every browser on iPadOS uses WebKit and keeps its own toolbar, so no
+      browser choice avoids this — the page has to declare itself a web app,
+      and then the home-screen launcher runs it with no browser UI at all.
+
+      black-translucent puts the page behind the status bar rather than below
+      it, so the board really does reach every edge. That means the clock and
+      battery sit on top of the header, so .board pads itself by the safe-area
+      insets (see Board.css) to keep out from under them.
+    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Trellis" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <title>Trellis</title>
   </head>
   <body>
     <div id="root"></div>

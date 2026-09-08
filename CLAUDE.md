@@ -129,6 +129,17 @@ this nearly impossible to open with a fingertip — a finger resting on
 glass emits a constant dribble of move events, while a held-still mouse
 emits none, so it tested fine on a Mac and failed on the wall.
 
+**Run it from the Home Screen, not from Safari.** Every browser on iPadOS
+uses WebKit and keeps its own toolbar, so no browser choice gets the full
+screen — the page declares itself a web app instead
+(`apple-mobile-web-app-capable`), and Add to Home Screen then launches it
+with no browser UI. `apple-mobile-web-app-status-bar-style` is
+`black-translucent`, so the page runs *behind* the status bar and `.board`
+adds `env(safe-area-inset-*)` to its padding to stay clear of the clock and
+battery. Those insets resolve to 0px in a normal tab, so the desktop layout
+is unchanged. This matters beyond looks: every `useDetailLevel` threshold
+is calibrated against the full-height viewport.
+
 ## Wall survival
 
 The iPad runs unattended for weeks, which breaks assumptions that hold
@@ -176,9 +187,9 @@ give them a real computed minimum, not `min-height: 0`.
   cart footer presents a possibly-undercounted total as authoritative.
 - `removeChore` / `removeShopping` delete optimistically and swallow the
   error, unlike the toggles which refetch on failure.
-- No iPad home-screen meta (`apple-mobile-web-app-capable`, status bar) and
-  `index.html` still titled "wall-planner". Not cosmetic: without it Safari
-  chrome eats the vertical height every `useDetailLevel` threshold assumes.
+- `public/favicon.svg` is still the purple template bolt, off-palette. The
+  home-screen icon (`apple-touch-icon.png`) was redrawn in the real palette;
+  the browser-tab favicon wasn't.
 - README is still Vite template boilerplate.
 - Decide whether to bring back a to-do list UI, and if so, where — no
   design surface currently exists for a third dock section, and

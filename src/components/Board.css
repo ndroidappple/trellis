@@ -8,7 +8,15 @@
 
   display: flex;
   flex-direction: column;
-  padding: 22px 24px 24px;
+
+  /* Launched from the Home Screen the page runs behind the status bar (see
+     the black-translucent meta in index.html), so the design's padding is
+     added on top of whatever the system reserves. env() resolves to 0px in a
+     normal browser tab, leaving the original 22/24/24 untouched there. */
+  padding: calc(22px + env(safe-area-inset-top, 0px))
+           calc(24px + env(safe-area-inset-right, 0px))
+           calc(24px + env(safe-area-inset-bottom, 0px))
+           calc(24px + env(safe-area-inset-left, 0px));
   gap: 16px;
 
   /* Kiosk: nothing on the wall should rubber-band or select. */

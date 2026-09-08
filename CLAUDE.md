@@ -15,16 +15,20 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   compile errors across the mixed .jsx/.tsx codebase — there's no
   standalone typecheck script)
 
-  **⚠️ A green build does not mean the app is in the bundle.**
-  `src/lib/supabase.js` throws at module scope when `VITE_SUPABASE_URL` /
-  `VITE_SUPABASE_ANON_KEY` are missing. Vite inlines those at build time, so
-  with no `.env.local` the throw becomes unconditional, Rolldown treats
-  everything downstream as unreachable, and it tree-shakes the entire app
-  away — exiting 0, reporting all modules transformed, and emitting full CSS.
-  The only tell is bundle size: ~430 kB with the app, ~199 kB without.
-  A `git worktree` won't have `.env.local` (it's gitignored), so copy it in
-  before trusting a build there. The same trap applies to any CI or Vercel
-  build with unset env vars: it "succeeds" and ships a blank screen.
+  **Builds require credentials, on purpose.** `vite.config.js` aborts a
+  build when `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are missing
+  (from `.env.local` or the environment). Don't remove that guard.
+
+  The failure it prevents is nasty: `src/lib/supabase.js` throws at module
+  scope without those vars, Vite inlines `import.meta.env` at build time, so
+  the throw becomes unconditional and Rolldown proves everything downstream
+  unreachable and tree-shakes the whole app away — exiting 0, reporting all
+  modules transformed, emitting full CSS, and shipping a blank screen. The
+  only tell was bundle size: ~430 kB with the app, ~199 kB without.
+
+  A `git worktree` does not inherit `.env.local` (it's gitignored), so copy
+  it in before building there. `npm run dev` deliberately still runs without
+  credentials — it fails visibly in the browser and can't be deployed.
 - `npm run lint` — oxlint
 
 ## Architecture
@@ -69,17 +73,20 @@ RLS is the real security boundary: every table's policies funnel through
 `current_household_id()`, which resolves via the caller's `profiles` row.
 No profile row = no access, even with a valid session.
 
-**⚠️ Migration gap:** `supabase/migrations/` only has `001`–`003` and
-`007`. Migrations `004_recipes.sql`, `005_price_book.sql`, and
-`006_seed_meal_hq.sql` were run directly against the live Supabase project
-during the session but were never saved into this repo — the recipes,
-products, and meal-plan seed data all exist in the database, just not as
-files here. If you need to reconstruct the schema from scratch (a new
-Supabase project, a teammate's local setup), those three files are
-missing and would need to be regenerated or pulled from Supabase's own
-migration history. Worth fixing at some point — either pull the current
-schema via `supabase db dump` and reconcile, or just recreate 004–006 from
-what's actually in the database.
+`supabase/migrations/` now holds the complete set, `001`–`007`. 004–006
+had been run straight against the live project and existed nowhere in git
+for a while; they were recovered and committed in slice 9, so the schema is
+reconstructible from this repo again.
+
+**Re-running `006_seed_meal_hq.sql` is destructive.** It is idempotent by
+wiping first, and its `delete from products` / `delete from staples` are
+not scoped to `source = 'meal_hq'` — so anything added by hand since is
+gone, and `weekly_budget_cents` is reset to 12000. Fine for rebuilding a
+fresh project, not something to run casually against the live one.
+
+004–006 seed no `meal_plan` rows, which is correct: meal plans are user
+data written through the app, not seed data. A rebuilt project starts with
+the price book and recipe bank but an empty week.
 
 Tables: `household` (singleton row — budget, `board_settings`),
 `profiles`, `events`, `chores`, `list_items` (shopping/todo, though todo
@@ -159,10 +166,26 @@ give them a real computed minimum, not `min-height: 0`.
 
 ## Open items from the last session
 
-- Reconstruct or reconcile migrations 004–006 (see gap above).
+- Slice 9 is unverified on the actual iPad. The midnight rollover was
+  checked as arithmetic and the offline states as code paths — neither has
+  been watched happening on the wall.
+- No test runner. `cost.js`, `week.js` and `useToday`'s date maths are pure
+  and worth covering; checking them this session meant hand-rolling an
+  esbuild + node harness, which is the signal to just add vitest.
+- `weekCost` returns `unpricedIngredients` and the UI discards it, so the
+  cart footer presents a possibly-undercounted total as authoritative.
+- `removeChore` / `removeShopping` delete optimistically and swallow the
+  error, unlike the toggles which refetch on failure.
+- No iPad home-screen meta (`apple-mobile-web-app-capable`, status bar) and
+  `index.html` still titled "wall-planner". Not cosmetic: without it Safari
+  chrome eats the vertical height every `useDetailLevel` threshold assumes.
+- README is still Vite template boilerplate.
 - Decide whether to bring back a to-do list UI, and if so, where — no
-  design surface currently exists for a third dock section.
+  design surface currently exists for a third dock section, and
+  `SectionDock` hardcodes two children.
 - Landscape orientation isn't tuned.
 - Broader "personality" pass was requested (typography done — real
   Fraunces/Figtree now installed — but color/texture/voice was only
   brainstormed, not decided or implemented).
+- Person avatars: direction settled in `docs/backlog-person-avatars.md`,
+  blocked on Nick supplying a photo of each of them.

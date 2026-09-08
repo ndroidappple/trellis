@@ -185,8 +185,18 @@ give them a real computed minimum, not `min-height: 0`.
   issues a 6-digit code, so put `{{ .Token }}` in the Magic Link email
   template and verify in-app with
   `verifyOtp({ email, token, type: 'email' })`. No browser hop, session
-  lands in the app that asked for it. `App.jsx` currently passes
-  `emailRedirectTo` and expects `detectSessionInUrl`.
+  lands in the app that asked for it.
+
+  **The template must contain `{{ .Token }}` and NOT
+  `{{ .ConfirmationURL }}`.** Those are the same one-time token in two
+  forms, not two independent options. Mail providers and security scanners
+  fetch links in incoming mail to scan them, and that fetch redeems the
+  link and spends the token — so the typed code is already dead, presenting
+  as "Token has expired or is invalid" within seconds of the mail arriving.
+  Shipping a template with both cost an evening here.
+
+  Each new send also invalidates the previous token, so only the newest
+  email is ever valid; old ones in the inbox look identical and are dead.
 - **Supabase's built-in email is rate-limited and not for production** — a
   handful of sends per hour on shared infrastructure (exact number under
   Auth → Rate Limits in the dashboard). This is what "email rate exceeded"

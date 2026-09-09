@@ -18,6 +18,11 @@ export default function ChoresPanel({
   onAdd,
   onRemove,
   commonChores = [],
+  onDragStart,
+  draggingId,
+  scheduleLabelFor,
+  isScheduled,
+  lastDoneFor,
 }) {
   if (loading) {
     return mode === 'compact' ? (
@@ -48,24 +53,63 @@ export default function ChoresPanel({
   }
 
   return (
-    <div className="panel-rows">
+    // Dropping a chore back here unschedules it — see useChoreDrag.
+    <div className="panel-rows" data-drop-backlog="">
       {chores.length === 0 && <p className="muted">Nothing yet.</p>}
-      {chores.map((c) => (
-        <div key={c.id} className="panel-row">
-          <ChecklistRow
-            id={c.id}
-            label={c.title}
-            when={c.recurrence === 'once' ? 'One-off' : undefined}
-            done={choreIsDone(c)}
-            person={c.assignee_id ? personFor(c.assignee_id) : undefined}
-            initials={c.assignee_id ? initialsForPerson(personFor(c.assignee_id)) : undefined}
-            onToggle={() => onToggle(c)}
-          />
-          <button className="panel-row__remove" onClick={() => onRemove(c)} aria-label={`Remove ${c.title}`}>
-            ×
-          </button>
-        </div>
-      ))}
+      {chores.map((c) => {
+        const scheduled = isScheduled?.(c) ?? false
+        const last = lastDoneFor?.(c.id) ?? null
+        const done = choreIsDone(c)
+
+        // Four states to tell apart, so they are split across two channels
+        // rather than crammed into one: the tick carries done/not-done, and
+        // the label carries scheduled/unscheduled. A scheduled chore names
+        // its day; an unscheduled one says so plainly instead of going
+        // blank, because blank reads as "no information" rather than "not
+        // scheduled".
+        const when = [
+          scheduleLabelFor?.(c),
+          last?.completed_by_name ? (done ? last.completed_by_name : `last: ${last.completed_by_name}`) : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+
+        return (
+          <div
+            key={c.id}
+            className={[
+              'panel-row',
+              scheduled ? 'panel-row--scheduled' : 'panel-row--loose',
+              draggingId === c.id ? 'is-dragging' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            {/* A handle, not a long press on the row. touch-action: none
+                here is what stops iPadOS reading the drag as a scroll of
+                the list, while the rest of the row still scrolls. */}
+            <button
+              type="button"
+              className="panel-row__grip"
+              aria-label={`Reschedule ${c.title}`}
+              onPointerDown={(e) => onDragStart?.(c, e)}
+            >
+              <span aria-hidden="true">⠿</span>
+            </button>
+
+            <ChecklistRow
+              id={c.id}
+              label={c.title}
+              when={when || undefined}
+              done={done}
+              person={c.assignee_id ? personFor(c.assignee_id) : undefined}
+              initials={c.assignee_id ? initialsForPerson(personFor(c.assignee_id)) : undefined}
+              onToggle={() => onToggle(c)}
+            />
+            <button className="panel-row__remove" onClick={() => onRemove(c)} aria-label={`Remove ${c.title}`}>
+              ×
+            </button>
+          </div>
+        )
+      })}
       {/* Full mode only, on purpose: compact is a four-chip summary read from
           across the room, and adding tap targets to it would turn a glance
           into a control panel.

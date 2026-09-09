@@ -12,7 +12,9 @@ export interface EventChipData {
   /** Omit for meals and household items with no single owner. */
   person?: Person;
   /** Meals opt out of the person system entirely and read as a material. */
-  kind?: 'event' | 'meal';
+  kind?: 'event' | 'meal' | 'chore';
+  /** Chores only — a ticked chore reads as struck through, not absent. */
+  done?: boolean;
 }
 
 interface Props {
@@ -25,16 +27,21 @@ interface Props {
 const DEFAULT_INITIALS: Record<Person, string> = { a: 'N', b: 'E', shared: 'NE' };
 
 export function EventChip({ event, level, initialsFor, onPress }: Props) {
-  const { id, title, meta, detail, person, kind = 'event' } = event;
+  const { id, title, meta, detail, person, kind = 'event', done } = event;
   const isMeal = kind === 'meal';
+  const isChore = kind === 'chore';
   const initials = person
     ? (initialsFor?.(person) ?? DEFAULT_INITIALS[person])
     : '';
 
+  // Chores opt out of the person colours the same way meals do: on the
+  // board a scheduled chore is a household fact about the day, and colouring
+  // it as somebody's would claim an owner the data does not have.
   const classes = [
     'event-chip',
-    isMeal ? 'event-chip--meal' : `event-chip--${person ?? 'shared'}`,
-  ].join(' ');
+    isMeal ? 'event-chip--meal' : isChore ? 'event-chip--chore' : `event-chip--${person ?? 'shared'}`,
+    isChore && done ? 'is-done' : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <button
@@ -47,7 +54,7 @@ export function EventChip({ event, level, initialsFor, onPress }: Props) {
         onPress?.(id);
       }}
     >
-      {!isMeal && person && <PersonBadge person={person} initials={initials} />}
+      {!isMeal && !isChore && person && <PersonBadge person={person} initials={initials} />}
       <span className="event-chip__body">
         <span className="event-chip__title">{title}</span>
         {meta && <span className="event-chip__meta">{meta}</span>}

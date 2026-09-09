@@ -30,9 +30,13 @@ interface Props {
   /** Opens the whole day. The row itself is the target, so a tap anywhere
       that isn't already a control gets there. */
   onOpenDay?: (date: string) => void;
+  /** A chore is in flight; rows show they can take it. */
+  dragging?: boolean;
+  /** The row currently under the pointer. */
+  dragOverDate?: string | null;
 }
 
-function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: {
+function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOver }: {
   day: DayData;
   level: DetailLevel;
   loading?: boolean;
@@ -41,6 +45,8 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
   onAddDay?: (date: string) => void;
   onAddMeal?: (date: string) => void;
   onOpenDay?: (date: string) => void;
+  dragging?: boolean;
+  dragOver?: boolean;
 }) {
   const limit = visibleChipCount(level);
   const shown = day.events.slice(0, limit);
@@ -58,7 +64,15 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
 
   return (
     <section
-      className={`day-row${day.isToday ? ' day-row--today' : ''}`}
+      className={[
+        'day-row',
+        day.isToday ? 'day-row--today' : '',
+        dragging ? 'is-drop-target' : '',
+        dragOver ? 'is-drop-over' : '',
+      ].filter(Boolean).join(' ')}
+      // Read by useChoreDrag's hit test. On the element rather than in
+      // React state so the hook needs to know nothing about the board.
+      data-drop-day={day.date}
       onClick={openDay}
     >
       {/* A real button so the day is reachable by keyboard and to AT, since
@@ -140,7 +154,7 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
   );
 }
 
-export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay }: Props) {
+export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOverDate }: Props) {
   return (
     <div className="week-grid">
       {days.map((day) => (
@@ -154,6 +168,8 @@ export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onAd
           onAddDay={onAddDay}
           onAddMeal={onAddMeal}
           onOpenDay={onOpenDay}
+          dragging={dragging}
+          dragOver={dragOverDate === day.date}
         />
       ))}
     </div>

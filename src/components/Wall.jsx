@@ -13,6 +13,14 @@ import {
 } from '../lib/week'
 import { daysInYear, daysLeftInYear, dayOfYear, fiscalWeek, yearProgress } from '../lib/year'
 import { groceryLines, weekCost } from '../lib/cost'
+import {
+  choreOccurrenceDate,
+  choreScheduleLabel,
+  isScheduled,
+  schedulePatchFor,
+  unschedulePatch,
+} from '../lib/chores'
+import { useChoreDrag } from '../hooks/useChoreDrag'
 import { useToday } from '../hooks/useToday'
 import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
@@ -149,6 +157,8 @@ export default function Wall({ profile, people }) {
   const [lastSync, setLastSync] = useState(null)
   const [events, setEvents] = useState([])
   const [chores, setChores] = useState([])
+  const [completions, setCompletions] = useState([])
+  const [lastDone, setLastDone] = useState([])
   const [shoppingItems, setShoppingItems] = useState([])
   const [mealPlan, setMealPlan] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -257,18 +267,40 @@ export default function Wall({ profile, people }) {
 
   // ---------------------------------------------------------------- chores
 
-  // Derived from `today` rather than a fresh `new Date()` per render, so
-  // weekly chores actually uncheck themselves when Sunday arrives instead of
-  // waiting for some unrelated change to force a re-render.
-  const weekStart = useMemo(() => startOfWeek(today), [today])
+  /**
+   * Done-ness is a lookup in the completion log rather than a timestamp on
+   * the chore, which is what makes "who did it, and when" answerable at all.
+   *
+   * Keyed against the week being *viewed*, not today, so paging back shows
+   * what actually happened that week instead of re-reading last week through
+   * this week's state.
+   */
+  const anchorWeekStart = useMemo(() => startOfWeek(anchor), [anchor])
+
+  const completedKeys = useMemo(
+    () => new Set(completions.map((c) => `${c.chore_id}:${c.on_date}`)),
+    [completions]
+  )
+
+  const occurrenceFor = useCallback(
+    (chore) => choreOccurrenceDate(chore, anchorWeekStart),
+    [anchorWeekStart]
+  )
 
   const choreIsDone = useCallback(
     (chore) => {
-      if (!chore.completed_at) return false
-      if (chore.recurrence === 'once') return true
-      return new Date(chore.completed_at) >= weekStart
+      const on = occurrenceFor(chore)
+      // A one-off with no date has no occurrence: any completion at all
+      // means it is done, forever, which is what 'once' has always meant.
+      if (on == null) return completions.some((c) => c.chore_id === chore.id)
+      return completedKeys.has(`${chore.id}:${on}`)
     },
-    [weekStart]
+    [completedKeys, completions, occurrenceFor]
+  )
+
+  const lastDoneFor = useCallback(
+    (choreId) => lastDone.find((l) => l.chore_id === choreId) ?? null,
+    [lastDone]
   )
 
   const loadChores = useCallback(async () => {
@@ -293,15 +325,87 @@ export default function Wall({ profile, people }) {
 
   const choresStatus = useRealtimeTable('chores-sync', 'chores', loadChores)
 
+  /**
+   * Two reads, because they answer two different questions: which
+   * occurrences in the viewed week are ticked, and who did each chore most
+   * recently regardless of when. The second is the dishwasher question, and
+   * chore_last_done is a view because DISTINCT ON has no PostgREST spelling.
+   */
+  const loadChoreLog = useCallback(async () => {
+    const from = toDateInputValue(startOfWeek(anchor))
+    const to = toDateInputValue(addDays(startOfWeek(anchor), 7))
+
+    const [weekRes, lastRes] = await Promise.all([
+      supabase.from('chore_completions').select('*').gte('on_date', from).lt('on_date', to),
+      supabase.from('chore_last_done').select('*'),
+    ])
+
+    const firstError = weekRes.error || lastRes.error
+    if (firstError) return setError(firstError.message)
+
+    setError(null)
+    setCompletions(weekRes.data ?? [])
+    setLastDone(lastRes.data ?? [])
+    setLastSync(new Date())
+  }, [anchor])
+
+  useEffect(() => {
+    loadChoreLog()
+  }, [loadChoreLog])
+
+  const choreLogStatus = useRealtimeTable('chore-log-sync', 'chore_completions', loadChoreLog)
+
+  /**
+   * Ticking inserts an occurrence; unticking deletes it. completed_by is
+   * whoever tapped, deliberately not the chore's assignee — credit belongs
+   * to whoever actually did the thing, which is the entire reason the log
+   * exists.
+   */
   async function toggleChore(chore) {
-    const next = choreIsDone(chore) ? null : new Date().toISOString()
-    setChores((cs) => cs.map((c) => (c.id === chore.id ? { ...c, completed_at: next } : c)))
-    const { error } = await supabase.from('chores').update({ completed_at: next }).eq('id', chore.id)
-    if (error) {
-      setError(error.message)
-      loadChores()
+    const on = occurrenceFor(chore) ?? toDateInputValue(today)
+
+    if (choreIsDone(chore)) {
+      const { error } = await supabase
+        .from('chore_completions')
+        .delete()
+        .eq('chore_id', chore.id)
+        .eq('on_date', on)
+      if (error) setError(error.message)
+      return loadChoreLog()
     }
+
+    const { error } = await supabase.from('chore_completions').insert({
+      household_id: profile.household_id,
+      chore_id: chore.id,
+      on_date: on,
+      completed_by: profile.id,
+    })
+    if (error) setError(error.message)
+    loadChoreLog()
   }
+
+  /**
+   * Dropping a chore on a day. A weekly chore lands on that weekday every
+   * week; a one-off lands on that date. Dropping it back on the panel
+   * unschedules it without otherwise touching it.
+   */
+  const scheduleChore = useCallback(
+    async (chore, target) => {
+      const patch =
+        target.kind === 'backlog' ? unschedulePatch(chore) : schedulePatchFor(chore, target.date)
+
+      setChores((cs) => cs.map((c) => (c.id === chore.id ? { ...c, ...patch } : c)))
+
+      const { error } = await supabase.from('chores').update(patch).eq('id', chore.id)
+      if (error) {
+        setError(error.message)
+        loadChores()
+      }
+    },
+    [loadChores]
+  )
+
+  const { drag, startDrag } = useChoreDrag(scheduleChore)
 
   async function addChore(title) {
     const clean = title.trim()
@@ -593,15 +697,17 @@ export default function Wall({ profile, people }) {
     shoppingStatus,
     mealsStatus,
     settingsStatus,
+    choreLogStatus,
   ])
 
   const refetchAll = useCallback(() => {
     loadEvents()
     loadChores()
+    loadChoreLog()
     loadShopping()
     loadMeals()
     loadSettings()
-  }, [loadEvents, loadChores, loadShopping, loadMeals, loadSettings])
+  }, [loadEvents, loadChores, loadChoreLog, loadShopping, loadMeals, loadSettings])
 
   useEffect(() => {
     function onWake() {
@@ -687,6 +793,20 @@ export default function Wall({ profile, people }) {
             kind: 'event',
           }))
 
+        // Nick asked for scheduled chores in both places: the panel keeps
+        // the whole list, the grid shows where each one landed.
+        for (const chore of chores) {
+          if (!isScheduled(chore)) continue
+          if (occurrenceFor(chore) !== iso) continue
+          dayEvents.push({
+            id: `chore:${chore.id}`,
+            title: chore.title,
+            meta: choreIsDone(chore) ? 'Done' : undefined,
+            kind: 'chore',
+            done: choreIsDone(chore),
+          })
+        }
+
         const meal = mealPlan.find((p) => p.on_date === iso && p.slot === 'dinner')
         if (meal?.recipe) {
           dayEvents.push({
@@ -708,7 +828,7 @@ export default function Wall({ profile, people }) {
           events: dayEvents,
         }
       }),
-    [anchor, events, mealPlan, personFor, today]
+    [anchor, chores, choreIsDone, events, mealPlan, occurrenceFor, personFor, today]
   )
 
   // Today, not the week on screen — the big line is a fact about the room,
@@ -754,6 +874,11 @@ export default function Wall({ profile, people }) {
   }
 
   function handleEventPress(id) {
+    if (id.startsWith('chore:')) {
+      const chore = chores.find((c) => c.id === id.slice('chore:'.length))
+      if (chore) toggleChore(chore)
+      return
+    }
     if (id.startsWith('meal:')) {
       const planId = id.slice('meal:'.length)
       const entry = mealPlan.find((p) => p.id === planId)
@@ -812,6 +937,11 @@ export default function Wall({ profile, people }) {
     onAdd: addChore,
     onRemove: removeChore,
     commonChores,
+    onDragStart: startDrag,
+    draggingId: drag?.chore?.id ?? null,
+    scheduleLabelFor: choreScheduleLabel,
+    isScheduled,
+    lastDoneFor,
   }
 
   const shoppingPanelProps = {
@@ -859,6 +989,8 @@ export default function Wall({ profile, people }) {
         onEventPress={handleEventPress}
         onAddDay={handleAddDay}
         onAddMeal={handleAddMeal}
+        dragging={drag != null}
+        dragOverDate={drag?.over?.kind === 'day' ? drag.over.date : null}
         onOpenDay={handleOpenDay}
         initialsFor={initialsForPerson}
       />
@@ -922,6 +1054,16 @@ export default function Wall({ profile, people }) {
           }}
           onClose={() => setDayViewing(null)}
         />
+      )}
+
+      {drag && (
+        <div
+          className="chore-ghost"
+          style={{ left: drag.x, top: drag.y }}
+          aria-hidden="true"
+        >
+          {drag.chore.title}
+        </div>
       )}
 
       {settingsOpen && (
@@ -1116,7 +1258,17 @@ function EventEditor({ initial, profile, people, personFor, onClose, onSaved, on
             <button
               key={p.id}
               className={p.id === ownerId ? 'chip on' : 'chip'}
-              style={{ borderColor: colorFor(p.id) }}
+              // .card .chip.on fills with --person-a for everyone, but the
+              // inline borderColor is per-person and wins over the
+              // stylesheet — so selecting the second person drew their
+              // colour around the first person's fill. Selected now takes
+              // its fill from the same source as its border, which also
+              // makes the dialog teach which colour means whom.
+              style={
+                p.id === ownerId
+                  ? { borderColor: colorFor(p.id), background: colorFor(p.id) }
+                  : { borderColor: colorFor(p.id) }
+              }
               onClick={() => setOwnerId(p.id)}
             >
               {p.display_name}

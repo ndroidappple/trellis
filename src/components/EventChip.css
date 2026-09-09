@@ -83,3 +83,17 @@
   .event-chip { transition: none; }
   .event-chip:active { transform: none; }
 }
+
+
+/* ---------- chores on the board ----------
+   Neutral like meals, for the same reason: a scheduled chore is a fact
+   about the day rather than a claim about whose day it is. */
+.event-chip--chore {
+  background: var(--row-face);
+  border: 1px dashed var(--rule);
+}
+
+.event-chip--chore.is-done .event-chip__title {
+  text-decoration: line-through;
+  color: var(--ink-faint);
+}

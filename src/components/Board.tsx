@@ -45,6 +45,8 @@ interface Props {
   onEventPress?: (id: string) => void;
   onAddDay?: (date: string) => void;
   onAddMeal?: (date: string) => void;
+  dragging?: boolean;
+  dragOverDate?: string | null;
   onOpenDay?: (date: string) => void;
   /** Absent while the board is already showing the current week. */
   onToday?: () => void;
@@ -118,13 +120,15 @@ export function Board(props: Props) {
           onEventPress={props.onEventPress}
           onAddDay={props.onAddDay}
           onAddMeal={props.onAddMeal}
+          dragging={props.dragging}
+          dragOverDate={props.dragOverDate}
           onOpenDay={props.onOpenDay}
         />
       </div>
 
       <SectionDock modes={[props.settings.chores, props.settings.shopping]}>
         <SectionPanel
-          title="To-Do"
+          title="Weekly To Do"
           count={props.choresCount}
           mode={props.settings.chores}
           compact={props.choresCompact}

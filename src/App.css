@@ -163,6 +163,53 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   gap: 6px;
 }
 
+/* The drag handle.
+
+   touch-action: none is the load-bearing declaration in this file: without
+   it iPadOS claims the gesture as a scroll of the panel before any JavaScript
+   runs, and the chore never lifts. Scoping it to the handle rather than the
+   row is what lets the list still scroll normally under a finger. */
+.panel-row__grip {
+  flex-shrink: 0;
+  touch-action: none;
+  width: 34px;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 19px;
+  line-height: 1;
+  cursor: grab;
+}
+
+.panel-row__grip:active { cursor: grabbing; color: var(--ink-soft); }
+
+/* The row being carried. Left in place at low opacity rather than removed,
+   so the list does not reflow under the finger mid-drag. */
+.panel-row.is-dragging { opacity: 0.35; }
+
+/* Scheduled vs unscheduled, on a channel the tick is not already using. A
+   scheduled chore has a day and gets a solid marker; a loose one is dashed,
+   matching the dashed quick-add chips that are also "not yet real". */
+.panel-row--scheduled { border-left: 3px solid var(--person-shared); padding-left: 7px; }
+.panel-row--loose { border-left: 3px dashed var(--rule); padding-left: 7px; }
+
+/* Follows the pointer. pointer-events: none is required, not cosmetic:
+   useChoreDrag hit-tests with elementFromPoint, and a ghost under the
+   cursor would be the only element it ever found. */
+.chore-ghost {
+  position: fixed;
+  z-index: 60;
+  transform: translate(-50%, -140%);
+  pointer-events: none;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--plaster);
+  font-size: 18px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
 .panel-row > .checklist-row { flex: 1; }
 
 .panel-row__remove {

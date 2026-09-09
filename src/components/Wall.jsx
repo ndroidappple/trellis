@@ -21,7 +21,7 @@ import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 import './Sheet.css'
 
-const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full', flourish: 'week' }
+const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full', flourish: ['week'] }
 const LONG_PRESS_MS = 650
 
 /**
@@ -39,13 +39,28 @@ const UNDO_MS = 9000
  * dialog. Deliberately not advertised: someone poking at the board finds
  * them, someone reading the week never notices they exist.
  */
+/**
+ * The asides that can ride along beside the week in the header.
+ *
+ * Each carries two renderings. Alone, it can afford to spell itself out;
+ * shown alongside others it shortens, because the header shares a row with
+ * the sync state and the week arrows and cannot grow sideways forever.
+ *
+ * 'off' is no longer an entry — an empty selection is off, which is what
+ * unticking the last chip naturally produces.
+ */
 const FLOURISHES = [
-  { id: 'off', label: 'Off', render: () => null },
-  { id: 'week', label: 'Week', render: (d) => `Week ${fiscalWeek(d)}` },
+  {
+    id: 'week',
+    label: 'Week',
+    render: (d) => `Week ${fiscalWeek(d)}`,
+    short: (d) => `Week ${fiscalWeek(d)}`,
+  },
   {
     id: 'progress',
     label: 'Year %',
     render: (d) => `${yearProgress(d)}% through ${d.getFullYear()}`,
+    short: (d) => `${yearProgress(d)}%`,
   },
   {
     id: 'daysLeft',
@@ -54,13 +69,50 @@ const FLOURISHES = [
       const n = daysLeftInYear(d)
       return n === 0 ? 'Last day of the year' : `${n} days left in ${d.getFullYear()}`
     },
+    short: (d) => {
+      const n = daysLeftInYear(d)
+      return n === 0 ? 'Last day' : `${n} left`
+    },
   },
   {
     id: 'dayOfYear',
     label: 'Day no.',
     render: (d) => `Day ${dayOfYear(d)} of ${daysInYear(d.getFullYear())}`,
+    short: (d) => `Day ${dayOfYear(d)}`,
   },
 ]
+
+/**
+ * Three, and the number is measured rather than picked.
+ *
+ * The heading shares the header row with the sync state and the week
+ * arrows, so it gets roughly two thirds of the board's width. The range
+ * label takes about half of that on its own. Three short asides plus their
+ * separators fit what is left on a 12.9" iPad in portrait; four do not.
+ *
+ * The header wraps rather than clips if this is ever wrong (see
+ * .board__sub), so the failure mode is a slightly taller header, not the
+ * silent amputation this layout is prone to.
+ */
+const MAX_FLOURISHES = 3
+
+/**
+ * Reads whatever is in board_settings as a list of valid ids.
+ *
+ * Households already have a bare string stored here from when this was a
+ * single choice, so that has to keep working — a wall that dropped its
+ * header aside on upgrade would be a puzzling little regression. Unknown
+ * ids are dropped rather than rendered as blanks.
+ */
+function toFlourishIds(value) {
+  const known = (id) => FLOURISHES.some((f) => f.id === id)
+  const chosen = Array.isArray(value) ? value : value == null || value === 'off' ? [] : [value]
+  // Canonical order, not tap order: the header should not reshuffle itself
+  // because of the sequence someone happened to tick the chips in.
+  return FLOURISHES.filter((f) => chosen.includes(f.id) && known(f.id))
+    .map((f) => f.id)
+    .slice(0, MAX_FLOURISHES)
+}
 
 /**
  * How far a finger may drift before a long-press is treated as a drag.
@@ -580,15 +632,38 @@ export default function Wall({ profile, people }) {
     day: 'numeric',
   })
 
-  const flourishIndex = Math.max(
-    0,
-    FLOURISHES.findIndex((f) => f.id === (settings.flourish ?? 'week'))
-  )
+  const flourishIds = useMemo(() => toFlourishIds(settings.flourish), [settings.flourish])
 
-  const flourishText = FLOURISHES[flourishIndex].render(today)
+  // One aside can spell itself out; several have to share the row, so they
+  // switch to their short forms. Derived from `today` so these re-render at
+  // midnight along with everything else date-shaped.
+  const flourishTexts = useMemo(() => {
+    const many = flourishIds.length > 1
+    return flourishIds
+      .map((id) => FLOURISHES.find((f) => f.id === id))
+      .filter(Boolean)
+      .map((f) => (many ? f.short(today) : f.render(today)))
+  }, [flourishIds, today])
 
+  /**
+   * Tapping the header still walks through the asides one at a time, which
+   * is how this was always found. It is only offered while at most one is
+   * showing: once someone has deliberately combined several, a stray tap
+   * that collapsed the set back to one would undo a choice they made in
+   * settings. Board renders plain text rather than a button in that case.
+   */
   function cycleFlourish() {
-    updateSetting('flourish', FLOURISHES[(flourishIndex + 1) % FLOURISHES.length].id)
+    const order = [null, ...FLOURISHES.map((f) => f.id)]
+    const current = flourishIds.length === 1 ? flourishIds[0] : null
+    const next = order[(order.indexOf(current) + 1) % order.length]
+    updateSetting('flourish', next ? [next] : [])
+  }
+
+  function toggleFlourish(id) {
+    const on = flourishIds.includes(id)
+    if (!on && flourishIds.length >= MAX_FLOURISHES) return
+    const next = on ? flourishIds.filter((x) => x !== id) : [...flourishIds, id]
+    updateSetting('flourish', toFlourishIds(next))
   }
 
   function handleEventPress(id) {
@@ -662,7 +737,8 @@ export default function Wall({ profile, people }) {
       <Board
         todayLabel={todayLabel}
         rangeLabel={weekLabel(anchor)}
-        flourish={flourishText}
+        flourishes={flourishTexts}
+        flourishCycleable={flourishIds.length <= 1}
         onCycleFlourish={cycleFlourish}
         syncLabel={syncText(syncState, lastSync)}
         syncState={syncState}
@@ -747,7 +823,12 @@ export default function Wall({ profile, people }) {
       )}
 
       {settingsOpen && (
-        <SettingsPanel settings={settings} onChange={updateSetting} onClose={() => setSettingsOpen(false)} />
+        <SettingsPanel
+          settings={settings}
+          onChange={updateSetting}
+          onToggleFlourish={toggleFlourish}
+          onClose={() => setSettingsOpen(false)}
+        />
       )}
 
       {/* Deletion on a shared wall is the one action nobody can take back by
@@ -1067,7 +1148,10 @@ const MODE_LABELS = { full: 'Full', compact: 'Compact', off: 'Off' }
 const MODE_OPTIONS = ['full', 'compact', 'off']
 const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping' }
 
-function SettingsPanel({ settings, onChange, onClose }) {
+function SettingsPanel({ settings, onChange, onToggleFlourish, onClose }) {
+  const chosen = toFlourishIds(settings.flourish)
+  const atMax = chosen.length >= MAX_FLOURISHES
+
   return (
     <div className="scrim" onClick={onClose}>
       <div className="card dialog" onClick={(e) => e.stopPropagation()}>
@@ -1097,17 +1181,30 @@ function SettingsPanel({ settings, onChange, onClose }) {
         <div className="settings-row">
           <span className="settings-row__label">Header aside</span>
           <div className="chips">
-            {FLOURISHES.map((f) => (
-              <button
-                key={f.id}
-                className={(settings.flourish ?? 'week') === f.id ? 'chip on' : 'chip'}
-                onClick={() => onChange('flourish', f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
+            {FLOURISHES.map((f) => {
+              const on = chosen.includes(f.id)
+              return (
+                <button
+                  key={f.id}
+                  className={on ? 'chip on' : 'chip'}
+                  // Full is the reason a chip is unavailable, so it says so
+                  // by going quiet rather than by rejecting the tap. Nothing
+                  // has to be un-picked first to see what is pickable.
+                  disabled={!on && atMax}
+                  onClick={() => onToggleFlourish(f.id)}
+                >
+                  {f.label}
+                </button>
+              )
+            })}
           </div>
         </div>
+
+        <p className="settings-row__hint">
+          {atMax
+            ? `Showing ${MAX_FLOURISHES} — untick one to swap it out. Together they use their short forms.`
+            : `Pick up to ${MAX_FLOURISHES}. Two or more switch to short forms so the header still fits.`}
+        </p>
 
         <div className="actions">
           <button className="ghost" onClick={onClose}>

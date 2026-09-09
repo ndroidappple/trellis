@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Sheet from './Sheet'
+import {
+  EFFORT_FILTERS,
+  PROTEINS,
+  SHOW_FILTERS,
+  TIME_FILTERS,
+  proteinsIn,
+} from '../lib/recipeFilters'
 import './RecipeBook.css'
 
 /**
@@ -113,24 +120,77 @@ function ingredientLine(ing) {
 
 /* ------------------------------------------------------------- the shelf */
 
-const FILTERS = [
-  { id: 'all', label: 'All' },
-  { id: 'quick', label: 'Under 30 min', match: (r) => (r.total_minutes ?? r.cook_minutes ?? 999) <= 30 },
-  { id: 'easy', label: 'Easy', match: (r) => r.effort === 'Easy' },
-  { id: 'unfinished', label: 'Needs work', match: (r) => r.step_count === 0 || r.ingredient_count === 0 },
-]
+/** One labelled row of mutually exclusive chips. */
+function FilterRow({ label, options, value, onChange }) {
+  return (
+    <div className="book__filter-row">
+      <span className="book__filter-label">{label}</span>
+      <div className="book__filter-chips">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            className={value === o.id ? 'chip on' : 'chip'}
+            aria-pressed={value === o.id}
+            onClick={() => onChange(o.id)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const NO_FILTERS = { protein: 'any', time: 'any', effort: 'any', show: 'all' }
 
 export default function RecipeBook({ recipes, loading, onOpen, onClose }) {
   const [q, setQ] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [f, setF] = useState(NO_FILTERS)
+  const [helpOpen, setHelpOpen] = useState(false)
+
+  const set = (key) => (value) => setF((prev) => ({ ...prev, [key]: value }))
+  const filtered = f.protein !== 'any' || f.time !== 'any' || f.effort !== 'any' || f.show !== 'all'
+
+  // Proteins are computed once per load, not per keystroke — the ingredient
+  // scan is cheap but it runs across every recipe on every render otherwise.
+  const proteinIndex = useMemo(() => {
+    const map = new Map()
+    for (const r of recipes) map.set(r.id, proteinsIn(r))
+    return map
+  }, [recipes])
+
+  /**
+   * Only offer a protein the book actually contains, plus Meatless.
+   * A Lamb chip that always returns nothing is a dead control that teaches
+   * people the filters are broken; the list grows by itself the day someone
+   * adds a pork recipe.
+   */
+  const proteinOptions = useMemo(() => {
+    const present = new Set()
+    for (const ids of proteinIndex.values()) for (const id of ids) present.add(id)
+    return [
+      { id: 'any', label: 'Any' },
+      ...PROTEINS.filter((p) => present.has(p.id)).map((p) => ({ id: p.id, label: p.label })),
+      { id: 'none', label: 'Meatless' },
+    ]
+  }, [proteinIndex])
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const active = FILTERS.find((f) => f.id === filter)
+    const time = TIME_FILTERS.find((o) => o.id === f.time)
+    const effort = EFFORT_FILTERS.find((o) => o.id === f.effort)
+    const show = SHOW_FILTERS.find((o) => o.id === f.show)
 
     return recipes.filter((r) => {
-      if (active?.match && !active.match(r)) return false
+      const proteins = proteinIndex.get(r.id) ?? []
+      if (f.protein === 'none' && proteins.length > 0) return false
+      if (f.protein !== 'any' && f.protein !== 'none' && !proteins.includes(f.protein)) return false
+      if (time?.match && !time.match(r)) return false
+      if (effort?.match && !effort.match(r)) return false
+      if (show?.match && !show.match(r)) return false
       if (!needle) return true
+
       // Searching a recipe book means searching what's in it, not just what
       // it's called — "chickpea" should find the curry even though the word
       // is only in the ingredients.
@@ -140,34 +200,33 @@ export default function RecipeBook({ recipes, loading, onOpen, onClose }) {
         .toLowerCase()
       return haystack.includes(needle)
     })
-  }, [recipes, q, filter])
+  }, [recipes, q, f, proteinIndex])
+
+  const countLabel = loading
+    ? 'Loading…'
+    : shown.length === recipes.length
+      ? `${recipes.length} recipes`
+      : `${shown.length} of ${recipes.length} recipes`
 
   return (
-    <Sheet
-      title="Recipe book"
-      subtitle={loading ? 'Loading…' : `${recipes.length} recipes`}
-      onClose={onClose}
-    >
-      {/* Same reasoning as the meal picker: no autoFocus. The list is the
-          interface until someone asks for the keyboard. */}
-      <input
-        className="sheet__search"
-        placeholder="Search titles and ingredients"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
+    <Sheet title="Recipe book" subtitle={countLabel} onClose={onClose}>
+      <div className="book__search-row">
+        {/* Same reasoning as the meal picker: no autoFocus. The list is the
+            interface until someone asks for the keyboard. */}
+        <input
+          className="sheet__search"
+          placeholder="Search titles and ingredients"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <HelpButton onClick={() => setHelpOpen(true)} label="How do I add or edit a recipe?" />
+      </div>
 
-      <div className="chips book__filters">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            className={filter === f.id ? 'chip on' : 'chip'}
-            aria-pressed={filter === f.id}
-            onClick={() => setFilter(f.id)}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="book__filters">
+        <FilterRow label="Protein" options={proteinOptions} value={f.protein} onChange={set('protein')} />
+        <FilterRow label="Time" options={TIME_FILTERS} value={f.time} onChange={set('time')} />
+        <FilterRow label="Effort" options={EFFORT_FILTERS} value={f.effort} onChange={set('effort')} />
+        <FilterRow label="Show" options={SHOW_FILTERS} value={f.show} onChange={set('show')} />
       </div>
 
       <div className="book__grid">
@@ -180,7 +239,20 @@ export default function RecipeBook({ recipes, loading, onOpen, onClose }) {
         ))}
       </div>
 
-      {!loading && shown.length === 0 && <p className="sheet__empty">Nothing matches.</p>}
+      {!loading && shown.length === 0 && (
+        <div className="sheet__section">
+          <p className="sheet__empty">Nothing matches.</p>
+          {/* An empty grid under four filter rows is a puzzle. The way out
+              should be one tap, not a hunt for which row did it. */}
+          {filtered && (
+            <button className="chip" onClick={() => setF(NO_FILTERS)}>
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
+      {helpOpen && <EditHelp onClose={() => setHelpOpen(false)} />}
     </Sheet>
   )
 }
@@ -198,48 +270,60 @@ export function RecipeDetail({
   onClose,
 }) {
   const [planning, setPlanning] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const ingredients = detail?.ingredients ?? []
   const steps = detail?.steps ?? []
   const cookable = steps.length > 0
 
+  /*
+   * Planning happens entirely in the footer.
+   *
+   * It used to put the day chips at the top of the sheet body: you pressed
+   * "Plan a night" at the bottom of the screen, and the thing to press next
+   * appeared at the top — a full diagonal of a 13" iPad away, and on a long
+   * recipe it could be scrolled off-screen entirely, so the button appeared
+   * to do nothing at all. Now the footer itself becomes the day picker, so
+   * the second tap lands within a few centimetres of the first.
+   */
+  const footer = planning ? (
+    <>
+      {planDays.map((d) => (
+        <button
+          key={d.iso}
+          className={d.iso === plannedDate ? 'plan-day on' : 'plan-day'}
+          onClick={() => onPlan(d.iso)}
+        >
+          <span className="plan-day__name">{d.label}</span>
+          <span className="plan-day__dom">{d.dom}</span>
+        </button>
+      ))}
+      <button className="ghost plan-day__cancel" onClick={() => setPlanning(false)} aria-label="Cancel">
+        ✕
+      </button>
+    </>
+  ) : (
+    <>
+      <button className="ghost" onClick={() => setPlanning(true)}>
+        Plan a night
+      </button>
+      {/* Two of the eighteen recipes still have no steps. Offering to cook
+          them would open an empty screen, so the button says why it can't
+          rather than disappearing without explanation. */}
+      <button onClick={onCook} disabled={!cookable}>
+        {cookable ? 'Cook' : 'No steps yet'}
+      </button>
+    </>
+  )
+
   return (
     <Sheet
       title={recipe.title}
-      subtitle={summaryOf(recipe) || undefined}
+      subtitle={planning ? 'Which night?' : summaryOf(recipe) || undefined}
       onClose={onClose}
-      footer={
-        <>
-          <button className="ghost" onClick={() => setPlanning((v) => !v)}>
-            {planning ? 'Not now' : 'Plan a night'}
-          </button>
-          {/* Five of the eighteen recipes have no steps at all. Offering to
-              cook them would open an empty screen, so the button says why
-              it can't rather than disappearing without explanation. */}
-          <button onClick={onCook} disabled={!cookable}>
-            {cookable ? 'Cook' : 'No steps yet'}
-          </button>
-        </>
-      }
+      footer={footer}
     >
       <RecipeArt recipe={recipe} className="recipe__hero" />
-
-      {planning && (
-        <div className="sheet__section">
-          <span className="sheet__heading">Plan for</span>
-          <div className="chips">
-            {planDays.map((d) => (
-              <button
-                key={d.iso}
-                className={d.iso === plannedDate ? 'chip on' : 'chip'}
-                onClick={() => onPlan(d.iso)}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {recipe.description && <p className="recipe__description">{recipe.description}</p>}
 
@@ -311,7 +395,101 @@ export function RecipeDetail({
           </a>
         </p>
       )}
+
+      {/* Where a pencil would go if there were an editor behind it. Until
+          there is, the honest thing is to say so and point at what does
+          work, rather than leave people tapping a title that never
+          becomes a text field. */}
+      <div className="recipe__edit-hint">
+        <HelpButton onClick={() => setHelpOpen(true)} label="How do I change this recipe?" />
+        <span>Recipes cannot be edited on the wall yet.</span>
+      </div>
+
+      {helpOpen && <EditHelp onClose={() => setHelpOpen(false)} />}
     </Sheet>
+  )
+}
+
+/* --------------------------------------------------------------- editing */
+
+function HelpButton({ onClick, label }) {
+  return (
+    <button type="button" className="help-button" onClick={onClick} aria-label={label} title={label}>
+      i
+    </button>
+  )
+}
+
+/**
+ * What to do when you want to change a recipe, given that you currently
+ * cannot do it here.
+ *
+ * This exists because the alternative — a pencil icon that opens a form —
+ * is a genuinely larger piece of work than it looks: a recipe is four
+ * tables, `recipes` plus ingredients plus steps plus provenance, and 008
+ * put real constraints between them (an active recipe may not lose its last
+ * ingredient; step numbers are unique and gapless; a hand edit must claim
+ * `user_supplied` provenance or the next enrichment pass will overwrite it).
+ * A form that ignores any of that corrupts the data quietly.
+ */
+function EditHelp({ onClose }) {
+  return (
+    <div className="help" role="dialog" aria-modal="true" aria-label="How to edit recipes">
+      <div className="help__panel">
+        <h2 className="help__title">Changing the recipe book</h2>
+
+        <p className="help__lead">
+          Trellis can read the recipe book but not write to it yet. Everything below
+          works today; an editor in the app is the next slice.
+        </p>
+
+        <div className="help__section">
+          <h3>To fix a time, a title or a step</h3>
+          <p>
+            Supabase dashboard → Table Editor → <code>recipes</code> (or{' '}
+            <code>recipe_steps</code> / <code>recipe_ingredients</code>). Edit the cell
+            and save. It appears on the wall within a second or two.
+          </p>
+          <p className="help__warn">
+            One extra step, and it matters: also set that field&rsquo;s row in{' '}
+            <code>recipe_field_provenance</code> to <code>user_supplied</code>. Most
+            times and all three of the newest methods are model estimates, and the next
+            enrichment pass will overwrite anything still marked{' '}
+            <code>ai_enrichment</code>. Marking it yours makes it permanent.
+          </p>
+        </div>
+
+        <div className="help__section">
+          <h3>To add a whole recipe</h3>
+          <p>
+            Write a migration in <code>supabase/migrations/</code> rather than typing it
+            into the dashboard, so a rebuilt project still has it. Insert the{' '}
+            <code>recipes</code> row, then its <code>recipe_ingredients</code> and{' '}
+            <code>recipe_steps</code>.
+          </p>
+          <p>
+            A recipe with <code>status = &lsquo;active&rsquo;</code> must have at least one
+            ingredient — a deferred trigger rejects the transaction at commit
+            otherwise. Use <code>&lsquo;conditional&rsquo;</code> while it is still a
+            stub.
+          </p>
+        </div>
+
+        <div className="help__section">
+          <h3>Or just ask Claude</h3>
+          <p>
+            &ldquo;Add my mum&rsquo;s lasagne to Trellis&rdquo; or &ldquo;the curry
+            actually takes 30 minutes, not 45&rdquo; is enough. It has the schema, knows
+            the constraints, and will write and apply the migration — which is what the
+            AI edit button would do from in here once there is one.
+          </p>
+        </div>
+
+        <button className="help__close" onClick={onClose}>
+          Got it
+        </button>
+      </div>
+    </div>
   )
 }
 

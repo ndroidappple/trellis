@@ -169,7 +169,7 @@ const RECIPE_BOOK_QUERY = `
   prep_minutes, cook_minutes, total_minutes,
   cuisine, tags, meal_types, source_url, image_url, image_source,
   cost_confidence,
-  ingredients:recipe_ingredients ( id, name, qty, unit, preparation, notes, sort_order ),
+  ingredients:recipe_ingredients ( id, name, normalized_name, qty, unit, preparation, notes, sort_order ),
   steps:recipe_steps ( id, step_number, body )
 `
 
@@ -754,11 +754,15 @@ export default function Wall({ profile, people }) {
 
   // The seven days currently on the board, so planning from the book obeys
   // the week you're looking at rather than silently meaning "this week".
+  // The date number rides along because "Tue" alone is ambiguous the moment
+  // you have paged the board to another week — which is exactly when someone
+  // is most likely to be planning ahead.
   const planDays = useMemo(
     () =>
       weekDays(anchor).map((d) => ({
         iso: toDateInputValue(d),
         label: dayName(d),
+        dom: d.getDate(),
       })),
     [anchor]
   )

@@ -95,6 +95,22 @@ export function Board(props: Props) {
           )}
         </div>
         <div className="board__header-right">
+          {/* Spelled out rather than a glyph. The settings dialog can afford
+              to hide behind a long-press because nobody goes looking for it;
+              a recipe book that nobody can find is just a database.
+
+              First in the cluster and fenced off by a rule, because it is
+              the only control here that leaves the week. Sitting it between
+              "Today" and the arrows filed a doorway to another room among
+              the controls for moving around this one. */}
+          {props.onOpenBook && (
+            <>
+              <button className="board__book" onClick={props.onOpenBook}>
+                Recipes
+              </button>
+              <span className="board__header-rule" aria-hidden="true" />
+            </>
+          )}
           <span className="board__sync" data-sync={props.syncState ?? 'live'}>
             <span className="board__sync-dot" aria-hidden="true" />
             {props.syncLabel}
@@ -105,14 +121,6 @@ export function Board(props: Props) {
           {props.onToday && (
             <button className="board__today" onClick={props.onToday}>
               Today
-            </button>
-          )}
-          {/* Spelled out rather than a glyph. The settings dialog can afford
-              to hide behind a long-press because nobody goes looking for it;
-              a recipe book that nobody can find is just a database. */}
-          {props.onOpenBook && (
-            <button className="board__book" onClick={props.onOpenBook}>
-              Recipes
             </button>
           )}
           <button className="board__step" aria-label="Previous week" onClick={props.onPrevWeek}>‹</button>

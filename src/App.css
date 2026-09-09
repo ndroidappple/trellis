@@ -19,7 +19,35 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 .muted { color: var(--ink-soft); }
 .ok    { color: var(--person-a); }
 .error { color: var(--error); }
-.banner { padding: 8px 20px; }
+/*
+ * Overlaid, not stacked. The banner used to sit above a 100dvh .board inside
+ * an unstyled .board-wrapper, so the moment an error appeared the page grew
+ * taller than the viewport and the whole window began to scroll — which is
+ * how a schema error turned into "the board scrolls now".
+ *
+ * Taking it out of flow fixes that at the root, and matters for a second
+ * reason: every useDetailLevel threshold is calibrated against a full-height
+ * board, so a banner that stole 34px would quietly change the density tier
+ * the week grid renders at.
+ */
+.banner {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+
+  margin: 0;
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 10px 20px;
+  border-radius: 999px;
+
+  background: var(--plaster);
+  border: 1px solid var(--error);
+  font-size: var(--size-min);
+  text-align: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
+}
 
 /* A sign-in failure is the only diagnosis available on a device with no
    devtools, so it has to wrap and stay selectable rather than run off the

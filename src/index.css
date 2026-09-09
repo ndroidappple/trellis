@@ -12,3 +12,18 @@ html, body, #root {
   height: 100%;
   margin: 0;
 }
+
+/*
+ * The window itself never scrolls. This is a kiosk, not a document: the board
+ * is designed to be exactly one screen, and anything that makes the whole
+ * frame scroll is a layout bug showing itself rather than a feature. Regions
+ * that are meant to scroll — a sheet's body, a section panel's list — say so
+ * themselves and are unaffected.
+ *
+ * overscroll-behavior kills iOS rubber-banding, which on a wall-mounted iPad
+ * reads as the board coming loose from its frame when someone brushes it.
+ */
+html, body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}

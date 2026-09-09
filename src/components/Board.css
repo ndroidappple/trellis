@@ -1,3 +1,13 @@
+/* Holds the board to exactly one screen. The board itself is still 100dvh —
+   the banner overlays rather than stacking (see .banner in App.css), so this
+   never has more than one screen of content to contain. */
+.board-wrapper {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .board {
   height: 100vh;
   height: 100dvh;
@@ -163,6 +173,15 @@ p.board__sub {
 .board__book:active {
   background: var(--slat-face);
   color: var(--ink);
+}
+
+/* Separates "leave the week" from "move around the week". Without it the
+   two kinds of control read as one undifferentiated row of buttons. */
+.board__header-rule {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 0;
+  background: var(--rule);
 }
 
 /* The only status worth reading from across the kitchen is "don't trust

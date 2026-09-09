@@ -1433,6 +1433,137 @@ leak memory over a multi-week uptime.
 
 ---
 
+# Feature #6 — Chores Scoreboard
+
+**Priority:** Medium
+**Category:** Household Intelligence / Motivation
+**Status:** Backlog
+**Depends On:** Chore completion history (`chore_completions`, migration 009). Nothing here is possible while a chore stores only a single "last completed" timestamp.
+**Primary Goal:** Show who actually did what over a chosen period, so the household has a shared record instead of two competing memories.
+
+## 1. The Actual Problem
+
+This feature exists because of a specific, real argument: **who ran the dishwasher last.**
+
+That is worth stating plainly, because it sets the bar. The scoreboard is not
+successful because it produces a chart. It is successful if it ends that
+argument — which means the underlying record has to be trusted by both
+people, and trusted records come from logging being effortless rather than
+from the chart being pretty.
+
+Two distinct things solve two different halves:
+
+- **Per-chore last-done** — "Dishwasher · Ed, Tuesday" on the row itself.
+  Answers the argument directly, at the moment it happens. Built alongside
+  migration 009.
+- **The scoreboard** — the aggregate over a period. Answers the *other*
+  argument, the one about who does more in general.
+
+This entry is the second. The first is the prerequisite and the more
+important of the two.
+
+## 2. Concept
+
+Over a selected period, each completed chore earns points for whoever
+completed it. The board can show the totals.
+
+Period options should include at least:
+
+- This week
+- This month
+- All time
+- Custom range
+
+## 3. Scoring — Decide This Deliberately
+
+The obvious scheme is **one point per completed chore**. It is also the one
+that most reliably generates a new argument, because chores are not equal: a
+week of taking the bins out should not outscore one deep clean of the
+kitchen.
+
+Options, roughly in order of how much trouble they invite:
+
+### Flat — one point per completion
+Simple, transparent, impossible to dispute the arithmetic. Biased toward
+whoever does many small frequent things.
+
+### Weighted — a per-chore point value
+Fairer in principle. In practice, *setting* the weights becomes the argument,
+which is worse than the one it replaced.
+
+### Time-based — points proportional to how long a chore takes
+Fairest in principle, requires someone to record durations, which nobody will
+do.
+
+**Recommendation:** ship flat, and make the per-chore weight an optional
+field defaulting to 1. That way weights exist for the handful of chores where
+the disparity is genuinely obvious, without requiring the household to price
+every chore before the feature works at all.
+
+## 4. A Real Risk Worth Designing Around
+
+Scoreboards between two people who live together can go wrong. A number that
+says one person does less is a fact with feelings attached, and a wall in a
+shared home is a public place to display it.
+
+Mitigations worth considering:
+
+- Offer a **household framing** as well as a head-to-head one: "37 chores
+  done this week" alongside, or instead of, "Nick 21 / Ed 16".
+- Make the period default to something short. A weekly reset lets a bad week
+  disappear; an all-time tally never forgives.
+- Do not put streaks, trophies, or losing states in the first version.
+- Consider making the scoreboard opt-in per household, and easy to turn off
+  without deleting the underlying history.
+
+The history is worth keeping regardless of whether the scoreboard is
+displayed — it answers the dishwasher question either way.
+
+## 5. Fairness Caveats
+
+The data will be honest about what was logged, which is not the same as what
+was done. Worth surfacing rather than hiding:
+
+- A chore assigned to one person but completed by the other is credited to
+  whoever ticked it. That is correct, and it needs the completion to record
+  `completed_by` rather than the chore's `assignee_id`.
+- Work nobody logs scores nothing. If one person logs diligently and the
+  other doesn't, the scoreboard measures logging, not effort.
+- Legacy completions from before migration 009 have no known person. They
+  should be excluded from scoring rather than silently attributed.
+
+## 6. Where It Lives
+
+The board has no spare room, so the scoreboard needs a surface:
+
+- A sheet opened from the Weekly To Do panel header — cheapest, consistent
+  with the day sheet that already exists.
+- A settings-style dialog.
+- **A screensaver scene (Feature #5).** The ambient display is on screen most
+  of the day and has room to spare. A slowly-drifting scoreboard is a
+  genuinely good fit, and it means the feature costs the board no space at
+  all.
+
+## 7. Out of Scope Initially
+
+- Weights, streaks, badges, achievements
+- Notifications about standings
+- Per-chore-category breakdowns
+- Charts beyond a simple total per person
+- Exporting or sharing standings
+
+## 8. Definition of Done
+
+- [ ] Points are computed from `chore_completions`, not from chore state.
+- [ ] A period can be selected, with at least week / month / all time.
+- [ ] Totals are shown per person for the selected period.
+- [ ] Completions with no known person are excluded, not misattributed.
+- [ ] The scoreboard can be turned off without losing history.
+- [ ] A household-total framing is available alongside head-to-head.
+- [ ] The underlying history remains useful even with the scoreboard off.
+
+---
+
 # Cross-Feature Architecture Principles
 
 These principles should apply across the backlog.
@@ -1495,6 +1626,7 @@ Themes and other delight-oriented work should not displace improvements that mak
 | **#3 Themes** | Low | Personalization and visual delight |
 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
 | **#5 Ambient Screen Timeout** | Medium | Protect the display and give the wall a resting face |
+| **#6 Chores Scoreboard** | Medium | Settle who actually did what, over a chosen period |
 
 ---
 

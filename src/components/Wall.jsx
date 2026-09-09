@@ -154,13 +154,21 @@ const MEAL_PLAN_QUERY = `
  * the detail view then opens with no loading state at all. It is fetched
  * lazily (only when the book is opened) rather than at boot, because the
  * wall spends approximately all of its time not showing a recipe.
+ *
+ * This is a PostgREST select string, not SQL: it takes no comments, and one
+ * bad column name 400s the whole request rather than degrading. It shipped
+ * once asking for `est_cost_cents`, which 004_recipes.sql declares and the
+ * live table does not have — the repo and the database drifted at some point
+ * before 008 — and the book opened to an empty shelf instead of a missing
+ * price. Check a column exists in the live schema before adding it here;
+ * finding it in a migration file is not the same thing.
  */
 const RECIPE_BOOK_QUERY = `
   id, title, status, description, notes,
   servings_min, servings_max, effort,
   prep_minutes, cook_minutes, total_minutes,
   cuisine, tags, meal_types, source_url, image_url, image_source,
-  est_cost_cents, cost_confidence,
+  cost_confidence,
   ingredients:recipe_ingredients ( id, name, qty, unit, preparation, notes, sort_order ),
   steps:recipe_steps ( id, step_number, body )
 `

@@ -1617,6 +1617,101 @@ Themes and other delight-oriented work should not displace improvements that mak
 
 ---
 
+# Feature #7 — Add a recipe by QR handoff to Claude
+
+**Priority:** High (next up)
+**Category:** Meal Planning / Capture
+**Status:** Designed, not built
+
+## The idea
+
+A `+` in the recipe book opens a panel showing a QR code. Scan it with a
+phone and you land in a Claude chat already primed to add a recipe to
+Trellis: you talk, Claude writes it to Supabase.
+
+This exists because the wall iPad is a terrible place to type a recipe and a
+great place to *see* one, and because the household already has a Supabase
+connector on claude.ai — so a phone chat can genuinely write to the database
+without Trellis needing an editor, an API key, or an edge function.
+
+## Design decisions already made
+
+**Keep the encoded prompt short — this is a hard constraint, not taste.** A QR
+code tops out around 2,953 bytes, and anything near that renders as a 177x177
+grid that a phone camera will not reliably pick off a glossy screen at arm's
+length. Target a prompt of roughly 400 characters so the code stays sparse and
+scans first time.
+
+**The prompt must tell Claude to read the schema, not carry it.** Embedding the
+table definitions would blow the size budget *and* go stale — `est_cost_cents`
+is declared in `004_recipes.sql` and does not exist on the live table, which is
+exactly the kind of drift that would make a baked-in schema produce broken SQL.
+Something close to:
+
+> I want to add a recipe to my Trellis household app. Use the Supabase
+> connector, project `useanivealpkicohodeo`. First read the schema and
+> constraints of `recipes`, `recipe_ingredients`, `recipe_steps` and
+> `recipe_field_provenance`. Then ask me for the recipe, show me the SQL
+> before running it, and record what I tell you as `user_supplied`
+> provenance.
+
+That last clause matters: anything a person states outranks
+`ai_enrichment` and must survive the next enrichment pass.
+
+**Render the prompt as copyable text and a tappable link beside the QR.** Two
+reasons. A QR is useless when you are already holding the phone that is showing
+it. And the claude.ai `?q=` prefill deep link is **unverified** — a HEAD request
+returns 403, which is bot filtering rather than evidence either way, and
+whether a named Skill can be switched on by URL is unknown. If the prefill
+silently does nothing, a visible prompt with a copy button still makes the
+feature work. Design so the QR is the convenience and the text is the contract.
+
+**Rendering:** needs a QR encoder — hand-rolling Reed-Solomon and mask
+selection is ~600 lines of the wrong kind of code. `qrcode-generator` is ~15 kB
+with no dependencies. Emit **SVG, not canvas**, so it stays crisp on the iPad
+and can take its colours from the palette tokens.
+
+## Open questions
+
+- Does `https://claude.ai/new?q=...` actually prefill on iOS, and does it open
+  the app or Safari? Test on the real phone before trusting it.
+- Can a specific Skill or Project be selected from the URL? If yes, the prompt
+  shrinks to almost nothing and the QR gets sparser still.
+- Should the panel offer a second QR for *editing* the recipe currently open,
+  not just adding a new one?
+
+---
+
+# Feature #8 — In-app recipe editing, with an AI edit button
+
+**Priority:** Low
+**Category:** Meal Planning
+**Status:** Backlog, deliberately deferred
+
+A pencil on each recipe opening a real editor, plus an "AI edit" button that
+takes an instruction in plain language.
+
+Deferred because it is a bigger piece of work than the icon suggests. A recipe
+spans four tables, and `008_recipe_enrichment.sql` put real constraints between
+them: an active recipe may not lose its last ingredient (a deferred trigger
+rejects the whole transaction at commit), step numbers are unique and positive,
+cuisine and tags must be lowercase, meal types are a closed set, and a hand edit
+has to claim `user_supplied` provenance or the next enrichment pass overwrites
+it. A form that ignores any of that corrupts the data quietly.
+
+The AI half additionally cannot run in the browser: Vite inlines
+`import.meta.env` at build time, so any `VITE_`-prefixed API key is baked into
+the public bundle Vercel serves. It needs a server-side function — Vercel
+Functions rather than Supabase Edge Functions, since the project already
+deploys to Vercel and that keeps it to one deployment surface. Hosting is free
+at this volume; tokens are roughly $0.05 an edit on Claude Opus 5.
+
+Feature #7 covers most of the same ground with none of the build, which is why
+this one is low priority rather than next.
+
+
+---
+
 # Current Feature Priority Summary
 
 | Feature | Priority | Primary Purpose |
@@ -1627,6 +1722,8 @@ Themes and other delight-oriented work should not displace improvements that mak
 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
 | **#5 Ambient Screen Timeout** | Medium | Protect the display and give the wall a resting face |
 | **#6 Chores Scoreboard** | Medium | Settle who actually did what, over a chosen period |
+| **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor |
+| **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
 
 ---
 

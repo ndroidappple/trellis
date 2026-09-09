@@ -148,51 +148,123 @@ export function recurrencePatchFor(chore, recurrence) {
  * and still being shown a "Today" group would be a lie about which week the
  * ticks belong to.
  */
-export function groupChores(chores, { todayIso, isCurrentWeek, occurrenceFor, choreIsDone }) {
+export function groupChores(
+  chores,
+  { todayIso, weekEndIso, isCurrentWeek, occurrenceFor, choreIsDone }
+) {
+  // Subtasks never group on their own. A subtask's whole meaning is "part of
+  // that", so it is shown under its parent wherever the parent landed, even
+  // when its own date would have put it somewhere else.
+  const children = new Map()
+  for (const chore of chores) {
+    if (!chore.parent_id) continue
+    if (!children.has(chore.parent_id)) children.set(chore.parent_id, [])
+    children.get(chore.parent_id).push(chore)
+  }
+
+  const overdue = []
   const episodic = []
   const todays = []
-  const rest = []
+  const week = []
+  const later = []
 
   for (const chore of chores) {
+    if (chore.parent_id) continue
+
     if (isEpisodic(chore)) {
       episodic.push(chore)
       continue
     }
+
     const occurrence = occurrenceFor(chore)
-    if (isCurrentWeek && occurrence != null && occurrence === todayIso) todays.push(chore)
-    else rest.push(chore)
+
+    // A weekly chore is never late. It has one occurrence per week and it
+    // clears each Sunday, so "you missed Tuesday" is not a state it can be
+    // in — only a dated one-off can actually be overdue.
+    const isDated = chore.recurrence === 'once' && chore.due_on != null
+    if (isDated && chore.due_on < todayIso && !choreIsDone(chore)) {
+      overdue.push(chore)
+      continue
+    }
+
+    // Not started yet: a start date is "don't show me this until", so it sits
+    // with the rest of the not-yet rather than in this week's work.
+    if (chore.starts_on && chore.starts_on > todayIso) {
+      later.push(chore)
+      continue
+    }
+
+    if (isCurrentWeek && occurrence != null && occurrence === todayIso) {
+      todays.push(chore)
+      continue
+    }
+
+    // A one-off due after this week was previously filed under "This week",
+    // which made a task due in November part of the current week's workload.
+    if (isDated && weekEndIso != null && chore.due_on > weekEndIso) {
+      later.push(chore)
+      continue
+    }
+
+    week.push(chore)
   }
 
-  // Outstanding work first, finished work last, insertion order preserved
-  // inside each half — Array.prototype.sort is stable, so this reorders no
-  // more than it has to. Done rows stay in their group rather than sinking
-  // into a pile at the bottom: the group emptying is the signal that the
-  // group is finished.
-  const byOutstanding = (list) =>
-    [...list].sort((a, b) => Number(choreIsDone(a)) - Number(choreIsDone(b)))
+  // Outstanding work first, then the most urgent of it, then insertion order
+  // — Array.prototype.sort is stable, so this reorders no more than it has
+  // to. Done rows stay in their own group rather than sinking to a pile at
+  // the bottom: a group emptying is the signal that the group is finished.
+  const ordered = (list) =>
+    [...list].sort(
+      (a, b) =>
+        Number(choreIsDone(a)) - Number(choreIsDone(b)) ||
+        Number(b.priority ?? 0) - Number(a.priority ?? 0)
+    )
+
+  const withChildren = (list) =>
+    ordered(list).map((chore) => ({
+      ...chore,
+      children: ordered(children.get(chore.id) ?? []),
+    }))
 
   const groups = []
-
-  if (todays.length > 0) {
-    groups.push({ key: 'today', label: 'Today', kind: 'check', chores: byOutstanding(todays) })
+  const add = (key, label, list, kind = 'check') => {
+    if (list.length > 0) groups.push({ key, label, kind, chores: withChildren(list) })
   }
 
-  if (rest.length > 0) {
-    groups.push({
-      key: 'week',
-      // Named for what it is rather than for "the rest", because on a week
-      // that is not this one the distinction is the whole point.
-      label: isCurrentWeek ? 'This week' : 'That week',
-      kind: 'check',
-      chores: byOutstanding(rest),
-    })
-  }
-
-  if (episodic.length > 0) {
-    groups.push({ key: 'anytime', label: 'As needed', kind: 'log', chores: episodic })
-  }
+  // Late first. It is the only group that is about something having gone
+  // wrong, and burying it under today's work is how it stays wrong.
+  add('overdue', 'Overdue', overdue)
+  add('today', 'Today', todays)
+  // Named for what it is rather than "the rest", because on a week that is
+  // not this one the distinction is the whole point.
+  add('week', isCurrentWeek ? 'This week' : 'That week', week)
+  add('later', 'Later', later)
+  add('anytime', 'As needed', episodic, 'log')
 
   return groups
+}
+
+/**
+ * How a dated task reads on its row: "3 days late", "Due today", "Due Fri".
+ *
+ * Lateness is counted in days rather than shown as a date, for the same
+ * reason agoLabel is: standing at the board, "4 days late" lands and
+ * "Tuesday" needs working out first.
+ */
+export function dueLabel(chore, today) {
+  if (chore.recurrence !== 'once' || !chore.due_on || !today) return null
+
+  const due = new Date(`${chore.due_on}T00:00`)
+  const now = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const days = Math.round((now - due) / 86400000)
+
+  if (days === 0) return 'Due today'
+  if (days === 1) return '1 day late'
+  if (days > 1) return `${days} days late`
+  if (days === -1) return 'Due tomorrow'
+  if (days >= -6) return `Due ${WEEKDAY_SHORT[due.getDay()]}`
+
+  return `Due ${due.getDate()} ${due.toLocaleDateString(undefined, { month: 'short' })}`
 }
 
 /**

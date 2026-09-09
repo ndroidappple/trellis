@@ -213,7 +213,83 @@ invisible, on a Mac browser window shorter than the iPad this was tuned
 for). If you add new flex children to `Board`/`WeekGrid`/`SectionPanel`,
 give them a real computed minimum, not `min-height: 0`.
 
-## Chores
+## Chores, which are also tasks
+
+**One table holds both, deliberately** (014). A *task* is a chore whose
+`recurrence` is `'once'` — that is not a workaround, it is what `'once'` has
+meant since 009, where `due_on` is already the due date. The alternative
+considered and rejected was a separate `tasks` table: it models the difference
+more honestly (a chore rotates and is never finished; a task is done once and
+gone) at the cost of two lists, two panels and two mental models in a
+household of two.
+
+014 added `priority` (0–3, rendered only above 0), `notes`, `starts_on` and
+`parent_id`. All four are recurrence-agnostic — a weekly chore can carry a
+priority as sensibly as a one-off can. Only the *date* is specific to a kind,
+and it already existed, which is why `chores_schedule_matches_recurrence` is
+untouched.
+
+The table keeps the name `chores` even though the concept is now broader. The
+panel has read "Weekly To Do" since the redesign, so the user-facing noun was
+already "task" and only the storage still says "chore"; renaming would touch
+the completion log, the `chore_last_done` view, every RLS policy and four
+constraints to settle a question the UI settled differently.
+
+**Subtasks are one level deep and stay that way.** `groupChores` pulls
+children out of the top-level grouping and hangs them off their parent
+wherever the parent landed, so a subtask never groups on its own — its whole
+meaning is "part of that". A list that grows a tree needs an outliner, and an
+outliner on a wall-mounted iPad is a worse version of a list.
+
+**Only a dated one-off can be overdue.** A weekly chore has one occurrence a
+week and clears each Sunday, so "you missed Tuesday" is not a state it can be
+in. `groupChores` puts late work in its own group above everything else,
+because the one group that reports something having gone wrong is the one that
+must not be buried under today's work.
+
+### Fast capture
+
+`src/lib/capture.js` reads scheduling and priority off the end of typed text,
+so "bins out every tuesday !!" lands as a Tuesday chore at high priority
+rather than as an untimed weekly one that then needs a sheet opened to finish
+it. Two rules keep it from being annoying:
+
+- **Matches are end-anchored, never mid-string.** "Buy tickets for Monday's
+  show" has to stay a task with that name. Any parser that matches dates
+  anywhere in the text eventually eats a word somebody meant, and on a shared
+  wall the person who typed it is not the person who finds it broken.
+- **Nothing is applied silently.** `parseCapture` returns the labels it
+  matched and `AddRow` shows them back — "Tuesdays · Medium" — before the row
+  is written. A parser you cannot see is one you stop trusting the first time
+  it guesses wrong.
+
+`"next friday"` means the Friday *after* the coming one. English genuinely
+disagrees about the phrase; the tie-break is structural, since bare `"friday"`
+already means the coming Friday and a modifier that changes nothing is worse
+than either reading.
+
+No slash dates: `12/9` is September in one hemisphere and December in another,
+and this app renders dates through the device locale, so guessing wrong would
+stay invisible until something happened on the wrong day.
+
+## Motion
+
+`tokens.css` owns the motion system. Durations name the *job* rather than the
+number — `--dur-tap` (press feedback), `--dur-state` (ticked, selected),
+`--dur-move` (reorder, sink), `--dur-layer` (a sheet arrived) — with
+`--ease-enter` / `--ease-exit` / `--ease-standard`. Before this there were
+five hand-picked durations and mostly a bare `ease`, so two controls doing the
+same kind of thing moved at different speeds for no reason.
+
+Everything is short, and nothing decorative loops: this runs on a
+wall-mounted iPad people tap in passing, where a looping animation is both a
+battery cost and a burn-in risk. The reduced-motion media query in
+`tokens.css` zeroes the durations, which is the default answer for any new
+component — but per-component blocks that also suppress an `:active`
+transform are still needed and still there, because a transform with no
+duration still snaps.
+
+## Chore recurrences
 
 Three recurrences, and the third exists because the first two could not
 describe the chore this household does most.

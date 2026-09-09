@@ -13,10 +13,12 @@ import {
 } from '../lib/week'
 import { daysInYear, daysLeftInYear, dayOfYear, fiscalWeek, yearProgress } from '../lib/year'
 import { groceryLines, weekCost } from '../lib/cost'
+import { parseCapture } from '../lib/capture'
 import {
   agoLabel,
   choreOccurrenceDate,
   choreScheduleLabel,
+  dueLabel,
   groupChores,
   isEpisodic,
   isScheduled,
@@ -31,6 +33,7 @@ import { useToday } from '../hooks/useToday'
 import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
 import Sheet from './Sheet'
+import AddRow from './AddRow'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
@@ -519,8 +522,18 @@ export default function Wall({ profile, people }) {
     [loadChores]
   )
 
-  async function addChore(title) {
-    const clean = title.trim()
+  /**
+   * Adding a task, from one line of typing.
+   *
+   * `parseCapture` reads scheduling and priority off the end of the text, so
+   * "bins out every tuesday !!" lands as a Tuesday chore at high priority
+   * rather than as an untimed weekly one that then needs a sheet opened to
+   * finish it. Anything it does not understand stays in the title, and the
+   * defaults below are exactly what the field produced before.
+   */
+  async function addChore(text, parentId = null) {
+    const parsed = parseCapture(text, today)
+    const clean = parsed.title.trim()
     if (!clean) return
 
     const { error } = await supabase.from('chores').insert({
@@ -528,11 +541,15 @@ export default function Wall({ profile, people }) {
       title: clean,
       recurrence: 'weekly',
       sort_order: chores.length,
+      parent_id: parentId,
+      ...parsed.patch,
     })
     if (error) return setError(error.message)
 
     loadChores()
-    rememberCommonChore(clean)
+    // The palette learns titles, not schedules — re-adding "Bins out" from a
+    // chip should not silently re-apply a priority typed once last month.
+    if (!parentId) rememberCommonChore(clean)
   }
 
   /**
@@ -1165,11 +1182,20 @@ export default function Wall({ profile, people }) {
     () =>
       groupChores(chores, {
         todayIso: toDateInputValue(today),
+        weekEndIso: toDateInputValue(addDays(startOfWeek(anchor), 6)),
         isCurrentWeek,
         occurrenceFor,
         choreIsDone,
       }),
-    [chores, choreIsDone, isCurrentWeek, occurrenceFor, today]
+    [anchor, chores, choreIsDone, isCurrentWeek, occurrenceFor, today]
+  )
+
+  // What is actually late, for the panel head. Overdue is the only count
+  // worth promoting past "N of M done" — it is the one number that means
+  // something has gone wrong rather than something is outstanding.
+  const overdueCount = useMemo(
+    () => choreGroups.find((g) => g.key === 'overdue')?.chores.length ?? 0,
+    [choreGroups]
   )
 
   const choresPanelProps = {
@@ -1194,9 +1220,11 @@ export default function Wall({ profile, people }) {
     onDragStart: startDrag,
     draggingId: drag?.chore?.id ?? null,
     scheduleLabelFor: choreScheduleLabel,
+    dueLabelFor: (chore) => dueLabel(chore, today),
     lastDoneFor,
     turnFor: (chore, last) => nextTurn(chore, last, orderedPeople),
     agoFor: (iso) => agoLabel(iso, today),
+    today,
   }
 
   const shoppingPanelProps = {
@@ -1234,7 +1262,13 @@ export default function Wall({ profile, people }) {
         settings={settings}
         chores={<ChoresPanel mode="full" {...choresPanelProps} />}
         choresCompact={<ChoresPanel mode="compact" {...choresPanelProps} />}
-        choresCount={booted ? `${choresDone} of ${trackableChores.length} done` : undefined}
+        choresCount={
+          booted
+            ? overdueCount > 0
+              ? `${overdueCount} late · ${choresDone} of ${trackableChores.length} done`
+              : `${choresDone} of ${trackableChores.length} done`
+            : undefined
+        }
         shopping={<ShoppingPanel mode="full" {...shoppingPanelProps} />}
         shoppingCompact={<ShoppingPanel mode="compact" {...shoppingPanelProps} />}
         shoppingCount={booted ? `${shoppingRemaining} to buy` : undefined}
@@ -1377,8 +1411,14 @@ export default function Wall({ profile, people }) {
 
       {reschedulingChore && (
         <ChoreSheet
-          chore={reschedulingChore}
+          // Read back out of `chores` rather than held in state, so an edit
+          // made in the sheet is reflected by the sheet itself.
+          chore={chores.find((c) => c.id === reschedulingChore.id) ?? reschedulingChore}
+          subtasks={chores.filter((c) => c.parent_id === reschedulingChore.id)}
+          subtaskIsDone={choreIsDone}
           onPatch={(patch) => patchChore(reschedulingChore, patch)}
+          onAddChild={(text) => addChore(text, reschedulingChore.id)}
+          onDeleteChild={removeChore}
           onDelete={() => {
             const chore = reschedulingChore
             setReschedulingChore(null)
@@ -1514,6 +1554,14 @@ function DayView({
  * calendar rather than seven buttons; dragging one onto a day in the grid
  * still works and remains the way to move it.
  */
+/** 0 is "no priority", and the row shows nothing at all for it. */
+const PRIORITY_OPTIONS = [
+  { value: 0, label: 'Normal' },
+  { value: 1, label: 'Low !' },
+  { value: 2, label: 'Medium !!' },
+  { value: 3, label: 'High !!!' },
+]
+
 const RECURRENCE_OPTIONS = [
   { id: 'weekly', label: 'Every week', hint: 'A rhythm. One tick per week, cleared each Sunday.' },
   { id: 'once', label: 'Just once', hint: 'An errand on a date. Drag it onto a day to move it.' },
@@ -1535,9 +1583,20 @@ const RECURRENCE_OPTIONS = [
  * the reason any of this exists — could only be made by hand in SQL, and
  * everything added through the app arrived as the exact kind that failed.
  */
-function ChoreSheet({ chore, onPatch, onDelete, onClose }) {
+function ChoreSheet({
+  chore,
+  subtasks = [],
+  subtaskIsDone,
+  onPatch,
+  onAddChild,
+  onDeleteChild,
+  onDelete,
+  onClose,
+}) {
   const weekly = chore.recurrence === 'weekly'
+  const oneOff = chore.recurrence === 'once'
   const episodic = chore.recurrence === 'anytime'
+  const isChild = chore.parent_id != null
   const active = RECURRENCE_OPTIONS.find((o) => o.id === chore.recurrence)
 
   return (
@@ -1588,6 +1647,27 @@ function ChoreSheet({ chore, onPatch, onDelete, onClose }) {
           </>
         )}
 
+        {/* A one-off carries a date, so it gets a date field rather than the
+            seven weekday buttons. This is the half of scheduling that drag
+            was previously the only way to reach. */}
+        {oneOff && (
+          <>
+            <p className="muted">Due</p>
+            <div className="field-row">
+              <input
+                type="date"
+                value={chore.due_on ?? ''}
+                onChange={(e) => onPatch({ due_on: e.target.value || null })}
+              />
+              {chore.due_on && (
+                <button className="ghost" onClick={() => onPatch({ due_on: null })}>
+                  Clear
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
         {/* Rotation is only meaningful where there is a log to derive a turn
             from, which is what an episodic chore is. nextTurn() answers from
             the completion history rather than a stored next_person_id, so
@@ -1602,6 +1682,60 @@ function ChoreSheet({ chore, onPatch, onDelete, onClose }) {
             Take turns
           </label>
         )}
+
+        <p className="muted">How urgent?</p>
+        <div className="chips">
+          {PRIORITY_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              className={Number(chore.priority ?? 0) === opt.value ? 'chip on' : 'chip'}
+              aria-pressed={Number(chore.priority ?? 0) === opt.value}
+              onClick={() => onPatch({ priority: opt.value })}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Subtasks are one level deep and stay that way. A household to-do
+            list that grows a tree needs an outliner, and an outliner on a
+            wall-mounted iPad is a worse version of a list. */}
+        {!isChild && (
+          <>
+            <p className="muted">Steps</p>
+            {subtasks.length > 0 && (
+              <div className="substeps">
+                {subtasks.map((child) => (
+                  <div key={child.id} className="substeps__row">
+                    <span className={subtaskIsDone(child) ? 'is-done' : undefined}>
+                      {child.title}
+                    </span>
+                    <button
+                      className="panel-row__remove"
+                      onClick={() => onDeleteChild(child)}
+                      aria-label={`Remove ${child.title}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <AddRow placeholder="Add a step" onAdd={onAddChild} />
+          </>
+        )}
+
+        <p className="muted">Notes</p>
+        <textarea
+          className="sheet__notes"
+          rows={3}
+          placeholder="Anything worth remembering next time"
+          defaultValue={chore.notes ?? ''}
+          onBlur={(e) => {
+            const next = e.target.value.trim() || null
+            if (next !== (chore.notes ?? null)) onPatch({ notes: next })
+          }}
+        />
 
         <div className="actions">
           <button className="ghost danger" onClick={onDelete}>

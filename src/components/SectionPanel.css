@@ -120,7 +120,7 @@
   font-size: 24px;
   line-height: 1;
   color: var(--ink-faint);
-  transition: transform 90ms ease, color 90ms ease;
+  transition: transform var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard);
 }
 
 .section-panel__open:active .section-panel__chevron {

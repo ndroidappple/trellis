@@ -113,7 +113,7 @@
   color: var(--ink);
   font-family: var(--font-text);
   cursor: pointer;
-  transition: transform 70ms ease, border-color 90ms ease;
+  transition: transform var(--dur-tap) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
 }
 
 .book__card:active {

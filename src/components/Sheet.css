@@ -22,7 +22,7 @@
            calc(24px + env(safe-area-inset-left, 0px));
   gap: 18px;
 
-  animation: sheet-in 180ms cubic-bezier(0.2, 0, 0, 1);
+  animation: sheet-in var(--dur-layer) var(--ease-enter);
 }
 
 /* Rises rather than fades in from nowhere: the direction is what says
@@ -153,7 +153,7 @@
   font-family: var(--font-text);
   font-size: 21px;
   cursor: pointer;
-  transition: transform 70ms ease, background-color 90ms ease;
+  transition: transform var(--dur-tap) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
 .sheet-row:active {

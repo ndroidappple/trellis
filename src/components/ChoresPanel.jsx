@@ -1,6 +1,7 @@
 import { ChecklistRow } from './ChecklistRow'
 import { SkeletonRows } from './Skeleton'
 import AddRow from './AddRow'
+import { priorityLabel } from '../lib/capture'
 
 /**
  * Assembles chores into the shapes SectionPanel.css already has rules for.
@@ -25,6 +26,10 @@ function ChoreRow({
   creditedTo,
   initials,
   when,
+  late,
+  priority,
+  progress,
+  isChild = false,
   draggingId,
   onToggle,
   onDragStart,
@@ -32,21 +37,30 @@ function ChoreRow({
 }) {
   return (
     <div
-      className={['panel-row', draggingId === chore.id ? 'is-dragging' : '']
+      className={[
+        'panel-row',
+        isChild ? 'panel-row--child' : '',
+        late ? 'panel-row--late' : '',
+        draggingId === chore.id ? 'is-dragging' : '',
+      ]
         .filter(Boolean)
         .join(' ')}
     >
       {/* A handle, not a long press on the row. touch-action: none here is
           what stops iPadOS reading the drag as a scroll of the list, while
-          the rest of the row still scrolls. */}
-      <button
-        type="button"
-        className="panel-row__grip"
-        aria-label={`Reschedule ${chore.title}`}
-        onPointerDown={(e) => onDragStart?.(chore, e)}
-      >
-        <span aria-hidden="true">⠿</span>
-      </button>
+          the rest of the row still scrolls. A subtask has no handle: it
+          belongs to its parent, and dragging it onto a day on its own would
+          be dragging it out of the thing that gives it meaning. */}
+      {!isChild && (
+        <button
+          type="button"
+          className="panel-row__grip"
+          aria-label={`Reschedule ${chore.title}`}
+          onPointerDown={(e) => onDragStart?.(chore, e)}
+        >
+          <span aria-hidden="true">⠿</span>
+        </button>
+      )}
 
       <ChecklistRow
         id={chore.id}
@@ -57,14 +71,25 @@ function ChoreRow({
         onToggle={onToggle}
       />
 
+      {/* Priority as weight, not as a colour scale. Two people sharing a wall
+          do not need a four-grade traffic light, and red-amber-green on an
+          always-on display in a living room is a nag rather than a signal. */}
+      {priority && (
+        <span className="panel-row__priority" data-level={chore.priority} aria-label={`Priority ${chore.priority} of 3`}>
+          {priority}
+        </span>
+      )}
+
+      {progress && <span className="panel-row__progress">{progress}</span>}
+
       {/* The row's one secondary door. It was three — a schedule pill, a
           drag handle and a delete × crowded into a ~350px column beside the
           primary tap, with the destructive one adjacent to the quiet one.
           Now the label opens a sheet that holds everything the row is not
-          for: what kind of chore this is, which day, and deleting it. */}
+          for: kind, day, priority, notes, subtasks and deleting. */}
       <button
         type="button"
-        className="panel-row__when"
+        className={late ? 'panel-row__when is-late' : 'panel-row__when'}
         onClick={() => onOpenSettings?.(chore)}
         aria-label={`Settings for ${chore.title}`}
       >
@@ -173,9 +198,11 @@ export default function ChoresPanel({
   onDragStart,
   draggingId,
   scheduleLabelFor,
+  dueLabelFor,
   lastDoneFor,
   turnFor,
   agoFor,
+  today,
   pendingCount = 0,
   allDone = false,
 }) {
@@ -220,12 +247,13 @@ export default function ChoresPanel({
         {choreCount === 0 && <p className="muted">Nothing yet.</p>}
 
         {groups.map((group) => (
-          <section key={group.key} className="chore-group">
+          <section key={group.key} className="chore-group" data-group={group.key}>
             <h3 className="chore-group__head">
               <span>{group.label}</span>
               {group.kind === 'check' && (
                 <span className="chore-group__count">
-                  {group.chores.filter((c) => !choreIsDone(c)).length} left
+                  {group.chores.filter((c) => !choreIsDone(c)).length}
+                  {group.key === 'overdue' ? ' late' : ' left'}
                 </span>
               )}
             </h3>
@@ -251,22 +279,44 @@ export default function ChoresPanel({
                 )
               }
 
-              const done = choreIsDone(c)
-              const creditedTo = done && last?.completed_by ? personFor(last.completed_by) : null
+              const rowFor = (chore, isChild) => {
+                const isDone = choreIsDone(chore)
+                const lastFor = lastDoneFor?.(chore.id) ?? null
+                const credited =
+                  isDone && lastFor?.completed_by ? personFor(lastFor.completed_by) : null
+                const kids = chore.children ?? []
+
+                return (
+                  <ChoreRow
+                    key={chore.id}
+                    chore={chore}
+                    isChild={isChild}
+                    done={isDone}
+                    creditedTo={credited}
+                    initials={credited ? initialsForPerson(credited) : undefined}
+                    // A dated task says how late or how soon; everything else
+                    // says what kind of rhythm it is on.
+                    when={dueLabelFor?.(chore) ?? scheduleLabelFor?.(chore)}
+                    late={group.key === 'overdue'}
+                    priority={priorityLabel(chore.priority)}
+                    progress={
+                      kids.length > 0
+                        ? `${kids.filter((k) => choreIsDone(k)).length}/${kids.length}`
+                        : null
+                    }
+                    draggingId={draggingId}
+                    onToggle={() => onToggle(chore)}
+                    onDragStart={onDragStart}
+                    onOpenSettings={onOpenSettings}
+                  />
+                )
+              }
 
               return (
-                <ChoreRow
-                  key={c.id}
-                  chore={c}
-                  done={done}
-                  creditedTo={creditedTo}
-                  initials={creditedTo ? initialsForPerson(creditedTo) : undefined}
-                  when={scheduleLabelFor?.(c)}
-                  draggingId={draggingId}
-                  onToggle={() => onToggle(c)}
-                  onDragStart={onDragStart}
-                  onOpenSettings={onOpenSettings}
-                />
+                <div key={c.id} className="chore-item">
+                  {rowFor(c, false)}
+                  {(c.children ?? []).map((child) => rowFor(child, true))}
+                </div>
               )
             })}
           </section>
@@ -291,7 +341,7 @@ export default function ChoresPanel({
           palette — so adding a chore to a full list meant scrolling to the
           bottom of it first. Pinned, it costs one row of list height and is
           always exactly where it was last time. */}
-      <AddRow placeholder="Add a chore" onAdd={onAdd} />
+      <AddRow placeholder="Add a task — try “bins out every tuesday”" onAdd={onAdd} parse today={today} />
 
       {pendingCount === 0 && choreCount > 0 && (
         <p className="panel-rows__footnote">Nothing left this week.</p>

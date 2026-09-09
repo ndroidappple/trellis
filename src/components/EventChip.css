@@ -76,7 +76,7 @@
 .day-row--today .event-chip__meta { font-size: 18px; }
 
 /* Instant acknowledgement on tap — see the note in App.css. */
-.event-chip { transition: transform 70ms ease; }
+.event-chip { transition: transform var(--dur-tap) var(--ease-standard); }
 .event-chip:active { transform: scale(0.98); }
 
 @media (prefers-reduced-motion: reduce) {

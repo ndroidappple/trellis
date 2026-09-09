@@ -276,6 +276,54 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   color: var(--ink-faint);
 }
 
+/* Late is the one group that reports something having gone wrong, so it is
+   the one heading allowed to raise its voice. Everywhere else in this app a
+   colour means a person; here it means a state, which is why it borrows the
+   error hue rather than any person's. */
+.chore-group[data-group='overdue'] .chore-group__head { color: var(--urgent); }
+.chore-group[data-group='overdue'] .chore-group__count { color: var(--urgent); }
+
+.chore-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* A subtask is indented and quieter, and has no drag handle — the indent is
+   doing the work the handle's absence would otherwise have to explain. */
+.panel-row--child {
+  margin-left: 34px;
+  font-size: 0.94em;
+}
+
+.panel-row--child .checklist-row__name { color: var(--ink-soft); }
+
+.panel-row--late .checklist-row__name { color: var(--urgent); }
+.panel-row__when.is-late { color: var(--urgent); }
+
+/* Priority as weight rather than as a traffic light: one hue, three
+   densities. Rendered only above normal — "!" on nothing is the same noise
+   as "x1" on every shopping row. */
+.panel-row__priority {
+  flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  font-size: 18px;
+  color: var(--urgent);
+  opacity: 0.55;
+}
+
+.panel-row__priority[data-level='2'] { opacity: 0.78; }
+.panel-row__priority[data-level='3'] { opacity: 1; }
+
+/* "2/3" — how much of a multi-step task is done. */
+.panel-row__progress {
+  flex-shrink: 0;
+  font-size: var(--size-min);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Follows the pointer. pointer-events: none is required, not cosmetic:
    useChoreDrag hit-tests with elementFromPoint, and a ghost under the
    cursor would be the only element it ever found. */
@@ -303,6 +351,12 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 .panel-row__when {
   flex-shrink: 0;
   min-height: 44px;
+  /* A column, not a label that ends wherever its text does. These now say
+     very different-length things — "Wednesdays", "5 days late", "Due 2 Nov" —
+     and left to themselves they gave every row a different right edge, which
+     made a tidy list look like a ragged one. */
+  min-width: 108px;
+  text-align: right;
   padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 999px;
@@ -497,7 +551,7 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   font-size: var(--size-row);
   text-align: left;
   cursor: pointer;
-  transition: transform 70ms ease;
+  transition: transform var(--dur-tap) var(--ease-standard);
 }
 
 .shop-row:active { transform: scale(0.99); }
@@ -568,10 +622,35 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   gap: 8px;
   margin-top: 8px;
   flex: 0 0 auto;
+  /* Top, not centre. The field grows a readback line underneath it as you
+     type, and a centred Add drifts down the moment the hint appears — the
+     button moving because the parser understood you is exactly the wrong
+     feedback. */
+  align-items: flex-start;
 }
 
-.panel-add input { flex: 1; min-height: var(--tap-min); font-size: 17px; }
+.panel-add__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-add input { width: 100%; min-height: var(--tap-min); font-size: 17px; }
 .panel-add button { min-height: var(--tap-min); font-size: 18px; }
+
+/* What the capture field understood, shown before anything is written.
+   Appears only when there is something to say, so the field has no permanent
+   furniture under it — and it is the reason the parser is trustworthy rather
+   than a thing that occasionally eats a word. */
+.panel-add__hint {
+  font-size: 15px;
+  color: var(--person-a);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding-left: 2px;
+}
 
 /* ---------- Recipe picker (inside the meal editor dialog) ---------- */
 
@@ -606,7 +685,7 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 .card button,
 .list-button,
 .chip {
-  transition: transform 70ms ease, background-color 90ms ease;
+  transition: transform var(--dur-tap) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -651,7 +730,7 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   border-radius: 12px;
   padding: 14px 16px 14px 20px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
-  animation: undo-rise 160ms ease-out;
+  animation: undo-rise var(--dur-layer) var(--ease-enter);
 }
 
 @keyframes undo-rise {
@@ -723,6 +802,56 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 }
 
 /* ---------- Settings dialog ---------- */
+
+/* A labelled control that is not chips — a date field, mostly. */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field-row input { flex: 1; min-width: 0; }
+
+.sheet__notes {
+  font: inherit;
+  font-size: 18px;
+  line-height: 1.45;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  color: var(--ink);
+  padding: 12px 14px;
+  resize: vertical;
+  min-height: 84px;
+}
+
+.sheet__notes:focus { outline: 2px solid var(--person-a); outline-offset: 1px; }
+
+/* Subtasks inside the sheet. Listed rather than editable in place: this is
+   where you add and remove them, and ticking them happens on the board where
+   the work actually gets done. */
+.substeps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.substeps__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 18px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.substeps__row:last-child { border-bottom: 0; }
+
+.substeps__row .is-done {
+  text-decoration: line-through;
+  color: var(--ink-faint);
+}
 
 .settings-row {
   display: flex;

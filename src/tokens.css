@@ -76,4 +76,53 @@
   --gap-chip: 8px;
   --radius-slat: 4px 8px 8px 4px;
   --radius-panel: 10px;
+
+  /* --- priority ---
+   * Deliberately one colour, not a traffic light. Two people sharing a wall
+   * do not need four levels of alarm, and red/amber/green on an always-on
+   * display in a living room is a nag. Priority shows as weight, and only
+   * when it is above normal — see prioritySuffix in lib/capture.js.
+   */
+  --urgent: #B5453A;       /* same hue as --error: overdue is a failure state */
+  --urgent-tint: rgba(181, 69, 58, 0.10);
+
+  /* --- motion ---
+   *
+   * Durations and easings were previously chosen per-component: 70, 90, 160,
+   * 180 and 650ms with mostly a bare `ease`, which meant two controls doing
+   * the same kind of thing moved at different speeds for no reason. These
+   * name the *job* rather than the number, so a new control picks the token
+   * that matches what it is doing and inherits the timing.
+   *
+   * Everything here is short. This runs on a wall-mounted iPad that people
+   * walk past and tap in passing — motion is here to explain what happened,
+   * not to be watched. Nothing decorative loops, because a looping animation
+   * on an always-on display is both a battery cost and a burn-in risk.
+   */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);    /* leaving: accelerate away */
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);   /* arriving: land softly */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);/* moving within the screen */
+
+  --dur-tap: 70ms;         /* press feedback, under the finger */
+  --dur-state: 140ms;      /* a thing changed: ticked, checked, selected */
+  --dur-move: 220ms;       /* a thing moved: reorder, sink, regroup */
+  --dur-layer: 300ms;      /* a surface arrived: sheet, dialog, toast */
+}
+
+/* The default answer for reduced motion, so a new component gets it right by
+ * using the tokens rather than by remembering to write a media query. The
+ * per-component blocks that also suppress a :active transform are still
+ * there and still needed — this zeroes durations, which stops things
+ * *travelling*, but a transform with no duration still snaps.
+ *
+ * ~0 rather than `animation: none`, so anything waiting on a transitionend
+ * or animationend still gets its event and doesn't hang half-done.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-tap: 0.01ms;
+    --dur-state: 0.01ms;
+    --dur-move: 0.01ms;
+    --dur-layer: 0.01ms;
+  }
 }

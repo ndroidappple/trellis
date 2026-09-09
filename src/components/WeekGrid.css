@@ -40,7 +40,7 @@
 /* The whole row opens the day, so it needs to look like it will. */
 .day-row {
   cursor: pointer;
-  transition: background-color 90ms ease;
+  transition: background-color var(--dur-state) var(--ease-standard);
 }
 
 .day-row:active {

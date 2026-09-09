@@ -346,7 +346,32 @@ Review exceptions, validate data, confirm provenance, and verify safe reruns.
 
 **Priority:** High  
 **Category:** Tasks / Productivity / Household OS  
-**Status:** Backlog  
+**Status:** **Tier 1 foundation shipped** (migration 014). The task system and
+fast capture are built; calendar unification, search/saved views and mature
+reminders are still open, as is all of Tiers 2–4.
+
+## Shipped in the Tier 1 foundation
+
+- **Tasks live in `chores`, not a new table.** Decided against the separate
+  `tasks` table: a task is a chore whose `recurrence` is `'once'`, which is
+  what `'once'` already meant. One list, one mental model. 014 added
+  `priority`, `notes`, `starts_on` and `parent_id`.
+- **Fast capture with natural-language dates.** "bins out every tuesday !!"
+  → a Tuesday chore at high priority. End-anchored matching only, and the
+  field shows back what it understood before writing anything.
+- **Subtasks**, one level deep, shown under their parent with a `2/3` count.
+- **Priority**, rendered only above normal, as weight rather than a traffic
+  light — colour means a *person* everywhere else in this app.
+- **In-app reminders**: an Overdue group above everything else, day-counted
+  lateness on the row, and a late count promoted into the panel head.
+- **A motion system** in `tokens.css`, with every existing transition refitted
+  to it.
+
+**Deliberately deferred within Tier 1:** push notifications (needs a service
+worker, VAPID keys and a send endpoint — a feature in its own right), unified
+calendar scheduling, and search / filters / saved views.
+
+**Old status:** Backlog  
 **Primary Goal:** Upgrade Trellis from a collection of household utilities into a cohesive household operating system with a mature task and planning layer.
 
 ## 1. Product Principle
@@ -1913,7 +1938,7 @@ Ordered by what should be picked up next, not by feature number.
 |---|---|---|---|
 | 1 | **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor |
 | 2 | **#6 Chores Scoreboard** | Medium-High | Settle who did what over a period — **unblocked by #9A** |
-| 3 | **#2 Productivity & Household OS Upgrade** | High | Build the core household task/planning system |
+| 3 | **#2 Tier 1 remainder** | High | Calendar unification, search/saved views, push reminders |
 | 4 | **#5 Ambient Screen Timeout** | Medium | Protect the display and give the wall a resting face |
 | 5 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
 | 6 | **#3 Themes** | Low | Personalization and visual delight |

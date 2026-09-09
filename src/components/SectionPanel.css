@@ -151,9 +151,54 @@
   color: var(--error);
 }
 
+/* Button left, caveat right, on one line. flex-shrink on the caveat and
+   nowrap on the button mean a long caveat truncates rather than pushing the
+   footer into a second row — the panel has a declared height, so a row
+   gained here is a row lost from the list above. */
+.panel-cart__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  min-height: 40px;
+}
+
 .panel-cart__caveat {
-  margin-top: 6px;
   font-size: 16px;
+  color: var(--ink-faint);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sized for a fingertip at arm's length rather than a cursor. Quiet by
+   default: this is a convenience on a board people mostly read, and it sits
+   directly under the largest number on the panel. */
+.panel-cart__add {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--row-face);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 17px;
+  white-space: nowrap;
+}
+
+.panel-cart__add:active {
+  background: var(--chip-face);
+}
+
+/* Nothing left to add is the resting state most of the week, so it has to
+   read as finished rather than broken. */
+.panel-cart__add:disabled {
+  background: none;
+  border-color: transparent;
   color: var(--ink-faint);
 }
 

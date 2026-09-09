@@ -12,7 +12,7 @@ import {
   weekLabel,
 } from '../lib/week'
 import { daysInYear, daysLeftInYear, dayOfYear, fiscalWeek, yearProgress } from '../lib/year'
-import { weekCost } from '../lib/cost'
+import { groceryLines, weekCost } from '../lib/cost'
 import { useToday } from '../hooks/useToday'
 import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
@@ -128,7 +128,7 @@ const MEAL_PLAN_QUERY = `
   recipe:recipes (
     id, title, cost_confidence,
     ingredients:recipe_ingredients (
-      purchase_qty, manual_cost_cents,
+      name, preferred_product, purchase_qty, manual_cost_cents,
       product:products ( id, name, pre_tax_cents, tax_rate_bps )
     )
   )
@@ -419,7 +419,7 @@ export default function Wall({ profile, people }) {
         .order('title'),
       supabase
         .from('staples')
-        .select('weekly_qty, included, manual_unit_cents, product:products ( pre_tax_cents, tax_rate_bps )'),
+        .select('item, weekly_qty, included, manual_unit_cents, product:products ( pre_tax_cents, tax_rate_bps )'),
       supabase.from('household').select('weekly_budget_cents').maybeSingle(),
     ])
 
@@ -442,6 +442,63 @@ export default function Wall({ profile, people }) {
   const mealsStatus = useRealtimeTable('meal-plan-sync', 'meal_plan', loadMeals)
 
   const cost = useMemo(() => weekCost(mealPlan, staples), [mealPlan, staples])
+
+  // ------------------------------------------------- meal plan → shopping
+  //
+  // The chain recipe → ingredient → product → cost already existed; the last
+  // link to the actual list did not, so the cart footer showed a total
+  // derived from the week's meals directly above a list of hand-typed items
+  // that had nothing to do with it.
+  //
+  // Matching on body text rather than an id is deliberate. list_items has no
+  // column to hang a stable key off, and adding one would mean a migration
+  // for a list whose whole nature is that people type into it. Text matching
+  // also does the right thing when someone has already added "Ground turkey"
+  // by hand: it doesn't appear twice.
+
+  const groceries = useMemo(() => groceryLines(mealPlan, staples), [mealPlan, staples])
+
+  const pendingGroceries = useMemo(() => {
+    const already = new Set(shoppingItems.map((i) => i.body.trim().toLowerCase()))
+    return groceries.lines.filter((l) => !already.has(l.body.trim().toLowerCase()))
+  }, [groceries, shoppingItems])
+
+  async function addWeekGroceries() {
+    if (pendingGroceries.length === 0) return
+
+    const { data, error } = await supabase
+      .from('list_items')
+      .insert(
+        pendingGroceries.map((l) => ({
+          household_id: profile.household_id,
+          list: 'shopping',
+          body: l.body,
+          added_by: profile.id,
+          // 001 has carried this column since the beginning and nothing has
+          // ever written anything but 'manual'. Marking these lets a later
+          // "clear what the meal plan added" know what it may remove.
+          source: 'meal_plan',
+        }))
+      )
+      .select('id')
+
+    if (error) return setError(error.message)
+
+    setError(null)
+    loadShopping()
+
+    // Fifteen rows arriving at once is exactly the action someone wants back
+    // if they tapped it on the wrong week.
+    const added = data ?? []
+    offerUndo(`Added ${added.length} ${added.length === 1 ? 'item' : 'items'}`, async () => {
+      const { error: undoError } = await supabase
+        .from('list_items')
+        .delete()
+        .in('id', added.map((r) => r.id))
+      if (undoError) setError(undoError.message)
+      loadShopping()
+    })
+  }
 
   const mealEntryFor = useCallback(
     (date) => mealPlan.find((p) => p.on_date === date && p.slot === 'dinner'),
@@ -719,8 +776,10 @@ export default function Wall({ profile, people }) {
     items: shoppingItems,
     cost,
     budget,
+    pendingGroceries: pendingGroceries.length,
     onToggle: toggleShopping,
     onAdd: addShopping,
+    onAddGroceries: addWeekGroceries,
     onRemove: removeShopping,
   }
 

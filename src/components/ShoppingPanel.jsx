@@ -49,8 +49,10 @@ export default function ShoppingPanel({
   items,
   cost,
   budget,
+  pendingGroceries = 0,
   onToggle,
   onAdd,
+  onAddGroceries,
   onRemove,
 }) {
   const [view, setView] = useState(0)
@@ -109,15 +111,33 @@ export default function ShoppingPanel({
         </span>
       </button>
 
-      {/* The projection is only as complete as the price book. Saying so is
-          the difference between a number and a guess wearing a number's
-          clothes — cost.js counts these precisely so this line can exist. */}
-      {cost.unpricedIngredients > 0 && (
-        <p className="panel-cart__caveat">
-          {cost.unpricedIngredients} unpriced{' '}
-          {cost.unpricedIngredients === 1 ? 'ingredient' : 'ingredients'} not counted
-        </p>
-      )}
+      {/* One line, always, whichever of the two halves is present — the panel
+          has a declared height, so a footer that sometimes wraps to two rows
+          steals a row from the list above it depending on the week's data. */}
+      <div className="panel-cart__footer">
+        <button
+          className="panel-cart__add"
+          onClick={onAddGroceries}
+          disabled={pendingGroceries === 0}
+        >
+          {pendingGroceries > 0
+            ? `Add ${pendingGroceries} from meals`
+            : 'Meals are on the list'}
+        </button>
+
+        {/* The projection is only as complete as the price book. Saying so is
+            the difference between a number and a guess wearing a number's
+            clothes — cost.js counts these precisely so this line can exist.
+            It now covers the list as well as the total: an ingredient with no
+            product is missing from both. */}
+        {cost.unpricedIngredients > 0 && (
+          <span className="panel-cart__caveat">
+            {cost.unpricedIngredients} unpriced{' '}
+            {cost.unpricedIngredients === 1 ? 'ingredient' : 'ingredients'} not
+            counted or added
+          </span>
+        )}
+      </div>
     </>
   )
 }

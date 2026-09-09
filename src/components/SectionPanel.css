@@ -93,6 +93,32 @@
   grid-template-columns: repeat(4, 1fr);
 }
 
+/* One-tap re-adding for chores this household has typed before. Quieter than
+   a chore row — these are a shortcut to creating one, not one themselves —
+   but still a real fingertip target at arm's length. */
+.panel-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.panel-quick__chip {
+  min-height: 40px;
+  padding: 7px 14px;
+  border: 1px dashed var(--rule);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+}
+
+.panel-quick__chip:active {
+  background: var(--row-face);
+  color: var(--ink);
+}
+
 .panel-strip {
   display: flex;
   align-items: center;

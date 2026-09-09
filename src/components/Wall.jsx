@@ -33,18 +33,14 @@ const UNDO_MS = 9000
 
 /**
  * Optional asides for the header's second line — the board having a bit of
- * character rather than telling you anything you need.
+ * character rather than telling you anything you need. Deliberately not
+ * advertised: someone poking at the board finds them, someone reading the
+ * week never notices they exist.
  *
- * Tapping the line cycles them, and the same list drives the settings
- * dialog. Deliberately not advertised: someone poking at the board finds
- * them, someone reading the week never notices they exist.
- */
-/**
- * The asides that can ride along beside the week in the header.
- *
- * Each carries two renderings. Alone, it can afford to spell itself out;
- * shown alongside others it shortens, because the header shares a row with
- * the sync state and the week arrows and cannot grow sideways forever.
+ * Several can be on at once. Each therefore carries two renderings: alone it
+ * can afford to spell itself out, but shown alongside others it shortens,
+ * because the header shares a row with the sync state and the week arrows
+ * and cannot grow sideways forever.
  *
  * 'off' is no longer an entry — an empty selection is off, which is what
  * unticking the last chip naturally produces.
@@ -95,6 +91,13 @@ const FLOURISHES = [
  * silent amputation this layout is prone to.
  */
 const MAX_FLOURISHES = 3
+
+/**
+ * How many chore titles the palette remembers. Eight is about what fits in
+ * two wrapped rows of the panel without the buttons crowding out the list
+ * they sit under.
+ */
+const COMMON_CHORE_LIMIT = 8
 
 /**
  * Reads whatever is in board_settings as a list of valid ids.
@@ -301,14 +304,33 @@ export default function Wall({ profile, people }) {
   }
 
   async function addChore(title) {
+    const clean = title.trim()
+    if (!clean) return
+
     const { error } = await supabase.from('chores').insert({
       household_id: profile.household_id,
-      title,
+      title: clean,
       recurrence: 'weekly',
       sort_order: chores.length,
     })
-    if (error) setError(error.message)
-    else loadChores()
+    if (error) return setError(error.message)
+
+    loadChores()
+    rememberCommonChore(clean)
+  }
+
+  /**
+   * The quick-add palette is learned rather than configured.
+   *
+   * Anything typed into the chore field joins it, most recent first, so the
+   * buttons arrive by using the app instead of by filling in a settings
+   * screen nobody wants to fill in. It rides along in board_settings, which
+   * already exists, already syncs over realtime, and needs no migration.
+   */
+  function rememberCommonChore(title) {
+    const prior = Array.isArray(settings.commonChores) ? settings.commonChores : []
+    const next = [title, ...prior.filter((t) => t.toLowerCase() !== title.toLowerCase())]
+    updateSetting('commonChores', next.slice(0, COMMON_CHORE_LIMIT))
   }
 
   async function removeChore(chore) {
@@ -757,6 +779,18 @@ export default function Wall({ profile, people }) {
       .filter((e) => isSameDay(new Date(e.starts_at), new Date(`${dateIso}T00:00`)))
       .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
 
+  /**
+   * Offer only what isn't already there. A button that adds a second
+   * "Dishes" row underneath the "Dishes" you can already see would be a
+   * duplicate generator rather than a shortcut, so anything currently in
+   * the list — ticked or not — drops out of the palette until it's gone.
+   */
+  const commonChores = useMemo(() => {
+    const remembered = Array.isArray(settings.commonChores) ? settings.commonChores : []
+    const present = new Set(chores.map((c) => c.title.trim().toLowerCase()))
+    return remembered.filter((t) => !present.has(t.trim().toLowerCase()))
+  }, [settings.commonChores, chores])
+
   const choresDone = chores.filter(choreIsDone).length
   const shoppingRemaining = shoppingItems.filter((i) => !i.checked).length
 
@@ -769,6 +803,7 @@ export default function Wall({ profile, people }) {
     onToggle: toggleChore,
     onAdd: addChore,
     onRemove: removeChore,
+    commonChores,
   }
 
   const shoppingPanelProps = {

@@ -17,6 +17,7 @@ export default function ChoresPanel({
   onToggle,
   onAdd,
   onRemove,
+  commonChores = [],
 }) {
   if (loading) {
     return mode === 'compact' ? (
@@ -65,6 +66,23 @@ export default function ChoresPanel({
           </button>
         </div>
       ))}
+      {/* Full mode only, on purpose: compact is a four-chip summary read from
+          across the room, and adding tap targets to it would turn a glance
+          into a control panel.
+
+          These sit inside .panel-rows, which scrolls, so a long palette
+          costs the list nothing — it scrolls with the chores rather than
+          stealing height from them. */}
+      {commonChores.length > 0 && (
+        <div className="panel-quick">
+          {commonChores.map((title) => (
+            <button key={title} className="panel-quick__chip" onClick={() => onAdd(title)}>
+              {title}
+            </button>
+          ))}
+        </div>
+      )}
+
       <AddRow placeholder="Add a chore" onAdd={onAdd} />
     </div>
   )

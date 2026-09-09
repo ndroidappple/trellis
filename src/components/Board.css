@@ -63,6 +63,16 @@
   gap: 7px;
   align-self: flex-start;
 
+  /* Several asides can be on at once, and this line shares the header row
+     with the sync state and the week arrows. Wrapping is the deliberate
+     failure mode: a slightly taller header pushes into the week grid, which
+     is the flexible element and degrades gracefully, whereas overflow:hidden
+     here would silently amputate the last aside with nothing to show for it.
+     max-width keeps a long combination from shoving the arrows off instead. */
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
+
   background: none;
   border: 0;
   padding: 2px 0;
@@ -80,6 +90,11 @@
 
 .board__sub:active {
   color: var(--ink);
+}
+
+/* The line renders as a <p> once it stops being a button. */
+p.board__sub {
+  margin: 0;
 }
 
 .board__sub-dot {

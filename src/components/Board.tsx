@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { useDetailLevel } from '../hooks/useDetailLevel';
 import { WeekGrid, type DayData } from './WeekGrid';
 import { SectionDock, SectionPanel, type SectionMode } from './SectionPanel';
@@ -18,7 +18,14 @@ interface Props {
   todayLabel: string;
   rangeLabel: string;          // "March 3 – 9"
   /** Optional aside: "Week 10", "19% through 2026". Null when switched off. */
-  flourish?: string | null;
+  /** Already rendered to text by Wall, in canonical order. */
+  flourishes?: string[];
+  /**
+   * False once several asides are showing. Tapping then would collapse a
+   * deliberate combination back to a single item, so the line stops being a
+   * button rather than doing something destructive.
+   */
+  flourishCycleable?: boolean;
   /** Advances the flourish. Deliberately undiscoverable until tapped. */
   onCycleFlourish?: () => void;
   syncLabel: string;           // "Live", "Offline · 7:41 PM"
@@ -47,6 +54,22 @@ interface Props {
 export function Board(props: Props) {
   const [weekRef, level] = useDetailLevel();
 
+  const flourishes = props.flourishes ?? [];
+  const cycleable = (props.flourishCycleable ?? true) && !!props.onCycleFlourish;
+
+  // Built once so the button and the plain-text variants cannot drift apart.
+  const subLine = (
+    <>
+      <span>{props.rangeLabel}</span>
+      {flourishes.map((text, i) => (
+        <Fragment key={i}>
+          <span className="board__sub-dot" aria-hidden="true">·</span>
+          <span className="board__flourish">{text}</span>
+        </Fragment>
+      ))}
+    </>
+  );
+
   return (
     <div className="board" data-detail={level}>
       <header className="board__header">
@@ -54,20 +77,18 @@ export function Board(props: Props) {
             size. The week being viewed is context and sits underneath. */}
         <div className="board__heading">
           <p className="board__today-label">{props.todayLabel}</p>
-          <button
-            type="button"
-            className="board__sub"
-            onClick={props.onCycleFlourish}
-            aria-label="Change what this line shows"
-          >
-            <span>{props.rangeLabel}</span>
-            {props.flourish && (
-              <>
-                <span className="board__sub-dot" aria-hidden="true">·</span>
-                <span className="board__flourish">{props.flourish}</span>
-              </>
-            )}
-          </button>
+          {cycleable ? (
+            <button
+              type="button"
+              className="board__sub"
+              onClick={props.onCycleFlourish}
+              aria-label="Change what this line shows"
+            >
+              {subLine}
+            </button>
+          ) : (
+            <p className="board__sub">{subLine}</p>
+          )}
         </div>
         <div className="board__header-right">
           <span className="board__sync" data-sync={props.syncState ?? 'live'}>

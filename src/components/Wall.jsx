@@ -27,6 +27,7 @@ import { Board } from './Board'
 import Sheet from './Sheet'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
+import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
 import './Sheet.css'
 
 const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full', flourish: ['week'] }
@@ -146,6 +147,25 @@ const MEAL_PLAN_QUERY = `
 `
 
 /**
+ * Everything the recipe book reads, in one query.
+ *
+ * The whole bank is 18 recipes, 127 ingredient rows and 56 steps — small
+ * enough that fetching it whole beats a second round trip per recipe, and
+ * the detail view then opens with no loading state at all. It is fetched
+ * lazily (only when the book is opened) rather than at boot, because the
+ * wall spends approximately all of its time not showing a recipe.
+ */
+const RECIPE_BOOK_QUERY = `
+  id, title, status, description, notes,
+  servings_min, servings_max, effort,
+  prep_minutes, cook_minutes, total_minutes,
+  cuisine, tags, meal_types, source_url, image_url, image_source,
+  est_cost_cents, cost_confidence,
+  ingredients:recipe_ingredients ( id, name, qty, unit, preparation, notes, sort_order ),
+  steps:recipe_steps ( id, step_number, body )
+`
+
+/**
  * The board layout. Chores and shopping get full panels; meals show up as
  * chips in the week itself (kind: 'meal') plus a grocery total in the
  * shopping panel's cart footer — this design has no dedicated meals section
@@ -166,6 +186,11 @@ export default function Wall({ profile, people }) {
   const [budget, setBudget] = useState(12000)
   const [editing, setEditing] = useState(null)
   const [mealEditing, setMealEditing] = useState(null) // an on_date string, or null
+  const [bookOpen, setBookOpen] = useState(false)
+  const [bookRecipes, setBookRecipes] = useState([])
+  const [bookLoading, setBookLoading] = useState(false)
+  const [recipeOpen, setRecipeOpen] = useState(null) // a recipe id, or null
+  const [cooking, setCooking] = useState(false)
   const [dayViewing, setDayViewing] = useState(null) // an on_date string, or null
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -664,6 +689,72 @@ export default function Wall({ profile, people }) {
     setMealEditing(null)
   }
 
+  // ------------------------------------------------------------ recipe book
+
+  const loadBook = useCallback(async () => {
+    setBookLoading(true)
+
+    // Retired recipes are included here and excluded from the meal picker,
+    // which is the difference between a planner and a book: you shouldn't be
+    // offered Tuesday's dinner from the retired pile, but a recipe you've
+    // stopped cooking is still a recipe you wrote down.
+    const { data, error: bookError } = await supabase
+      .from('recipes')
+      .select(RECIPE_BOOK_QUERY)
+      .order('title')
+
+    setBookLoading(false)
+    if (bookError) return setError(bookError.message)
+
+    setError(null)
+    setBookRecipes(
+      (data ?? []).map((r) => {
+        const ingredients = [...(r.ingredients ?? [])].sort(
+          (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+        )
+        const steps = [...(r.steps ?? [])].sort((a, b) => a.step_number - b.step_number)
+        return {
+          ...r,
+          ingredients,
+          steps,
+          ingredient_count: ingredients.length,
+          step_count: steps.length,
+          // Flattened once here so search doesn't re-join 127 rows on
+          // every keystroke.
+          ingredient_names: ingredients.map((i) => i.name).join(' '),
+        }
+      })
+    )
+  }, [])
+
+  const openBook = useCallback(
+    (recipeId = null) => {
+      setRecipeOpen(recipeId)
+      setBookOpen(true)
+      loadBook()
+    },
+    [loadBook]
+  )
+
+  const openRecipe = bookRecipes.find((r) => r.id === recipeOpen) ?? null
+
+  function closeBook() {
+    setBookOpen(false)
+    setRecipeOpen(null)
+    setCooking(false)
+  }
+
+  // The seven days currently on the board, so planning from the book obeys
+  // the week you're looking at rather than silently meaning "this week".
+  const planDays = useMemo(
+    () =>
+      weekDays(anchor).map((d) => ({
+        iso: toDateInputValue(d),
+        label: dayName(d),
+      })),
+    [anchor]
+  )
+
   // -------------------------------------------------------------- settings
   //
   // board_settings lives on the household row, so the wall and everyone's
@@ -748,7 +839,7 @@ export default function Wall({ profile, people }) {
   const swallowNextClick = useRef(false)
 
   function handlePressStart(e) {
-    if (editing || mealEditing || dayViewing || settingsOpen) return
+    if (editing || mealEditing || dayViewing || settingsOpen || bookOpen) return
     // Holding a "+" button shouldn't also summon settings behind the dialog
     // it opens.
     if (e.target.closest?.('button, input, a, label')) return
@@ -992,6 +1083,7 @@ export default function Wall({ profile, people }) {
         dragging={drag != null}
         dragOverDate={drag?.over?.kind === 'day' ? drag.over.date : null}
         onOpenDay={handleOpenDay}
+        onOpenBook={() => openBook()}
         initialsFor={initialsForPerson}
       />
 
@@ -1052,8 +1144,45 @@ export default function Wall({ profile, people }) {
             setDayViewing(null)
             setMealEditing(dayViewing)
           }}
+          onViewRecipe={() => {
+            const entry = mealEntryFor(dayViewing)
+            setDayViewing(null)
+            openBook(entry?.recipe?.id ?? null)
+          }}
           onClose={() => setDayViewing(null)}
         />
+      )}
+
+      {/* Three layers, one at a time: the shelf, a recipe, cooking it. Each
+          later one covers the one before, so closing cook mode lands back on
+          the recipe rather than dumping you at the board mid-dinner. */}
+      {bookOpen && !openRecipe && (
+        <RecipeBook
+          recipes={bookRecipes}
+          loading={bookLoading}
+          onOpen={(r) => setRecipeOpen(r.id)}
+          onClose={closeBook}
+        />
+      )}
+
+      {bookOpen && openRecipe && !cooking && (
+        <RecipeDetail
+          recipe={openRecipe}
+          detail={openRecipe}
+          loading={bookLoading}
+          planDays={planDays}
+          plannedDate={mealPlan.find((p) => p.recipe?.id === openRecipe.id)?.on_date}
+          onPlan={(date) => {
+            pickMeal(date, openRecipe.id)
+            closeBook()
+          }}
+          onCook={() => setCooking(true)}
+          onClose={() => setRecipeOpen(null)}
+        />
+      )}
+
+      {cooking && openRecipe && (
+        <CookMode recipe={openRecipe} detail={openRecipe} onExit={() => setCooking(false)} />
       )}
 
       {drag && (
@@ -1115,6 +1244,7 @@ function DayView({
   onEventPress,
   onAddEvent,
   onEditMeal,
+  onViewRecipe,
   onClose,
 }) {
   const nameFor = (ownerId) => peopleById.find((p) => p.id === ownerId)?.display_name
@@ -1133,6 +1263,17 @@ function DayView({
             {meal?.recipe ? (meal.is_leftover ? 'Leftovers' : 'Cooking') : 'Tap to plan'}
           </span>
         </button>
+
+        {/* The night you're actually cooking is the likeliest reason to want
+            the recipe, so the shortest path to it starts here rather than
+            back at the board header. Leftovers get it too — reheating
+            instructions live in the same steps. */}
+        {meal?.recipe && (
+          <button className="sheet-row" onClick={onViewRecipe}>
+            <span>Open the recipe</span>
+            <span className="sheet-row__meta">Ingredients, method, cook mode</span>
+          </button>
+        )}
       </div>
 
       <div className="sheet__section">

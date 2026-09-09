@@ -1,0 +1,343 @@
+/*
+ * The recipe book. Lives inside .sheet, so the head, close button, search
+ * field and section headings all come from Sheet.css — only what's specific
+ * to recipes is here.
+ *
+ * Nothing in here appears on the board itself, and that's deliberate. A
+ * wall-mounted iPad shows the same pixels for hours; a full-bleed photo of
+ * chili parked on the week grid is exactly the image-retention risk the
+ * ambient-timeout work is meant to avoid. Recipe artwork only ever exists
+ * inside a sheet somebody opened and will close.
+ */
+
+/* ------------------------------------------------------------- the shelf */
+
+.book__filters {
+  flex: 0 0 auto;
+}
+
+/* .chip is scoped to .card in App.css (a specificity fight with .card
+   button, see the comment there). Sheets aren't cards, so the chips need
+   their own base here rather than inheriting one. */
+.book__filters .chip,
+.sheet .chips .chip {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+  padding: 0 20px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.book__filters .chip.on,
+.sheet .chips .chip.on {
+  background: var(--person-a);
+  border-color: var(--person-a);
+  color: var(--person-ink);
+  font-weight: 500;
+}
+
+.book__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  /* Cards are grid children inside a scrolling flex column. Without a real
+     floor here the row collapses and the art gets clipped with no visual
+     sign — the same failure the day rows hit. */
+  grid-auto-rows: minmax(232px, auto);
+}
+
+.book__card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  text-align: left;
+
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--ink);
+  font-family: var(--font-text);
+  cursor: pointer;
+  transition: transform 70ms ease, border-color 90ms ease;
+}
+
+.book__card:active {
+  transform: scale(0.99);
+  border-color: var(--person-a);
+}
+
+.book__card-art {
+  flex: 0 0 auto;
+  height: 132px;
+}
+
+.book__card-title {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.book__card-meta {
+  font-size: var(--size-min);
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- artwork */
+
+.recipe-art {
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--today-face);
+}
+
+.recipe-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The no-photo plate. Five washes, picked from the title so a recipe keeps
+   the same colour for good — see tintFor(). */
+.recipe-art--plate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-size: 54px;
+  color: var(--ink-soft);
+  opacity: 0.95;
+}
+
+.recipe-art--plate[data-tint='0'] { background: rgba(63, 122, 94, 0.16); }
+.recipe-art--plate[data-tint='1'] { background: rgba(156, 95, 62, 0.15); }
+.recipe-art--plate[data-tint='2'] { background: rgba(107, 100, 80, 0.16); }
+.recipe-art--plate[data-tint='3'] { background: rgba(63, 122, 94, 0.09); }
+.recipe-art--plate[data-tint='4'] { background: rgba(156, 95, 62, 0.08); }
+
+.recipe__hero {
+  flex: 0 0 auto;
+  height: 220px;
+}
+
+.recipe__hero.recipe-art--plate {
+  font-size: 92px;
+}
+
+/* ------------------------------------------------------------ one recipe */
+
+.recipe__description {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.recipe__notes {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  border-left: 3px solid var(--rule);
+  padding-left: 14px;
+}
+
+.recipe__ingredients,
+.cook__ingredients {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recipe__ingredients li,
+.cook__ingredients li {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 20px;
+}
+
+.recipe__ingredients li:last-child,
+.cook__ingredients li:last-child {
+  border-bottom: none;
+}
+
+.recipe__amount {
+  flex: 0 0 108px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.recipe__ingredient {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recipe__ingredient-note {
+  font-size: var(--size-min);
+  color: var(--ink-faint);
+}
+
+.recipe__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.recipe__steps li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  font-size: 21px;
+  line-height: 1.45;
+}
+
+.recipe__step-number {
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--meal-tint);
+  border: 1px solid var(--meal-rule);
+  color: var(--ink-soft);
+  font-size: var(--size-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recipe__source {
+  margin: 0;
+  font-size: var(--size-min);
+}
+
+.recipe__source a {
+  color: var(--person-a);
+}
+
+/* -------------------------------------------------------------- cook mode */
+
+/*
+ * Its own layer rather than a sheet: cook mode is the one surface where the
+ * whole screen is a single sentence, so the sheet's title/subtitle/scroll
+ * furniture would be working against it.
+ */
+.cook {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+
+  background: var(--today-face);
+  color: var(--ink);
+  font-family: var(--font-text);
+
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  padding: calc(20px + env(safe-area-inset-top, 0px))
+           calc(24px + env(safe-area-inset-right, 0px))
+           calc(24px + env(safe-area-inset-bottom, 0px))
+           calc(24px + env(safe-area-inset-left, 0px));
+}
+
+.cook__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cook__recipe {
+  margin: 0;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 26px;
+}
+
+.cook__progress {
+  margin: 2px 0 0;
+  font-size: 18px;
+  color: var(--ink-soft);
+}
+
+.cook__body {
+  flex: 1 1 auto;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  overflow-y: auto;
+}
+
+/* The whole point of the mode. Big enough to read while standing back from
+   the counter, which is a different distance from everything else here. */
+.cook__step {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.cook__ingredients {
+  flex: 0 1 auto;
+  min-height: 96px;
+  overflow-y: auto;
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 6px 16px;
+}
+
+.cook__foot {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+}
+
+.cook__foot button {
+  flex: 1;
+  font-family: var(--font-text);
+  font-size: 19px;
+  font-weight: 600;
+  min-height: var(--tap-min);
+  border-radius: 10px;
+  border: none;
+  background: var(--person-a);
+  color: var(--person-ink);
+  cursor: pointer;
+}
+
+.cook__foot button.ghost {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.cook__foot button:disabled {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book__card { transition: none; }
+  .book__card:active { transform: none; }
+}

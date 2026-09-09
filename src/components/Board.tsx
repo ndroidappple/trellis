@@ -48,6 +48,8 @@ interface Props {
   dragging?: boolean;
   dragOverDate?: string | null;
   onOpenDay?: (date: string) => void;
+  /** Opens the recipe book. The board's only permanent door out of the week. */
+  onOpenBook?: () => void;
   /** Absent while the board is already showing the current week. */
   onToday?: () => void;
   initialsFor?: (person: Person) => string;
@@ -103,6 +105,14 @@ export function Board(props: Props) {
           {props.onToday && (
             <button className="board__today" onClick={props.onToday}>
               Today
+            </button>
+          )}
+          {/* Spelled out rather than a glyph. The settings dialog can afford
+              to hide behind a long-press because nobody goes looking for it;
+              a recipe book that nobody can find is just a database. */}
+          {props.onOpenBook && (
+            <button className="board__book" onClick={props.onOpenBook}>
+              Recipes
             </button>
           )}
           <button className="board__step" aria-label="Previous week" onClick={props.onPrevWeek}>‹</button>

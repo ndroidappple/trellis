@@ -146,6 +146,25 @@ p.board__sub {
   color: var(--ink);
 }
 
+/* Same shape as Today, one step quieter — it's always there, so it mustn't
+   compete with a control that only appears when it has something to say. */
+.board__book {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+  padding: 7px 18px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.board__book:active {
+  background: var(--slat-face);
+  color: var(--ink);
+}
+
 /* The only status worth reading from across the kitchen is "don't trust
    this". Live and connecting stay quiet; offline earns colour and weight. */
 .board__sync[data-sync='connecting'] .board__sync-dot {

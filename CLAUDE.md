@@ -60,6 +60,17 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   (display serif) + Figtree (text sans) fonts are installed via
   `@fontsource-variable/fraunces` / `@fontsource/figtree`, imported in
   `main.jsx`.
+- `src/components/RecipeBook.jsx` — the recipe book, in three layers:
+  `RecipeBook` (the shelf: search over titles *and* ingredient names, four
+  filters), `RecipeDetail` (one recipe, plus "plan a night" against the week
+  currently on the board), and `CookMode` (one step at a time at 40px, holding
+  a screen wake lock). Reached from a `Recipes` button in the board header, or
+  from a day view that already has a meal on it. `Wall.jsx` fetches the whole
+  bank in one lazy query (`RECIPE_BOOK_QUERY`) the first time the book opens —
+  18 recipes / 127 ingredients / 56 steps is small enough that this beats a
+  round trip per recipe, and the detail view then opens with no spinner.
+  The meal picker inside `MealEditor` is deliberately untouched: tapping a
+  recipe there still lands the chip on the board in one tap.
 - `src/components/MealsCard.jsx` — **unmounted, unused.** Pre-redesign
   meal-planning UI (whole-week panel + recipe picker). Kept as reference;
   `Wall.jsx`'s `MealEditor` is the current per-day equivalent.
@@ -243,3 +254,22 @@ link. Settled the hard way; the constraints below are all load-bearing.
   brainstormed, not decided or implemented).
 - Person avatars: direction settled in `docs/backlog-person-avatars.md`,
   blocked on Nick supplying a photo of each of them.
+- **The recipe enrichment in `008` was never run.** The migration added
+  `description`, `cuisine`, `tags`, `meal_types`, `prep_minutes`,
+  `total_minutes`, `source_url`, `image_url`, ingredient `normalized_name` /
+  `ingredient_category` / `preparation`, and `recipe_field_provenance` — and
+  every one of them is empty across all 18 recipes (`enrichment_status` is
+  `pending` on all 18). The recipe book therefore reads title, servings,
+  cook time, ingredients and steps, and honestly shows nothing where there is
+  nothing. It gets substantially richer the day phase 1D of Feature #1 in
+  `docs/feature-backlog.md` actually runs; no UI work is needed to absorb it.
+- Five recipes have zero steps (Asian Beef Udon Stir-Fry, Turkey Rosso Pesto
+  Protein Pasta, Protein Berry Smoothie, Filthy cabbage, Steak salad) and two
+  of those have zero ingredients. The book's "Needs work" filter exists to
+  find them; cook mode is disabled with a reason rather than hidden.
+- Recipe images: nothing to build in the schema, everything to decide about
+  sourcing. Written up in `docs/backlog-recipe-images.md`. Recipe artwork must
+  stay inside sheets and off the always-on board (image retention).
+- Recipe servings aren't scalable in the book. Doubling a recipe means
+  trusting the quantities, and 7 of 127 ingredient rows have no quantity at
+  all, so it was left out rather than shipped half-right.

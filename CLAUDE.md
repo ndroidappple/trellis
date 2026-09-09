@@ -260,14 +260,26 @@ link. Settled the hard way; the constraints below are all load-bearing.
   text that already said them. `enrichment_status` is now 13 `enriched` /
   5 `needs_review` / 0 `pending`.
 
-  **What it deliberately left null, and why it should stay that way.** No
-  `prep_minutes` or `total_minutes` for any recipe, no `servings`, `effort` or
-  `cook_minutes` for the ones missing them, no steps for the five without, no
-  `source_url`. 008's own verification notes call these Ed's decisions rather
-  than lost facts, and the book renders an estimated minute count identically
-  to a measured one — so an invented "35 min" is indistinguishable from a real
-  one. If estimates are ever wanted, the UI needs to show an estimate *as* an
-  estimate first. Don't quietly fill these in a later pass.
+  **010 left the times, efforts and methods null; `011_recipe_estimates.sql`
+  then filled them on Nick's explicit instruction to override that.** So every
+  prep time, total time and the three newest methods are model estimates that
+  nobody has cooked or timed. They are all `ai_enrichment` at confidence
+  0.60–0.75, against 1.00 for Ed's own figures, and this is the query that
+  separates them:
+
+      select r.title, p.field_name, p.confidence
+        from recipe_field_provenance p join recipes r on r.id = p.recipe_id
+       where p.confidence < 0.80 order by r.title;
+
+  46 rows. Treat them as placeholders to correct against a real timer, not as
+  facts. The book still renders an estimate identically to a measurement — if
+  that ever matters, the UI needs to show confidence, which it does not yet.
+
+  `steps` is now a valid `field_name` in `recipe_field_provenance` (011 widened
+  the whitelist; 008 never imagined enrichment writing a method). Ed's 13
+  methods are recorded as `existing`, the 3 model-written ones as
+  `ai_enrichment`. Do not collapse that distinction — it is the difference
+  between instructions a person tested and instructions a model produced.
 
   `trellis_may_enrich(recipe_id, field)` is the re-run gate: it asks whether a
   field is held by something outranking `ai_enrichment` before writing, so a
@@ -282,11 +294,21 @@ link. Settled the hard way; the constraints below are all load-bearing.
   `existing` (35) outranks `ai_enrichment` (20) and no ingredient could ever
   be normalised. 010 therefore gates ingredients on `normalized_name is null`
   — the gap itself — which is what 008's prose intended.
-- Five recipes have zero steps (Asian Beef Udon Stir-Fry, Turkey Rosso Pesto
-  Protein Pasta, Protein Berry Smoothie, Filthy cabbage, Steak salad) and two
-  of those have zero ingredients. These are the five `needs_review` rows. The
-  book's "Needs work" filter exists to find them; cook mode is disabled with a
-  reason rather than hidden. What they need is Ed, not another model pass.
+- **`recipes.est_cost_cents` is declared in `004_recipes.sql` and does not
+  exist on the live table.** The repo and the database drifted at some point
+  before 008. This shipped a broken recipe book once: PostgREST 400s the whole
+  request on one unknown column rather than omitting it, so selecting it made
+  the book open to an empty shelf under a red "column recipes.est_cost_cents
+  does not exist". Check the live schema before adding a column to any select
+  string — finding it in a migration file is not the same thing. Note also
+  that a PostgREST select string is not SQL and takes no `--` comments.
+- Two recipes still read `needs_review`, and both need a person rather than
+  another model pass: **Filthy cabbage** (retired; zero ingredients, zero
+  steps, and no notes beyond its retirement — the name is the only information
+  that exists, so 011 left it entirely alone) and **Steak salad**
+  (conditional; 011 gave it servings and times, but a method needs ingredients
+  and there are no ingredient rows). The book's "Needs work" filter finds
+  exactly these two.
 - Recipe images: nothing to build in the schema, everything to decide about
   sourcing. Written up in `docs/backlog-recipe-images.md`. Recipe artwork must
   stay inside sheets and off the always-on board (image retention).

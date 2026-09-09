@@ -82,13 +82,57 @@ risk that the ambient-timeout feature exists to address. Recipe artwork lives
 inside sheets that somebody opened and will close. The book is already built
 this way; keep it that way.
 
+### Route 3 in detail — Nick has approved AI generation
+
+**Claude cannot generate images at all**, so there was never a Claude-token
+path to spend or save here. Every option below is an external service.
+
+**The binding constraint is style iteration, not generation cost.** Eighteen
+images is nothing; finding a look that sits on a plaster-and-muted-green wall
+without screaming "stock food photography" takes 50–150 throwaway generations.
+Price the iteration, not the output.
+
+**Generate illustrations, not photographs.** This is the important call. A
+photorealistic AI plate is glossy, uncanny at close range, and claims to be a
+photograph of a dinner nobody cooked — the exact honesty problem that made
+route 3 uncomfortable in the first place. A flat illustration claims nothing.
+It also holds a consistent style across 18 images far more reliably than
+photoreal does, matches the palette by construction, and lines up with the
+hand-drawn flat SVG direction already chosen for the person avatars in
+`backlog-person-avatars.md`. One house style, two features.
+
+| | Cost for 18 | Iteration cost | Setup |
+| --- | --- | --- | --- |
+| **Local** — Draw Things (free Mac app) or ComfyUI, running FLUX.1 [schnell] or SDXL | $0 | **$0, unlimited** | ~30 min, 6–12 GB model download |
+| **Hosted API** — Gemini image gen, OpenAI `gpt-image-1`, or FLUX via fal.ai / Replicate | ~$0.05–$1.00 | ~$0.003–$0.04 each | API key, ~50-line script |
+| **A subscription already paid for** — ChatGPT, Gemini, Midjourney, Copilot | $0 marginal | included | none; ~45 min of manual work |
+| **Canva** — already connected as an MCP connector | free tier limits | limited | none |
+
+(Hosted pricing moves constantly and these figures are from mid-2026 — check
+before committing to one.)
+
+FLUX.1 [schnell] is Apache-2.0, so locally generated output carries no
+licensing question at all.
+
+**Recommended:** Draw Things locally if a 30-minute setup is acceptable —
+free iteration is the thing actually worth buying here, and the wall iPad
+never needs to be involved. Otherwise a hosted API script, which has the
+advantage of being *repeatable*: it can read the recipes still missing an
+image, generate, downscale, upload, and write `image_url`,
+`image_source = 'ai_generated'` and a `recipe_field_provenance` row in one
+pass — the same shape as `010_recipe_enrichment_run.sql`.
+
+Whichever route, `image_source = 'ai_generated'` means a later "which of these
+are real" is one `where` clause, and photographed dishes can replace generated
+ones one at a time without a migration.
+
 ### Recommendation
 
-Route 2, filled in opportunistically: photograph a dish the night it's cooked,
-from the recipe screen that's already open on the counter. Nick and Ed cook
-about five of these a week, so the book fills itself over roughly a month with
-no backfill session and no photo shoot. The plate stays as the permanent
-fallback rather than a placeholder waiting to be cleared.
+Both, in order. Generate illustrations now so the book has artwork this week,
+and photograph dishes opportunistically as they get cooked — a real photo of
+their own dinner outranks a generated illustration and can quietly replace it,
+recipe by recipe, with `image_source` recording which is which. The tinted
+plate stays as the permanent fallback beneath both.
 
 ### Open question
 

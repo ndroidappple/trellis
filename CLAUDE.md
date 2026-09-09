@@ -49,6 +49,21 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   for (`panel-rows`, `panel-list`, `panel-strip`, `panel-cart`). Each panel
   component takes a `mode: 'full' | 'compact'` prop; `Wall.jsx` renders
   both variants since `Board` needs them simultaneously.
+
+  Both panels group their contents rather than presenting a flat list —
+  chores by Today / This week / As needed (`groupChores`), shopping by aisle
+  (`groupByAisle`). The add row sits *outside* the scrolling list in both, so
+  capture does not require scrolling to the bottom of a full panel.
+- `src/components/PanelSheets.jsx` — `ToDoSheet` and `ShoppingSheet`, the
+  full-page versions of the two dock sections, opened by tapping a panel's
+  head. They reuse the panel components rather than reimplementing them, so
+  the page and the dock cannot drift about what is on the list. The page is
+  also where the things the dock deliberately omits live: per-row delete,
+  "clear ticked", and the named list of unpriced ingredients behind the cart
+  footer's count.
+- `src/lib/shopping.js` — aisle vocabulary, walking order, and grouping.
+  The vocabulary is `recipe_ingredients.ingredient_category` verbatim, since
+  a grocery line inherits its aisle from the ingredient it came from.
 - `src/lib/supabase.js` — client, reads `VITE_SUPABASE_URL` /
   `VITE_SUPABASE_ANON_KEY` from `.env.local` (gitignored via the `*.local`
   rule).
@@ -84,6 +99,13 @@ there if this ever needs a third person or different people).
 RLS is the real security boundary: every table's policies funnel through
 `current_household_id()`, which resolves via the caller's `profiles` row.
 No profile row = no access, even with a valid session.
+
+`013_shopping_aisles.sql` gave `list_items` a `category` and a `qty`, and
+`staples` a `category`. Quantity used to live inside the item's text as a
+"×2" suffix, which made the label the source of truth for a number — so
+"Ground turkey" and "Ground turkey ×2" were different items to the text-match
+dedupe in `pendingGroceries`, and a heavier week added a second row instead
+of a bigger number. 013 parses the suffix out of the 11 rows that carried it.
 
 `supabase/migrations/` now holds the complete set, `001`–`007`. 004–006
 had been run straight against the live project and existed nowhere in git
@@ -227,13 +249,26 @@ checkbox — attribution and completion in the same tap. `logChore` upserts on
 than failing on a duplicate.
 
 **Scheduling has two doors.** Dragging (`useChoreDrag`) is unchanged and is
-still the fast path. Tapping the day label opens `ChoreScheduler` — seven
-weekday buttons — because drag was the *only* path, and on a wall-mounted
-iPad it means hauling a row out of a scrolling dock panel, across a 13"
-screen, onto a target that may be scrolled out of view. It was also the only
-path, full stop, for anyone who cannot make that gesture. One-offs are not
-offered weekdays; they carry a date, which wants a calendar, so dragging
-remains the way to move them.
+still the fast path. Tapping the schedule label opens `ChoreSheet` because
+drag was the *only* path, and on a wall-mounted iPad it means hauling a row
+out of a scrolling dock panel, across a 13" screen, onto a target that may be
+scrolled out of view. It was also the only path, full stop, for anyone who
+cannot make that gesture. One-offs are not offered weekdays; they carry a
+date, which wants a calendar, so dragging remains the way to move them.
+
+**`ChoreSheet` holds everything the row is not for** — recurrence, weekday,
+whether it rotates, and deleting. The row itself carries exactly one primary
+action. It previously carried four hit zones (grip, tick, schedule pill, a
+permanently-resident delete ×) in a ~350px column, with the destructive one
+next to the quiet one.
+
+**The recurrence control is also the only way to make anything but a weekly
+chore.** `addChore` writes `recurrence: 'weekly'` and still does, deliberately
+— capture stays one field. Until `ChoreSheet` existed, `anytime` and `once`
+were reachable only by hand-written SQL, so 012's whole point was unreachable
+from the app that needed it. `recurrencePatchFor` clears the incompatible
+scheduling column in the same write, because
+`chores_schedule_matches_recurrence` rejects a row that holds the wrong one.
 
 An `anytime` chore has no day at all: `schedulePatchFor` returns null and a
 drop on the grid does nothing visibly, rather than appearing to work until
@@ -289,8 +324,10 @@ link. Settled the hard way; the constraints below are all load-bearing.
 - No test runner. `cost.js`, `week.js` and `useToday`'s date maths are pure
   and worth covering; checking them this session meant hand-rolling an
   esbuild + node harness, which is the signal to just add vitest.
-- `weekCost` returns `unpricedIngredients` and the UI discards it, so the
-  cart footer presents a possibly-undercounted total as authoritative.
+- Unpriced ingredients are now surfaced twice: the cart footer counts them,
+  and the Shopping full page names them under "Not on the list" with the
+  recipe each came from. An ingredient with no product is missing from the
+  total *and* from the list, and the page is the only place that says which.
 - `removeChore` / `removeShopping` delete optimistically and swallow the
   error, unlike the toggles which refetch on failure.
 - `public/favicon.svg` is still the purple template bolt, off-palette. The

@@ -17,9 +17,11 @@ import {
   agoLabel,
   choreOccurrenceDate,
   choreScheduleLabel,
+  groupChores,
   isEpisodic,
   isScheduled,
   nextTurn,
+  recurrencePatchFor,
   schedulePatchFor,
   unschedulePatch,
   WEEKDAY_NAMES,
@@ -32,6 +34,7 @@ import Sheet from './Sheet'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
+import { ShoppingSheet, ToDoSheet } from './PanelSheets'
 import './Sheet.css'
 
 const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full', flourish: ['week'] }
@@ -144,7 +147,7 @@ const MEAL_PLAN_QUERY = `
   recipe:recipes (
     id, title, cost_confidence,
     ingredients:recipe_ingredients (
-      name, preferred_product, purchase_qty, manual_cost_cents,
+      name, preferred_product, purchase_qty, manual_cost_cents, ingredient_category,
       product:products ( id, name, pre_tax_cents, tax_rate_bps )
     )
   )
@@ -205,6 +208,7 @@ export default function Wall({ profile, people }) {
   const [recipeOpen, setRecipeOpen] = useState(null) // a recipe id, or null
   const [cooking, setCooking] = useState(false)
   const [dayViewing, setDayViewing] = useState(null) // an on_date string, or null
+  const [sectionOpen, setSectionOpen] = useState(null) // 'chores' | 'shopping' | null
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState(null)
@@ -490,6 +494,31 @@ export default function Wall({ profile, people }) {
 
   const { drag, startDrag } = useChoreDrag(scheduleChore)
 
+  /**
+   * Any change to a chore's own row — its kind, its day — applied optimistically.
+   *
+   * Optimistic because these are all one-tap changes made while looking at the
+   * row, and a round trip before the label updates reads as the tap not having
+   * landed. A rejected write refetches, so the row snaps back to the truth
+   * rather than staying wrong.
+   */
+  const patchChore = useCallback(
+    async (chore, patch) => {
+      setChores((cs) => cs.map((c) => (c.id === chore.id ? { ...c, ...patch } : c)))
+
+      const { error: patchError } = await supabase
+        .from('chores')
+        .update(patch)
+        .eq('id', chore.id)
+
+      if (patchError) {
+        setError(patchError.message)
+        loadChores()
+      }
+    },
+    [loadChores]
+  )
+
   async function addChore(title) {
     const clean = title.trim()
     if (!clean) return
@@ -613,6 +642,47 @@ export default function Wall({ profile, people }) {
     })
   }
 
+  /**
+   * Everything ticked, gone at once — the end of a shop, in one tap.
+   *
+   * Offered only on the full page. Clearing the list is the one action here
+   * that destroys several rows at a time, and the dock panel is a surface
+   * people tap while walking past it.
+   */
+  async function clearCheckedShopping() {
+    const done = shoppingItems.filter((i) => i.checked)
+    if (done.length === 0) return
+
+    setShoppingItems((xs) => xs.filter((x) => !x.checked))
+
+    const { error: clearError } = await supabase
+      .from('list_items')
+      .delete()
+      .in('id', done.map((i) => i.id))
+
+    if (clearError) {
+      setError(clearError.message)
+      return loadShopping()
+    }
+
+    offerUndo(`Cleared ${done.length} ${done.length === 1 ? 'item' : 'items'}`, async () => {
+      const { error: undoError } = await supabase.from('list_items').insert(
+        done.map((i) => ({
+          household_id: i.household_id,
+          list: i.list,
+          body: i.body,
+          qty: i.qty,
+          category: i.category,
+          added_by: i.added_by,
+          checked: i.checked,
+          source: i.source,
+        }))
+      )
+      if (undoError) setError(undoError.message)
+      loadShopping()
+    })
+  }
+
   // ------------------------------------------------------------------ meals
 
   const loadMeals = useCallback(async () => {
@@ -628,7 +698,7 @@ export default function Wall({ profile, people }) {
         .order('title'),
       supabase
         .from('staples')
-        .select('item, weekly_qty, included, manual_unit_cents, product:products ( pre_tax_cents, tax_rate_bps )'),
+        .select('item, weekly_qty, included, manual_unit_cents, category, product:products ( pre_tax_cents, tax_rate_bps )'),
       supabase.from('household').select('weekly_budget_cents').maybeSingle(),
     ])
 
@@ -682,6 +752,11 @@ export default function Wall({ profile, people }) {
           household_id: profile.household_id,
           list: 'shopping',
           body: l.body,
+          qty: l.qty ?? 1,
+          // Carried across from the ingredient (013) so the list can be walked
+          // in aisle order. Null for anything we cannot place, which lands it
+          // under "Anything else" rather than guessing an aisle.
+          category: l.category,
           added_by: profile.id,
           // 001 has carried this column since the beginning and nothing has
           // ever written anything but 'manual'. Marking these lets a later
@@ -1077,27 +1152,48 @@ export default function Wall({ profile, people }) {
     return remembered.filter((t) => !present.has(t.trim().toLowerCase()))
   }, [settings.commonChores, chores])
 
-  const choresDone = chores.filter(choreIsDone).length
+  // Episodic chores are never "done" — they have no done-ness to report — so
+  // counting them in the denominator made the panel permanently read "3 of 4"
+  // with no fourth tick in existence. A progress figure that cannot reach its
+  // own total teaches people to stop reading it. Compact mode already
+  // excluded them, so the two halves of the same panel disagreed.
+  const trackableChores = chores.filter((c) => !isEpisodic(c))
+  const choresDone = trackableChores.filter(choreIsDone).length
   const shoppingRemaining = shoppingItems.filter((i) => !i.checked).length
+
+  const choreGroups = useMemo(
+    () =>
+      groupChores(chores, {
+        todayIso: toDateInputValue(today),
+        isCurrentWeek,
+        occurrenceFor,
+        choreIsDone,
+      }),
+    [chores, choreIsDone, isCurrentWeek, occurrenceFor, today]
+  )
 
   const choresPanelProps = {
     loading: !booted,
-    chores,
+    groups: choreGroups,
+    choreCount: chores.length,
+    pendingCount: trackableChores.filter((c) => !choreIsDone(c)).length,
+    allDone: trackableChores.length > 0 && choresDone === trackableChores.length,
     choreIsDone,
     personFor,
     initialsForPerson,
+    // The panel gets people as rows and needs their positional colour slot;
+    // personFor answers that from an id. Passing a whole profile straight to
+    // initialsForPerson is what made both buttons read "NE".
+    slotFor: (person) => personFor(person.id),
     people: orderedPeople,
     onToggle: toggleChore,
     onLog: logChore,
     onAdd: addChore,
-    onRemove: removeChore,
-    onReschedule: setReschedulingChore,
+    onOpenSettings: setReschedulingChore,
     commonChores,
     onDragStart: startDrag,
     draggingId: drag?.chore?.id ?? null,
     scheduleLabelFor: choreScheduleLabel,
-    isScheduled,
-    isEpisodic,
     lastDoneFor,
     turnFor: (chore, last) => nextTurn(chore, last, orderedPeople),
     agoFor: (iso) => agoLabel(iso, today),
@@ -1138,7 +1234,7 @@ export default function Wall({ profile, people }) {
         settings={settings}
         chores={<ChoresPanel mode="full" {...choresPanelProps} />}
         choresCompact={<ChoresPanel mode="compact" {...choresPanelProps} />}
-        choresCount={booted ? `${choresDone} of ${chores.length} done` : undefined}
+        choresCount={booted ? `${choresDone} of ${trackableChores.length} done` : undefined}
         shopping={<ShoppingPanel mode="full" {...shoppingPanelProps} />}
         shoppingCompact={<ShoppingPanel mode="compact" {...shoppingPanelProps} />}
         shoppingCount={booted ? `${shoppingRemaining} to buy` : undefined}
@@ -1152,8 +1248,34 @@ export default function Wall({ profile, people }) {
         dragOverDate={drag?.over?.kind === 'day' ? drag.over.date : null}
         onOpenDay={handleOpenDay}
         onOpenBook={() => openBook()}
+        onOpenChores={() => setSectionOpen('chores')}
+        onOpenShopping={() => setSectionOpen('shopping')}
         initialsFor={initialsForPerson}
       />
+
+      {sectionOpen === 'chores' && (
+        <ToDoSheet
+          weekLabel={weekLabel(anchor)}
+          choresPanelProps={choresPanelProps}
+          onClose={() => setSectionOpen(null)}
+        />
+      )}
+
+      {sectionOpen === 'shopping' && (
+        <ShoppingSheet
+          items={shoppingItems}
+          cost={cost}
+          budget={budget}
+          pendingGroceries={pendingGroceries.length}
+          unmatched={groceries.unmatched}
+          onToggle={toggleShopping}
+          onAdd={addShopping}
+          onRemove={removeShopping}
+          onAddGroceries={addWeekGroceries}
+          onClearChecked={clearCheckedShopping}
+          onClose={() => setSectionOpen(null)}
+        />
+      )}
 
       {editing && (
         <EventEditor
@@ -1254,28 +1376,13 @@ export default function Wall({ profile, people }) {
       )}
 
       {reschedulingChore && (
-        <ChoreScheduler
+        <ChoreSheet
           chore={reschedulingChore}
-          onPick={async (day) => {
-            const patch =
-              day == null
-                ? unschedulePatch(reschedulingChore)
-                : { scheduled_day: day, due_on: null }
-
-            setChores((cs) =>
-              cs.map((c) => (c.id === reschedulingChore.id ? { ...c, ...patch } : c))
-            )
+          onPatch={(patch) => patchChore(reschedulingChore, patch)}
+          onDelete={() => {
+            const chore = reschedulingChore
             setReschedulingChore(null)
-
-            const { error: patchError } = await supabase
-              .from('chores')
-              .update(patch)
-              .eq('id', reschedulingChore.id)
-
-            if (patchError) {
-              setError(patchError.message)
-              loadChores()
-            }
+            removeChore(chore)
           }}
           onClose={() => setReschedulingChore(null)}
         />
@@ -1407,43 +1514,99 @@ function DayView({
  * calendar rather than seven buttons; dragging one onto a day in the grid
  * still works and remains the way to move it.
  */
-function ChoreScheduler({ chore, onPick, onClose }) {
-  const oneOff = chore.recurrence === 'once'
+const RECURRENCE_OPTIONS = [
+  { id: 'weekly', label: 'Every week', hint: 'A rhythm. One tick per week, cleared each Sunday.' },
+  { id: 'once', label: 'Just once', hint: 'An errand on a date. Drag it onto a day to move it.' },
+  { id: 'anytime', label: 'As needed', hint: 'No schedule. Logs every time it is done, and whose turn is next.' },
+]
+
+/**
+ * Everything a chore row is not for.
+ *
+ * The row carries one primary action — tick it, or say who did it. This holds
+ * the rest: what kind of chore it is, which day, whether it alternates, and
+ * deleting it. Those were previously spread across a schedule pill, a drag
+ * handle and a permanently-resident delete × sitting next to the primary tap
+ * in a ~350px column, which at arm's length on a wall is a mis-tap generator.
+ *
+ * The recurrence control is also the only way to create anything but a weekly
+ * chore. `addChore` writes `recurrence: 'weekly'` and always has, so until
+ * this existed the 'anytime' kind that 012 was built for — the dishwasher,
+ * the reason any of this exists — could only be made by hand in SQL, and
+ * everything added through the app arrived as the exact kind that failed.
+ */
+function ChoreSheet({ chore, onPatch, onDelete, onClose }) {
+  const weekly = chore.recurrence === 'weekly'
+  const episodic = chore.recurrence === 'anytime'
+  const active = RECURRENCE_OPTIONS.find((o) => o.id === chore.recurrence)
 
   return (
     <div className="scrim" onClick={onClose}>
       <div className="card dialog" onClick={(e) => e.stopPropagation()}>
         <h2>{chore.title}</h2>
 
-        {oneOff ? (
-          <p className="muted">
-            This is a one-off, so it falls on a date rather than a weekday. Drag it
-            onto a day in the week to move it.
-          </p>
-        ) : (
+        <p className="muted">How does this happen?</p>
+        <div className="chips">
+          {RECURRENCE_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              className={chore.recurrence === opt.id ? 'chip on' : 'chip'}
+              aria-pressed={chore.recurrence === opt.id}
+              onClick={() => onPatch(recurrencePatchFor(chore, opt.id))}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {active && <p className="settings-row__hint">{active.hint}</p>}
+
+        {/* Only weekly chores get weekdays. A one-off carries a date, which
+            wants a calendar rather than seven buttons, and an 'anytime' chore
+            has no day at all — 012's constraint would reject one. */}
+        {weekly && (
           <>
-            <p className="muted">Which day does this happen?</p>
+            <p className="muted">Which day?</p>
             <div className="chips">
               {WEEKDAY_NAMES.map((name, day) => (
                 <button
                   key={name}
                   className={chore.scheduled_day === day ? 'chip on' : 'chip'}
                   aria-pressed={chore.scheduled_day === day}
-                  onClick={() => onPick(day)}
+                  onClick={() => onPatch({ scheduled_day: day, due_on: null })}
                 >
                   {name.slice(0, 3)}
                 </button>
               ))}
+              <button
+                className={chore.scheduled_day == null ? 'chip on' : 'chip'}
+                aria-pressed={chore.scheduled_day == null}
+                onClick={() => onPatch(unschedulePatch(chore))}
+              >
+                Any day
+              </button>
             </div>
           </>
         )}
 
+        {/* Rotation is only meaningful where there is a log to derive a turn
+            from, which is what an episodic chore is. nextTurn() answers from
+            the completion history rather than a stored next_person_id, so
+            this switch changes what the row says, not who owns anything. */}
+        {episodic && (
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={!!chore.rotates}
+              onChange={(e) => onPatch({ rotates: e.target.checked })}
+            />
+            Take turns
+          </label>
+        )}
+
         <div className="actions">
-          {!oneOff && (
-            <button className="ghost" onClick={() => onPick(null)}>
-              Any day
-            </button>
-          )}
+          <button className="ghost danger" onClick={onDelete}>
+            Delete
+          </button>
           <button onClick={onClose}>Done</button>
         </div>
       </div>

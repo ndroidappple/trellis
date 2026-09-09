@@ -50,6 +50,9 @@ interface Props {
   onOpenDay?: (date: string) => void;
   /** Opens the recipe book. The board's only permanent door out of the week. */
   onOpenBook?: () => void;
+  /** Open each dock section as a full page. */
+  onOpenChores?: () => void;
+  onOpenShopping?: () => void;
   /** Absent while the board is already showing the current week. */
   onToday?: () => void;
   initialsFor?: (person: Person) => string;
@@ -150,6 +153,7 @@ export function Board(props: Props) {
           count={props.choresCount}
           mode={props.settings.chores}
           compact={props.choresCompact}
+          onOpen={props.onOpenChores}
         >
           {props.chores}
         </SectionPanel>
@@ -159,6 +163,7 @@ export function Board(props: Props) {
           count={props.shoppingCount}
           mode={props.settings.shopping}
           compact={props.shoppingCompact}
+          onOpen={props.onOpenShopping}
         >
           {props.shopping}
         </SectionPanel>

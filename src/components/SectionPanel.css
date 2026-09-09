@@ -1,5 +1,12 @@
+/* `flex: 0 1 auto`, not `0 0 auto`. The week grid below has a hard
+   min-height floor and the dock declares fixed panel heights, so on any
+   viewport where the two together exceed the board the surplus used to fall
+   straight off the bottom of .board's overflow:hidden — the lower panel
+   simply ended below the screen, with no scrollbar and nothing to say it was
+   there. Letting the dock shrink is what turns that into a squeeze the
+   panels absorb (see the one-column rules below) instead of a silent cut. */
 .section-dock {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: grid;
   gap: 16px;
   min-height: 0;
@@ -28,15 +35,32 @@
 .section-panel--full { height: clamp(220px, 36vh, 448px); }
 .section-panel--compact { height: clamp(84px, 9vh, 112px); padding: 14px 22px; }
 
-/* One column with two panels in it — the full/compact mix. Stacked, a
-   448px full panel plus a compact one plus the gap asks for ~576px, and the
-   board has roughly 490px left after the week grid takes its floor. The
-   difference was simply clipped by .board's overflow:hidden, with the lower
-   panel's bottom rows unreachable and no scrollbar to hint at it. Shortening
-   the full panel here is what makes the arrangement actually fit; the
-   panel's own content scrolls for anything longer. */
+/* One column with two panels in it — the full/compact mix. Flex rather than
+   grid for this arrangement specifically, because it is the only one where
+   the two panels have to *negotiate*: a fixed 340px full panel plus a 112px
+   compact one plus the gap asks for 468px, and once the week grid takes its
+   floor the board frequently has slightly less than that to give. A grid row
+   sized from a panel's declared height cannot yield, so the compact panel
+   below it was cut off at the bottom of the screen.
+
+   Flex lets the full panel give up the difference — it is the one with a
+   scrolling list, so height it loses costs a row of chores rather than a
+   whole panel — while the compact panel keeps the height it was tuned for.
+   Order-agnostic on purpose: either section can be the full one. */
+.section-dock[data-cols='1'][data-stack='2'] {
+  display: flex;
+  flex-direction: column;
+}
+
 .section-dock[data-cols='1'][data-stack='2'] .section-panel--full {
-  height: clamp(180px, 26vh, 340px);
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 180px;
+  max-height: clamp(180px, 26vh, 340px);
+}
+
+.section-dock[data-cols='1'][data-stack='2'] .section-panel--compact {
+  flex: 0 0 auto;
 }
 
 .section-panel h2 {
@@ -54,11 +78,59 @@
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 6px;
+  flex: 0 0 auto;
 }
 
 .section-panel__count {
   font-size: 18px;
   color: var(--ink-soft);
+}
+
+/* The head as a door to the full page. Styled as the head it replaced, not
+   as a button: this panel is mostly read, and a second loud control at the
+   top of it would compete with the list for the eye. The chevron is the only
+   tell, and it is enough — the affordance people actually use is that the
+   title of a thing opens the thing. */
+.section-panel__open {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.section-panel__open h2 { flex: 0 1 auto; min-width: 0; }
+.section-panel__open .section-panel__count { margin-left: auto; }
+
+.section-panel__chevron {
+  flex-shrink: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--ink-faint);
+  transition: transform 90ms ease, color 90ms ease;
+}
+
+.section-panel__open:active .section-panel__chevron {
+  transform: translateX(2px);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-panel__chevron { transition: none; }
+  .section-panel__open:active .section-panel__chevron { transform: none; }
 }
 
 /* --- shared layouts for panel contents --- */
@@ -69,6 +141,12 @@
    whole board, which on a wall-mounted kiosk looks like the app coming
    loose. */
 .panel-rows {
+  /* Grow into whatever the panel has spare and scroll past that. Without the
+     grow it sizes to content, so a short list leaves the pinned add row
+     floating mid-panel; without the min-height:0 a long one refuses to shrink
+     and pushes that row off the bottom instead of scrolling. */
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -82,23 +160,23 @@
   padding-right: 12px;
 }
 
+/* A plain column now, not a grid.
+ *
+ * It used to be the grid that laid the shopping items out, two or four across.
+ * The list is grouped into aisles since 013, and a grid here made each *aisle*
+ * a grid cell rather than each item — so one column of aisles sat in the left
+ * half of the panel and the rest overflowed. The columns moved inside
+ * .shop-aisle__items, which is the element that actually holds items. */
 .panel-list {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   /* Same reason as .panel-rows above — the shopping rows carry an × too. */
   padding-right: 12px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: min-content;
-  gap: 6px 14px;
-  align-content: start;
   margin-top: 6px;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-/* Full-width shopping panel gets four columns instead of two. */
-.section-dock[data-cols='1'] .panel-list {
-  grid-template-columns: repeat(4, 1fr);
 }
 
 /* One-tap re-adding for chores this household has typed before. Quieter than

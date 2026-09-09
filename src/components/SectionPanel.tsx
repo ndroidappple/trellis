@@ -12,16 +12,38 @@ interface PanelProps {
   children: ReactNode;
   /** Shown at compact. Not a shrunken `children` — a different thing. */
   compact?: ReactNode;
+  /** Opens this section's full page. Absent means the section has no page. */
+  onOpen?: () => void;
 }
 
-export function SectionPanel({ title, count, mode, children, compact }: PanelProps) {
+export function SectionPanel({ title, count, mode, children, compact, onOpen }: PanelProps) {
   if (mode === 'off') return null;
 
   return (
     <section className={`section-panel section-panel--${mode}`}>
+      {/* The whole head is the door, not a separate chevron. It is the one
+          strip of the panel that is not already a control, it is the largest
+          target the panel has, and a title that opens the thing it titles
+          needs no explaining. The count rides along inside it so the head
+          keeps reading as a status line rather than as a button. */}
       <div className="section-panel__head">
-        <h2>{title}</h2>
-        {count && <span className="section-panel__count">{count}</span>}
+        {onOpen ? (
+          <button
+            type="button"
+            className="section-panel__open"
+            onClick={onOpen}
+            aria-label={`Open ${title}`}
+          >
+            <h2>{title}</h2>
+            {count && <span className="section-panel__count">{count}</span>}
+            <span className="section-panel__chevron" aria-hidden="true">›</span>
+          </button>
+        ) : (
+          <>
+            <h2>{title}</h2>
+            {count && <span className="section-panel__count">{count}</span>}
+          </>
+        )}
       </div>
       {mode === 'full' ? children : compact}
     </section>

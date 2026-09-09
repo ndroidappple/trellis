@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { ChecklistRow } from './ChecklistRow'
 import { SkeletonRows } from './Skeleton'
 import AddRow from './AddRow'
 import { formatCents } from '../lib/cost'
+import { groupByAisle, qtyLabel } from '../lib/shopping'
 
 /**
  * The cart footer answers three different questions depending on who's
@@ -39,9 +39,104 @@ function cartFigure(view, cost, budget) {
 }
 
 /**
- * Assembles shopping items into panel-list (full, denser grid) and
- * panel-strip (compact). The cart footer surfaces the live weekly grocery
- * total computed from the meal plan — see cost.js.
+ * One line of the list.
+ *
+ * Not a ChecklistRow, unlike the chores panel. A shopping row is read while
+ * walking — the name has to survive being glanced at sideways from a metre
+ * away — and it carries a count, which ChecklistRow has nowhere to put. The
+ * count used to live inside the name as a "×2" suffix, which made it
+ * unstyleable and made "Ground turkey" and "Ground turkey ×2" two different
+ * items to the dedupe that decides what the meal plan still owes the list.
+ */
+export function ShoppingRow({ item, onToggle }) {
+  const qty = qtyLabel(item.qty)
+
+  return (
+    <button
+      type="button"
+      className={`shop-row${item.checked ? ' is-checked' : ''}`}
+      role="checkbox"
+      aria-checked={item.checked}
+      onClick={() => onToggle(item)}
+    >
+      <span className="shop-row__box" aria-hidden="true">
+        {item.checked && (
+          <svg viewBox="0 0 16 16" width="15" height="15">
+            <path
+              d="M3 8.5l3.2 3.2L13 5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </span>
+
+      <span className="shop-row__name">{item.body}</span>
+
+      {/* Only when there is more than one. "×1" on almost every row is noise
+          that makes the genuine ×12 harder to find. */}
+      {qty && <span className="shop-row__qty">{qty}</span>}
+    </button>
+  )
+}
+
+/**
+ * The list as aisles.
+ *
+ * Shared by the dock panel and the full-page sheet so the two cannot drift
+ * into disagreeing about what the shop looks like.
+ */
+export function ShoppingAisles({ items, onToggle, onRemove, dense = false }) {
+  const groups = groupByAisle(items)
+
+  return (
+    <div className={dense ? 'shop-aisles shop-aisles--dense' : 'shop-aisles'}>
+      {groups.map((group) => (
+        <section key={group.category} className="shop-aisle">
+          <h3 className="shop-aisle__head">
+            <span>{group.label}</span>
+            {/* A finished aisle says so, rather than going quiet. On a list
+                you walk past once, "done" is the useful state to be able to
+                see from the end of the row. */}
+            <span className="shop-aisle__count">
+              {group.remaining === 0 ? 'done' : `${group.remaining} left`}
+            </span>
+          </h3>
+
+          <div className="shop-aisle__items">
+            {group.items.map((item) =>
+              // Delete only exists on the full page. In the dock it was a
+              // permanent 44px neighbour of the primary tap, for an action
+              // taken about once a month — the page has room to offer it
+              // without putting it under a thumb that meant to tick.
+              onRemove ? (
+                <div key={item.id} className="shop-row-wrap">
+                  <ShoppingRow item={item} onToggle={onToggle} />
+                  <button
+                    className="panel-row__remove"
+                    onClick={() => onRemove(item)}
+                    aria-label={`Remove ${item.body}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <ShoppingRow key={item.id} item={item} onToggle={onToggle} />
+              )
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Assembles shopping items into the dock panel. The cart footer surfaces the
+ * live weekly grocery total computed from the meal plan — see cost.js.
  */
 export default function ShoppingPanel({
   mode,
@@ -53,7 +148,6 @@ export default function ShoppingPanel({
   onToggle,
   onAdd,
   onAddGroceries,
-  onRemove,
 }) {
   const [view, setView] = useState(0)
 
@@ -86,15 +180,9 @@ export default function ShoppingPanel({
     <>
       <div className="panel-list">
         {items.length === 0 && <p className="muted">Empty.</p>}
-        {items.map((i) => (
-          <div key={i.id} className="panel-row">
-            <ChecklistRow id={i.id} label={i.body} done={i.checked} density="item" onToggle={() => onToggle(i)} />
-            <button className="panel-row__remove" onClick={() => onRemove(i)} aria-label={`Remove ${i.body}`}>
-              ×
-            </button>
-          </div>
-        ))}
+        <ShoppingAisles items={items} onToggle={onToggle} dense />
       </div>
+
       <AddRow placeholder="Add to shopping list" onAdd={onAdd} />
 
       <button

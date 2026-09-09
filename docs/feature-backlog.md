@@ -7,9 +7,16 @@
 
 # Feature #1 — Meal Planner Data Enrichment: Phase 1
 
-**Priority:** High  
+**Priority:** ~~High~~ — **Shipped** (migrations 008, 010, 011)  
 **Category:** Meal Planning / Data Foundation  
-**Status:** Backlog / Phase 1  
+**Status:** **Complete.** `enrichment_status` is 13 `enriched` / 5 `needs_review` /
+0 `pending`. Provenance, safe reruns, and the `trellis_may_enrich` gate are all
+live. Two recipes (**Filthy cabbage**, **Steak salad**) remain `needs_review` and
+need a person, not another model pass — tracked in CLAUDE.md, not here.
+The 46 low-confidence rows from 011 are model estimates, not measurements; the
+book still renders an estimate identically to a measurement. Surfacing
+confidence in the UI is the only Phase 1 thread left, and it belongs to a
+future meal-planning UI slice rather than to this entry.  
 **Primary Goal:** Build the structured recipe data foundation required to make meal planning a major Trellis selling point.
 
 ## 1. Feature Overview
@@ -1712,18 +1719,224 @@ this one is low priority rather than next.
 
 ---
 
+# Feature #9 — Weekly To Do: make it one thing
+
+**Priority:** ~~Critical (9A) / High (9B, 9C)~~
+**Category:** Tasks / Core Experience
+**Status:** **Shipped.** 9A, 9B and 9C are all built, along with full-page
+views for both dock sections and the shopping revamp that came with them
+(migration 013). The critique below is kept because it is the reasoning behind
+the design, not a to-do list.
+
+**Deliberately left for later:** creating an `anytime` or `once` chore still
+takes two taps — add it (arrives weekly, which keeps capture to one field),
+then change its kind in the sheet. A recurrence control in the add row was
+rejected as a tax on the common case. Revisit if the two-tap path annoys.
+
+**Depends On:** Nothing. 9A was the prerequisite for #6 (Chores Scoreboard),
+which is now unblocked.
+**Primary Goal:** The panel is three different products sharing one scroll
+container. Make it read and behave as one list.
+
+## 1. The diagnosis
+
+"Weekly To Do" currently holds three kinds of thing:
+
+- a **weekly checklist** (`weekly`) — "has this been done this week"
+- a **dated errand list** (`once`) — "is this done, ever"
+- an **activity log** (`anytime`) — "when was this last done, and whose turn"
+
+Each has its own interaction grammar, its own time base, and its own visual
+encoding — and they are stacked in one undifferentiated scroll with no
+grouping, no headers, and no legend. The clunkiness is not any single control.
+It is that the panel never tells you which of the three lists you are looking
+at, so every row has to be decoded from scratch.
+
+Everything below follows from that.
+
+---
+
+## Phase 9A — The bugs (Critical, small, ship first)
+
+These are why the section feels *broken* rather than merely awkward. All four
+are verified in the code, and none is more than a few lines.
+
+### A1. Both person buttons show the same initials
+
+`ChoresPanel.jsx:142` calls `initialsForPerson(p)` with a person **object**,
+but `Wall.jsx:251` expects the letter `'a' | 'b' | 'shared'`. Neither branch
+matches, so it falls through to the combined return — **every episodic row
+renders "NE" on both buttons**.
+
+The one feature whose entire purpose is telling Nick and Ed apart cannot
+currently be used to tell Nick and Ed apart. This alone would make the section
+feel unusable, and it silently poisons the completion log every time someone
+guesses which circle is theirs.
+
+Fix: pass `personFor(p.id)`, or accept both shapes.
+
+### A2. The "whose turn" highlight is always Nick's colour
+
+`.whodunit--turn` and `.panel-row__turn` hardcode `var(--person-a)`
+(`App.css:304, 332`). When it is Ed's turn, Ed's button fills with person A's
+green and the words "Ed's turn" render in Nick's colour.
+
+Person colour is meaningful everywhere else in this app. Here it is decoration
+that actively contradicts the sentence next to it. Fix: derive the token from
+`personFor(turn.id)`.
+
+### A3. The header counter can never reach completion
+
+`choresDone` excludes episodic chores — they are never "done" — but the
+denominator is `chores.length`, which includes them (`Wall.jsx:1080, 1141`).
+With one dishwasher row among four chores the panel permanently reads
+**"3 of 4 done"**.
+
+A progress indicator that structurally cannot complete teaches people to stop
+reading it. Fix: count only trackable chores in both halves.
+
+### A4. Full and compact disagree with each other
+
+Compact correctly excludes episodic rows and will say "All done"
+(`ChoresPanel.jsx:56–58`) at the same moment the header says "3 of 4 done".
+Same panel, same instant, two answers. Fixed by A3.
+
+### A5. Two of the three chore types cannot be created
+
+`addChore` hardcodes `recurrence: 'weekly'` (`Wall.jsx:500`). **No UI anywhere
+creates an `anytime` or a `once` chore.** Migration 012's headline feature —
+the one built precisely because the dishwasher could not be recorded — is
+reachable only by hand-written SQL, and everything anyone adds through the app
+arrives as the exact type that failed them.
+
+This is the single largest gap between what Trellis can do and what Trellis
+lets you do. Minimum viable fix: a three-way recurrence control in the add
+flow, or a recurrence row inside the existing `ChoreScheduler` sheet (which is
+already the "when does this happen" surface and is the natural home for "it
+doesn't").
+
+---
+
+## Phase 9B — Group the list (High)
+
+**One change fixes most of the structural complaints: three labelled groups
+inside the one panel.**
+
+    Today          — scheduled here, or due today
+    This week      — the rest of the week's checklist
+    As needed      — the episodic log
+
+Why this specific move, rather than restyling rows:
+
+- **It gives each group one interaction grammar.** Today/This week are
+  checkboxes where tapping the row completes it. As needed is a log where the
+  row body is inert and you tap a person. Right now those two behaviours are
+  interleaved in rows that look alike — a user learns "tap the row" on row one
+  and it silently does nothing on row three. Grouping makes the difference
+  structural instead of something you discover by failing.
+- **It replaces the border code.** Solid shared-colour = scheduled, dashed =
+  loose, solid person-A = episodic: three meanings on one visual channel with
+  no legend, and the third borrows a *person* colour to mean a *category*.
+  Headers say it in words instead.
+- **It answers the question the wall actually gets asked.** Chores are
+  currently ordered by `sort_order`/`created_at` only — done rows do not sink,
+  today's chores do not rise. "What is left today" is the one thing a wall
+  calendar is looked at for, and the list cannot currently answer it at a
+  glance.
+
+### Also in 9B
+
+**Two time bases in one list.** Checkbox rows reflect the week you have paged
+to; episodic rows reflect actual today (`chore_last_done` is not week-scoped).
+Page forward and every tick clears while "Ed, yesterday" stays put, with
+nothing in the panel to say which week it is showing. The title says "Weekly";
+the week itself lives in a header far away. Either scope the panel visibly to
+the anchor week, or freeze it to the current week and let the grid do the
+paging.
+
+**Four hit zones per row in a ~350px column.** Grip, checklist row, when-pill,
+delete. Two of them are adjacent, low-frequency, and one is destructive. At
+arm's length on a wall this is a mis-tap generator, and the `×` holds
+permanent prime real estate for an action performed maybe monthly. Move delete
+into the reschedule sheet or behind a swipe; keep undo either way.
+
+**The grid is a partial mirror.** Scheduled chores render in both the panel
+and the day rows, in different visual languages ("Done" text vs. a checkmark
+and strikethrough). Unscheduled and episodic ones appear only in the panel. So
+neither surface is complete and you learn to check both. Decide which surface
+is authoritative.
+
+---
+
+## Phase 9C — Capture (High)
+
+**Fast capture is currently the least reachable control in the panel.** The
+add input sits inside the scrolling list, below every chore *and* below the
+quick-add palette. With eight chores in a shortened panel it may never be on
+screen at all.
+
+Feature #2 names fast capture as Tier 1 core. This is the cheapest possible
+down payment on it: pin the add row to the bottom of the panel, outside the
+scroll container, and let the palette scroll.
+
+---
+
+## 4. Deliberately not in scope here
+
+- Natural-language capture, subtasks, priorities, reminders — that is #2, and
+  it should not block fixing what is already shipped.
+- Reviving the separate `list='todo'` list. The panel is already carrying more
+  concepts than it can label; adding a fourth before grouping exists would
+  make this worse. Revisit after 9B.
+- The scoreboard (#6). It reads the same log and should wait for 9A, because a
+  scoreboard built on attribution nobody could aim is a scoreboard built on
+  bad data.
+
+## 5. Definition of Done
+
+- [ ] Each person's button shows that person's own initial.
+- [ ] The turn indicator uses the colour of the person whose turn it is.
+- [ ] The header count can reach "all done", and agrees with compact mode.
+- [ ] Every recurrence the database supports can be created in the app.
+- [ ] The list is grouped, and each group has one interaction grammar.
+- [ ] It is unambiguous which week the panel is describing.
+- [ ] Adding a chore does not require scrolling the list.
+- [ ] Delete is no longer a permanent, full-time neighbour of the primary tap.
+
+---
+
 # Current Feature Priority Summary
 
-| Feature | Priority | Primary Purpose |
-|---|---|---|
-| **#1 Meal Planner Data Enrichment — Phase 1** | High | Build the recipe/meal data foundation |
-| **#2 Productivity & Household OS Upgrade** | High | Build the core household task/planning system |
-| **#3 Themes** | Low | Personalization and visual delight |
-| **#4 Weather Integration** | Medium-Low | Add weather as household context |
-| **#5 Ambient Screen Timeout** | Medium | Protect the display and give the wall a resting face |
-| **#6 Chores Scoreboard** | Medium | Settle who actually did what, over a chosen period |
-| **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor |
-| **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+Ordered by what should be picked up next, not by feature number.
+
+| # | Feature | Priority | Primary Purpose |
+|---|---|---|---|
+| 1 | **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor |
+| 2 | **#6 Chores Scoreboard** | Medium-High | Settle who did what over a period — **unblocked by #9A** |
+| 3 | **#2 Productivity & Household OS Upgrade** | High | Build the core household task/planning system |
+| 4 | **#5 Ambient Screen Timeout** | Medium | Protect the display and give the wall a resting face |
+| 5 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
+| 6 | **#3 Themes** | Low | Personalization and visual delight |
+| 7 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+| — | **#9 Weekly To Do + full pages + shopping aisles** | **Shipped** | 9A/9B/9C, both full-page views, migration 013 |
+| — | **#1 Meal Planner Data Enrichment — Phase 1** | **Shipped** | Recipe/meal data foundation — complete in 008/010/011 |
+
+## What changed in this review
+
+- **#1 was done and still listed as High.** 010 and 011 ran against the live
+  project; the remaining threads are two recipes needing a person and a UI
+  question about showing confidence, neither of which is Phase 1.
+- **#9 was raised, built and shipped in the same session.** It was not a
+  missing feature — it was a shipped feature reporting the wrong person's
+  name.
+- **#6 is unblocked and moved up.** Its whole premise is a trustworthy record
+  of who did what, and until 9A both buttons on every episodic row were
+  labelled identically, so the log was being aimed blind. It now is not, and
+  the scoreboard has a record worth aggregating.
+- **#2 stays High but is not next.** It is a programme, not a task. 9B/9C were
+  its first concrete slices, and the full-page views are the surface a real
+  task system would grow into.
+- **#3, #4, #5, #7, #8 are unchanged.**
 
 ---
 

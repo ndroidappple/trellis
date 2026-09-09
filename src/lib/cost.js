@@ -32,7 +32,7 @@ export function formatCents(cents) {
  * footer total and the list underneath it drift apart.
  */
 export function weekPackages(planEntries) {
-  const packages = new Map() // product id -> { product, qty }
+  const packages = new Map() // product id -> { product, qty, categories }
   const unmatched = [] // needs buying, but we can't say which product
 
   for (const entry of planEntries) {
@@ -43,6 +43,7 @@ export function weekPackages(planEntries) {
         unmatched.push({
           name: ing.name ?? ing.preferred_product ?? 'Unnamed ingredient',
           recipeTitle: entry.recipe.title,
+          category: ing.ingredient_category ?? null,
           // Distinguishes "no price anywhere" from "priced, but not against a
           // package we could put in a cart" — only the former is missing from
           // the cost total, but both are missing from the shopping list.
@@ -51,13 +52,36 @@ export function weekPackages(planEntries) {
         continue
       }
 
-      const current = packages.get(ing.product.id) ?? { product: ing.product, qty: 0 }
+      const current =
+        packages.get(ing.product.id) ?? { product: ing.product, qty: 0, categories: [] }
       current.qty += Number(ing.purchase_qty)
+      // One product can be reached from several ingredient rows, and 010
+      // categorised each row independently, so they can disagree. Collected
+      // rather than last-one-wins so the aisle can be the commonest answer.
+      if (ing.ingredient_category) current.categories.push(ing.ingredient_category)
       packages.set(ing.product.id, current)
     }
   }
 
   return { packages: [...packages.values()], unmatched }
+}
+
+/** The commonest category among the ingredients that reached one product. */
+function commonestCategory(categories) {
+  if (!categories?.length) return null
+
+  const counts = new Map()
+  for (const c of categories) counts.set(c, (counts.get(c) ?? 0) + 1)
+
+  let best = null
+  let bestCount = 0
+  for (const [category, n] of counts) {
+    if (n > bestCount) {
+      best = category
+      bestCount = n
+    }
+  }
+  return best
 }
 
 export function weekCost(planEntries, staples) {
@@ -110,24 +134,33 @@ export function weekCost(planEntries, staples) {
 export function groceryLines(planEntries, staples) {
   const { packages, unmatched } = weekPackages(planEntries)
 
-  const label = (name, count) => (count > 1 ? `${name} ×${count}` : name)
-
-  const lines = packages.map(({ product, qty }) => ({
+  // `body` is the bare name and `qty` is a number, since 013. They used to be
+  // one string with a "×2" suffix, which made the label the source of truth
+  // for a count — so "Ground turkey" and "Ground turkey ×2" were different
+  // items to the dedupe in pendingGroceries, and a heavier week added a
+  // second row instead of a bigger number.
+  const lines = packages.map(({ product, qty, categories }) => ({
     key: `product:${product.id}`,
-    body: label(product.name, Math.ceil(qty)),
+    body: product.name,
+    qty: Math.ceil(qty),
+    category: commonestCategory(categories),
   }))
 
   for (const s of staples) {
     if (!s.included) continue
     lines.push({
       key: `staple:${s.item}`,
-      body: label(s.item, Math.ceil(Number(s.weekly_qty))),
+      body: s.item,
+      qty: Math.ceil(Number(s.weekly_qty)),
+      // Staples never pass through an ingredient row, so they carry their own
+      // aisle (013) rather than inheriting one.
+      category: s.category ?? null,
     })
   }
 
-  // Alphabetical is not aisle order, but it is the order that makes a
-  // duplicate obvious at a glance. Grouping by aisle wants
-  // ingredient_category, which 008 adds and nothing populates yet.
+  // Alphabetical within the returned list. The UI groups by aisle for
+  // shopping order (see lib/shopping.js); this order is what makes a
+  // duplicate obvious when the lines are read as a flat set.
   lines.sort((a, b) => a.body.localeCompare(b.body, undefined, { sensitivity: 'base' }))
 
   return { lines, unmatched }

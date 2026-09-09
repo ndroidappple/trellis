@@ -109,6 +109,93 @@ export function unschedulePatch(chore) {
 }
 
 /**
+ * Changing what kind of chore something is.
+ *
+ * `chores_schedule_matches_recurrence` (009, widened by 012) requires each
+ * recurrence to hold only its own scheduling column: weekly owns
+ * scheduled_day, once owns due_on, anytime owns neither. Switching kind
+ * therefore has to clear the other column in the same write, or the row is
+ * rejected — which is why this returns the whole patch rather than just the
+ * recurrence.
+ *
+ * A chore keeps its day where the new kind can still express one, and loses
+ * it silently where it cannot, because there is nowhere to put it.
+ */
+export function recurrencePatchFor(chore, recurrence) {
+  if (recurrence === 'anytime') {
+    return { recurrence, scheduled_day: null, due_on: null }
+  }
+
+  if (recurrence === 'once') {
+    return { recurrence, due_on: chore.due_on ?? null, scheduled_day: null }
+  }
+
+  return { recurrence: 'weekly', scheduled_day: chore.scheduled_day ?? null, due_on: null }
+}
+
+/**
+ * The list, split into the three questions it is actually answering.
+ *
+ * One panel was carrying a weekly checklist, a dated errand list and an
+ * activity log in one undifferentiated scroll, with the difference between
+ * them encoded only in a left border colour. Rows that looked alike behaved
+ * differently — tapping the body of a checkbox row completes it, tapping the
+ * body of a log row does nothing — so the grammar had to be learned by
+ * failing at it. Grouping makes the difference structural: each group has one
+ * kind of row and one meaning for a tap.
+ *
+ * "Today" only exists when today is in the week being viewed. Paging forward
+ * and still being shown a "Today" group would be a lie about which week the
+ * ticks belong to.
+ */
+export function groupChores(chores, { todayIso, isCurrentWeek, occurrenceFor, choreIsDone }) {
+  const episodic = []
+  const todays = []
+  const rest = []
+
+  for (const chore of chores) {
+    if (isEpisodic(chore)) {
+      episodic.push(chore)
+      continue
+    }
+    const occurrence = occurrenceFor(chore)
+    if (isCurrentWeek && occurrence != null && occurrence === todayIso) todays.push(chore)
+    else rest.push(chore)
+  }
+
+  // Outstanding work first, finished work last, insertion order preserved
+  // inside each half — Array.prototype.sort is stable, so this reorders no
+  // more than it has to. Done rows stay in their group rather than sinking
+  // into a pile at the bottom: the group emptying is the signal that the
+  // group is finished.
+  const byOutstanding = (list) =>
+    [...list].sort((a, b) => Number(choreIsDone(a)) - Number(choreIsDone(b)))
+
+  const groups = []
+
+  if (todays.length > 0) {
+    groups.push({ key: 'today', label: 'Today', kind: 'check', chores: byOutstanding(todays) })
+  }
+
+  if (rest.length > 0) {
+    groups.push({
+      key: 'week',
+      // Named for what it is rather than for "the rest", because on a week
+      // that is not this one the distinction is the whole point.
+      label: isCurrentWeek ? 'This week' : 'That week',
+      kind: 'check',
+      chores: byOutstanding(rest),
+    })
+  }
+
+  if (episodic.length > 0) {
+    groups.push({ key: 'anytime', label: 'As needed', kind: 'log', chores: episodic })
+  }
+
+  return groups
+}
+
+/**
  * Whose turn it is, for a chore that alternates.
  *
  * Derived, never stored. Whoever did it last is not up next; everyone else

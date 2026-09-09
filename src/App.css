@@ -216,11 +216,65 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
    so the list does not reflow under the finger mid-drag. */
 .panel-row.is-dragging { opacity: 0.35; }
 
-/* Scheduled vs unscheduled, on a channel the tick is not already using. A
-   scheduled chore has a day and gets a solid marker; a loose one is dashed,
-   matching the dashed quick-add chips that are also "not yet real". */
-.panel-row--scheduled { border-left: 3px solid var(--person-shared); padding-left: 7px; }
-.panel-row--loose { border-left: 3px dashed var(--rule); padding-left: 7px; }
+/* The left-border code is gone. It carried three meanings on one channel —
+   solid shared-colour for scheduled, dashed for unscheduled, solid person-A
+   for episodic — with no legend, and the third borrowed a *person* colour to
+   mean a *category*. The group headings say all three in words instead. */
+
+/* --- chore groups ------------------------------------------------------ */
+
+.chore-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Sticky so the aisle you are in stays named while you scroll past it. The
+   background is opaque for the same reason — rows must not show through the
+   heading they are scrolling under. */
+.chore-group__head,
+.shop-aisle__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+
+  margin: 0;
+  padding: 4px 0 3px;
+  background: var(--slat-face);
+
+  font-family: var(--font-text);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.chore-group__count,
+.shop-aisle__count {
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-size: 15px;
+}
+
+/* Groups after the first get air above them, so the list reads as sections
+   rather than as one run of rows with occasional labels in it. */
+.chore-group + .chore-group,
+.shop-aisle + .shop-aisle {
+  margin-top: 6px;
+}
+
+.panel-rows__footnote {
+  margin: 6px 0 0;
+  font-size: 16px;
+  color: var(--ink-faint);
+}
 
 /* Follows the pointer. pointer-events: none is required, not cosmetic:
    useChoreDrag hit-tests with elementFromPoint, and a ghost under the
@@ -273,9 +327,8 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
    is a log line plus two people. */
 
 .panel-row--episodic {
-  border-left: 3px solid var(--person-a);
-  padding-left: 7px;
   min-height: var(--tap-min);
+  gap: 10px;
 }
 
 .panel-row__body {
@@ -300,11 +353,16 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 }
 
 /* Whose turn it is, given the weight the answer deserves — this is the line
-   the household is actually arguing about. */
-.panel-row__turn {
-  color: var(--person-a);
-  font-weight: 600;
-}
+   the household is actually arguing about.
+
+   Coloured by *which* person, not by a fixed token. It used to be
+   var(--person-a) unconditionally, so "Ed's turn" was rendered in Nick's
+   green — a person colour that means something everywhere else in this app,
+   contradicting the sentence it was colouring. */
+.panel-row__turn { font-weight: 600; color: var(--ink-soft); }
+.panel-row__turn[data-person='a'] { color: var(--person-a); }
+.panel-row__turn[data-person='b'] { color: var(--person-b); }
+.panel-row__turn[data-person='shared'] { color: var(--person-shared); }
 
 .panel-row__whodunit {
   flex-shrink: 0;
@@ -327,11 +385,27 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   cursor: pointer;
 }
 
-/* The one whose turn it is leads. The other stays fully available and fully
-   legible — doing it out of turn is normal, and must not be the harder tap. */
-.whodunit--turn {
+/* Every button carries its own person's colour as an outline, so which
+   circle is whose is answerable without reading the letter — at arm's length
+   over a sink, the letter is the part that goes first. */
+.whodunit[data-person='a'] { border-color: var(--person-a); color: var(--person-a); }
+.whodunit[data-person='b'] { border-color: var(--person-b); color: var(--person-b); }
+
+/* The one whose turn it is leads, filled in that same person's colour. The
+   fill used to be var(--person-a) whoever's turn it was, so Ed's turn lit up
+   in Nick's green. The other stays fully available and fully legible — doing
+   it out of turn is normal, and must not be the harder tap. */
+.whodunit--turn { color: var(--person-ink); }
+
+.whodunit--turn[data-person='a'] {
   background: var(--person-a);
   border-color: var(--person-a);
+  color: var(--person-ink);
+}
+
+.whodunit--turn[data-person='b'] {
+  background: var(--person-b);
+  border-color: var(--person-b);
   color: var(--person-ink);
 }
 
@@ -360,10 +434,140 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   padding: 0;
 }
 
+/* ---------- Shopping ---------- */
+
+.shop-aisles {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.shop-aisle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Two columns in the dock, where the panel is wide and short and the job is
+   to see as much of the shop at once as possible. One column on the page,
+   where the job is to walk it. */
+.shop-aisle__items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* minmax(0, 1fr), not 1fr. A bare 1fr track has an automatic minimum of the
+   item's min-content width, and .shop-row__name is nowrap — so one long
+   product name ("Boneless skinless chicken breasts") widened its column to
+   fit and squeezed everything in the other column out of the panel. */
+.shop-aisles--dense .shop-aisle__items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 14px;
+}
+
+.section-dock[data-cols='1'] .shop-aisles--dense .shop-aisle__items {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Tighter in the dock than on the page. Grouping costs vertical space that a
+   flat list did not, and the dock is the surface that has none to spare. */
+.shop-aisles--dense { gap: 8px; }
+.shop-aisles--dense .shop-aisle { gap: 2px; }
+.shop-aisles--dense .shop-row { min-height: 38px; font-size: 19px; }
+.shop-aisles--dense .shop-row__box { width: 23px; height: 23px; }
+
+/* The row. A button rather than a ChecklistRow because a shopping line is
+   read while walking and carries a count, which ChecklistRow has nowhere to
+   put — the count used to be glued onto the end of the name as text. */
+.shop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 6px 4px 0;
+
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: var(--size-row);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 70ms ease;
+}
+
+.shop-row:active { transform: scale(0.99); }
+
+.shop-row__box {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid var(--rule);
+  border-radius: 7px;
+  color: var(--person-ink);
+}
+
+.shop-row__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The count, as its own object. Tabular so a column of them lines up, and
+   quiet enough that it reads as a qualifier on the name rather than as part
+   of it. */
+.shop-row__qty {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  color: var(--ink-soft);
+  background: var(--chip-face);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+/* Bought. Dimmed and struck rather than moved: the list is read while
+   standing in the aisle the item is on, so relocating it is relocating it
+   away from where you are. It sorts last within its own aisle instead. */
+.shop-row.is-checked { color: var(--ink-faint); }
+.shop-row.is-checked .shop-row__name { text-decoration: line-through; }
+
+.shop-row.is-checked .shop-row__box {
+  background: var(--person-a);
+  border-color: var(--person-a);
+}
+
+.shop-row.is-checked .shop-row__qty {
+  background: none;
+  color: var(--ink-faint);
+}
+
+.shop-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shop-row-wrap .shop-row { flex: 1; min-width: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-row { transition: none; }
+  .shop-row:active { transform: none; }
+}
+
 .panel-add {
   display: flex;
   gap: 8px;
   margin-top: 8px;
+  flex: 0 0 auto;
 }
 
 .panel-add input { flex: 1; min-height: var(--tap-min); font-size: 17px; }
@@ -522,12 +726,22 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 
 .settings-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
+/* The label belongs to the *first* row of chips, not to the centre of a
+   wrapped block. "Header aside" wraps its four chips onto two rows, and
+   align-items:center then left the label floating in the gutter between
+   them, reading as a heading for neither. Matching the chip's own tap height
+   and centring inside that keeps every label optically level with the first
+   chip beside it, whether its row wraps or not. */
 .settings-row__label {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-height: var(--tap-min);
   font-family: var(--font-display);
   font-weight: 500;
   font-size: 19px;

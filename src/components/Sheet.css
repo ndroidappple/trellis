@@ -172,6 +172,38 @@
   color: var(--ink-faint);
 }
 
+/* A dock panel, rendered on a page.
+ *
+ * The panel components size themselves to a box with a declared height and
+ * scroll their own list inside it. On a sheet that would be a scroll context
+ * inside a scroll context under one finger, so the inner one is switched off
+ * and the sheet body does the scrolling — the whole point of the page being
+ * that the list no longer has to fit in 340px.
+ */
+.sheet__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sheet__panel .panel-rows,
+.sheet__panel .panel-list {
+  overflow: visible;
+  padding-right: 0;
+}
+
+/* Group headings stick to the sheet's scroller instead of the panel's, so
+   they need the sheet's ground behind them rather than a panel's. Scoped to
+   .sheet, not .sheet__panel — the shopping page renders its aisles directly
+   on the sheet body without a panel wrapper. */
+.sheet .chore-group__head,
+.sheet .shop-aisle__head {
+  background: var(--plaster);
+}
+
+/* Rows get the page's extra width, so they stop truncating. */
+.sheet__panel .panel-row { gap: 10px; }
+
 .sheet__search {
   width: 100%;
   background: #fff;

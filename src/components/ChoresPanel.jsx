@@ -3,9 +3,9 @@ import { SkeletonRows } from './Skeleton'
 import AddRow from './AddRow'
 
 /**
- * Assembles chores into the shapes SectionPanel.css already has rules for:
- * panel-rows (full) and panel-strip (compact). Called twice from Wall.jsx —
- * once per mode — since Board needs both regardless of which is on screen.
+ * Assembles chores into the shapes SectionPanel.css already has rules for.
+ * Called twice from Wall.jsx — once per mode — since Board needs both
+ * regardless of which is on screen.
  *
  * Two kinds of row live here, and they answer different questions.
  *
@@ -13,29 +13,171 @@ import AddRow from './AddRow'
  * An 'anytime' chore is a log: "when was this last done, and whose turn is
  * it". The dishwasher is never done — it is only more or less recently done —
  * and forcing it into a checkbox is what made it untickable in practice.
+ *
+ * Those two kinds used to be interleaved in one flat list, told apart only by
+ * the colour of a left border. They are now grouped (see groupChores), which
+ * is what lets a tap mean one thing per group instead of one thing per row.
  */
+
+function ChoreRow({
+  chore,
+  done,
+  creditedTo,
+  initials,
+  when,
+  draggingId,
+  onToggle,
+  onDragStart,
+  onOpenSettings,
+}) {
+  return (
+    <div
+      className={['panel-row', draggingId === chore.id ? 'is-dragging' : '']
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {/* A handle, not a long press on the row. touch-action: none here is
+          what stops iPadOS reading the drag as a scroll of the list, while
+          the rest of the row still scrolls. */}
+      <button
+        type="button"
+        className="panel-row__grip"
+        aria-label={`Reschedule ${chore.title}`}
+        onPointerDown={(e) => onDragStart?.(chore, e)}
+      >
+        <span aria-hidden="true">⠿</span>
+      </button>
+
+      <ChecklistRow
+        id={chore.id}
+        label={chore.title}
+        done={done}
+        person={creditedTo ?? undefined}
+        initials={initials}
+        onToggle={onToggle}
+      />
+
+      {/* The row's one secondary door. It was three — a schedule pill, a
+          drag handle and a delete × crowded into a ~350px column beside the
+          primary tap, with the destructive one adjacent to the quiet one.
+          Now the label opens a sheet that holds everything the row is not
+          for: what kind of chore this is, which day, and deleting it. */}
+      <button
+        type="button"
+        className="panel-row__when"
+        onClick={() => onOpenSettings?.(chore)}
+        aria-label={`Settings for ${chore.title}`}
+      >
+        {when}
+      </button>
+    </div>
+  )
+}
+
+function EpisodicRow({
+  chore,
+  last,
+  ago,
+  turn,
+  people,
+  slotFor,
+  initialsForPerson,
+  when,
+  onLog,
+  onOpenSettings,
+}) {
+  // "Ed, yesterday" is the whole argument settled in three words. Without a
+  // last completion there is nothing to report, and saying so beats an empty
+  // gap that reads as a rendering failure.
+  const history = last?.completed_by_name
+    ? [last.completed_by_name, ago].filter(Boolean).join(', ')
+    : 'not done yet'
+
+  return (
+    <div className="panel-row panel-row--episodic">
+      <div className="panel-row__body">
+        <span className="panel-row__title">{chore.title}</span>
+        <span className="panel-row__meta">
+          <span>{history}</span>
+          {turn && (
+            <span className="panel-row__turn" data-person={slotFor(turn)}>
+              {`${turn.display_name}’s turn`}
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/*
+        One button per person, rather than a checkbox plus a separate "who"
+        step.
+
+        The wall is a single signed-in session shared by two people, so
+        crediting whoever the iPad happens to be logged in as would make the
+        log confidently wrong — and this log exists to settle exactly the
+        argument it would then be lying about. Naming both people turns
+        attribution into the same tap as completion.
+
+        Each button carries that person's own initial and that person's own
+        colour. Both used to render the combined "NE": initialsForPerson takes
+        the positional slot 'a' | 'b' | 'shared', and this passed it a whole
+        profile row, so neither branch matched and every button fell through
+        to the both-of-them fallback. The one control built to tell Nick and
+        Ed apart could not tell Nick and Ed apart.
+      */}
+      <div className="panel-row__whodunit">
+        {people.map((p) => {
+          const slot = slotFor(p)
+          const isTurn = turn?.id === p.id
+          return (
+            <button
+              key={p.id}
+              type="button"
+              className={isTurn ? 'whodunit whodunit--turn' : 'whodunit'}
+              data-person={slot}
+              onClick={() => onLog?.(chore, p.id)}
+              aria-label={`${p.display_name} did ${chore.title}`}
+            >
+              {initialsForPerson(slot)}
+            </button>
+          )
+        })}
+      </div>
+
+      <button
+        type="button"
+        className="panel-row__when"
+        onClick={() => onOpenSettings?.(chore)}
+        aria-label={`Settings for ${chore.title}`}
+      >
+        {when}
+      </button>
+    </div>
+  )
+}
+
 export default function ChoresPanel({
   mode,
   loading,
-  chores,
+  groups = [],
+  choreCount = 0,
   choreIsDone,
   personFor,
   initialsForPerson,
+  slotFor,
   people = [],
   onToggle,
   onLog,
   onAdd,
-  onRemove,
-  onReschedule,
+  onOpenSettings,
   commonChores = [],
   onDragStart,
   draggingId,
   scheduleLabelFor,
-  isScheduled,
-  isEpisodic,
   lastDoneFor,
   turnFor,
   agoFor,
+  pendingCount = 0,
+  allDone = false,
 }) {
   if (loading) {
     return mode === 'compact' ? (
@@ -53,9 +195,10 @@ export default function ChoresPanel({
     // An episodic chore is never "pending" — it has no outstanding state to
     // summarise — so the strip stays a list of what is actually outstanding
     // rather than permanently carrying the dishwasher.
-    const pending = chores.filter((c) => !isEpisodic?.(c) && !choreIsDone(c))
-    const trackable = chores.filter((c) => !isEpisodic?.(c))
-    const allDone = trackable.length > 0 && pending.length === 0
+    const pending = groups
+      .filter((g) => g.kind === 'check')
+      .flatMap((g) => g.chores)
+      .filter((c) => !choreIsDone(c))
 
     return (
       <div className="panel-strip">
@@ -71,179 +214,88 @@ export default function ChoresPanel({
   }
 
   return (
-    // Dropping a chore back here unschedules it — see useChoreDrag.
-    <div className="panel-rows" data-drop-backlog="">
-      {chores.length === 0 && <p className="muted">Nothing yet.</p>}
+    <>
+      {/* Dropping a chore back here unschedules it — see useChoreDrag. */}
+      <div className="panel-rows" data-drop-backlog="">
+        {choreCount === 0 && <p className="muted">Nothing yet.</p>}
 
-      {chores.map((c) => {
-        const episodic = isEpisodic?.(c) ?? false
-        const last = lastDoneFor?.(c.id) ?? null
-        const ago = agoFor?.(last?.on_date) ?? null
-
-        if (episodic) {
-          const turn = turnFor?.(c, last) ?? null
-
-          // "Ed, yesterday" is the whole argument settled in three words.
-          // Without a last completion there is nothing to report, and saying
-          // so beats an empty gap that reads as a rendering failure.
-          const history = last?.completed_by_name
-            ? [last.completed_by_name, ago].filter(Boolean).join(', ')
-            : 'not done yet'
-
-          return (
-            <div
-              key={c.id}
-              className={[
-                'panel-row',
-                'panel-row--episodic',
-                draggingId === c.id ? 'is-dragging' : '',
-              ].filter(Boolean).join(' ')}
-            >
-              <div className="panel-row__body">
-                <span className="panel-row__title">{c.title}</span>
-                {/* "As needed" leads because without it the row is silent
-                    about what kind of chore this is: no checkbox and no day
-                    reads as missing information rather than as a deliberate
-                    absence of schedule. Then the log, then the turn — which
-                    is last because it is the thing being looked for, and
-                    carries its own weight to be found. */}
-                <span className="panel-row__meta">
-                  <span>{scheduleLabelFor?.(c)}</span>
-                  <span>{history}</span>
-                  {turn && (
-                    <span className="panel-row__turn">{`${turn.display_name}’s turn`}</span>
-                  )}
+        {groups.map((group) => (
+          <section key={group.key} className="chore-group">
+            <h3 className="chore-group__head">
+              <span>{group.label}</span>
+              {group.kind === 'check' && (
+                <span className="chore-group__count">
+                  {group.chores.filter((c) => !choreIsDone(c)).length} left
                 </span>
-              </div>
+              )}
+            </h3>
 
-              {/*
-                One button per person, rather than a checkbox plus a separate
-                "who" step.
+            {group.chores.map((c) => {
+              const last = lastDoneFor?.(c.id) ?? null
 
-                The wall is a single signed-in session shared by two people,
-                so crediting whoever the iPad happens to be logged in as would
-                make the log confidently wrong — and this log exists to settle
-                exactly the argument it would then be lying about. Naming both
-                people turns attribution into the same tap as completion.
+              if (group.kind === 'log') {
+                return (
+                  <EpisodicRow
+                    key={c.id}
+                    chore={c}
+                    last={last}
+                    ago={agoFor?.(last?.on_date) ?? null}
+                    turn={turnFor?.(c, last) ?? null}
+                    people={people}
+                    slotFor={slotFor}
+                    initialsForPerson={initialsForPerson}
+                    when={scheduleLabelFor?.(c)}
+                    onLog={onLog}
+                    onOpenSettings={onOpenSettings}
+                  />
+                )
+              }
 
-                The person whose turn it is leads, but the other is always
-                available: doing it out of turn is normal and must not be
-                harder to record than doing it in turn.
-              */}
-              <div className="panel-row__whodunit">
-                {people.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={turn && turn.id === p.id ? 'whodunit whodunit--turn' : 'whodunit'}
-                    onClick={() => onLog?.(c, p.id)}
-                    aria-label={`${p.display_name} did ${c.title}`}
-                  >
-                    {initialsForPerson(p)}
-                  </button>
-                ))}
-              </div>
+              const done = choreIsDone(c)
+              const creditedTo = done && last?.completed_by ? personFor(last.completed_by) : null
 
-              <button
-                className="panel-row__remove"
-                onClick={() => onRemove(c)}
-                aria-label={`Remove ${c.title}`}
-              >
-                ×
+              return (
+                <ChoreRow
+                  key={c.id}
+                  chore={c}
+                  done={done}
+                  creditedTo={creditedTo}
+                  initials={creditedTo ? initialsForPerson(creditedTo) : undefined}
+                  when={scheduleLabelFor?.(c)}
+                  draggingId={draggingId}
+                  onToggle={() => onToggle(c)}
+                  onDragStart={onDragStart}
+                  onOpenSettings={onOpenSettings}
+                />
+              )
+            })}
+          </section>
+        ))}
+
+        {/* Inside the scroll on purpose: a long palette costs the list
+            nothing, because it scrolls away with the chores rather than
+            stealing height from them. */}
+        {commonChores.length > 0 && (
+          <div className="panel-quick">
+            {commonChores.map((title) => (
+              <button key={title} className="panel-quick__chip" onClick={() => onAdd(title)}>
+                {title}
               </button>
-            </div>
-          )
-        }
-
-        const scheduled = isScheduled?.(c) ?? false
-        const done = choreIsDone(c)
-        const creditedTo = done && last?.completed_by ? personFor(last.completed_by) : null
-
-        // Four states to tell apart, so they are split across two channels
-        // rather than crammed into one: the tick carries done/not-done, and
-        // the label carries scheduled/unscheduled. A scheduled chore names
-        // its day; an unscheduled one says so plainly instead of going
-        // blank, because blank reads as "no information" rather than "not
-        // scheduled".
-        const when = scheduleLabelFor?.(c)
-
-        return (
-          <div
-            key={c.id}
-            className={[
-              'panel-row',
-              scheduled ? 'panel-row--scheduled' : 'panel-row--loose',
-              draggingId === c.id ? 'is-dragging' : '',
-            ].filter(Boolean).join(' ')}
-          >
-            {/* A handle, not a long press on the row. touch-action: none
-                here is what stops iPadOS reading the drag as a scroll of
-                the list, while the rest of the row still scrolls. */}
-            <button
-              type="button"
-              className="panel-row__grip"
-              aria-label={`Reschedule ${c.title}`}
-              onPointerDown={(e) => onDragStart?.(c, e)}
-            >
-              <span aria-hidden="true">⠿</span>
-            </button>
-
-            {/* `when` deliberately not passed: it is rendered below as a
-                tappable control instead, and showing it twice made the row
-                read as two different facts. */}
-            <ChecklistRow
-              id={c.id}
-              label={c.title}
-              done={done}
-              person={creditedTo ?? undefined}
-              initials={creditedTo ? initialsForPerson(creditedTo) : undefined}
-              onToggle={() => onToggle(c)}
-            />
-
-            {/* Drag was the only way to put a chore on a day, which on a
-                wall-mounted iPad means hauling a row from a scrolling dock
-                panel up across the whole screen to a target that may not
-                even be on screen. Dragging still works exactly as it did;
-                this is simply a second door, and the only one that exists
-                for anyone who cannot drag. */}
-            <button
-              type="button"
-              className="panel-row__when"
-              onClick={() => onReschedule?.(c)}
-              aria-label={`Change when ${c.title} happens`}
-            >
-              {when}
-            </button>
-
-            <button
-              className="panel-row__remove"
-              onClick={() => onRemove(c)}
-              aria-label={`Remove ${c.title}`}
-            >
-              ×
-            </button>
+            ))}
           </div>
-        )
-      })}
+        )}
+      </div>
 
-      {/* Full mode only, on purpose: compact is a four-chip summary read from
-          across the room, and adding tap targets to it would turn a glance
-          into a control panel.
-
-          These sit inside .panel-rows, which scrolls, so a long palette
-          costs the list nothing — it scrolls with the chores rather than
-          stealing height from them. */}
-      {commonChores.length > 0 && (
-        <div className="panel-quick">
-          {commonChores.map((title) => (
-            <button key={title} className="panel-quick__chip" onClick={() => onAdd(title)}>
-              {title}
-            </button>
-          ))}
-        </div>
-      )}
-
+      {/* Outside the scroll, unlike the palette. Capture was the least
+          reachable control in the panel — below every chore and below the
+          palette — so adding a chore to a full list meant scrolling to the
+          bottom of it first. Pinned, it costs one row of list height and is
+          always exactly where it was last time. */}
       <AddRow placeholder="Add a chore" onAdd={onAdd} />
-    </div>
+
+      {pendingCount === 0 && choreCount > 0 && (
+        <p className="panel-rows__footnote">Nothing left this week.</p>
+      )}
+    </>
   )
 }

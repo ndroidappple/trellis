@@ -254,19 +254,39 @@ link. Settled the hard way; the constraints below are all load-bearing.
   brainstormed, not decided or implemented).
 - Person avatars: direction settled in `docs/backlog-person-avatars.md`,
   blocked on Nick supplying a photo of each of them.
-- **The recipe enrichment in `008` was never run.** The migration added
-  `description`, `cuisine`, `tags`, `meal_types`, `prep_minutes`,
-  `total_minutes`, `source_url`, `image_url`, ingredient `normalized_name` /
-  `ingredient_category` / `preparation`, and `recipe_field_provenance` — and
-  every one of them is empty across all 18 recipes (`enrichment_status` is
-  `pending` on all 18). The recipe book therefore reads title, servings,
-  cook time, ingredients and steps, and honestly shows nothing where there is
-  nothing. It gets substantially richer the day phase 1D of Feature #1 in
-  `docs/feature-backlog.md` actually runs; no UI work is needed to absorb it.
+- **The enrichment ran** (`010_recipe_enrichment_run.sql`, applied to the live
+  project). 16 descriptions, 15 cuisines, 16 tag sets, 16 meal-type sets, all
+  127 ingredients normalised and categorised, 8 preparations extracted from
+  text that already said them. `enrichment_status` is now 13 `enriched` /
+  5 `needs_review` / 0 `pending`.
+
+  **What it deliberately left null, and why it should stay that way.** No
+  `prep_minutes` or `total_minutes` for any recipe, no `servings`, `effort` or
+  `cook_minutes` for the ones missing them, no steps for the five without, no
+  `source_url`. 008's own verification notes call these Ed's decisions rather
+  than lost facts, and the book renders an estimated minute count identically
+  to a measured one — so an invented "35 min" is indistinguishable from a real
+  one. If estimates are ever wanted, the UI needs to show an estimate *as* an
+  estimate first. Don't quietly fill these in a later pass.
+
+  `trellis_may_enrich(recipe_id, field)` is the re-run gate: it asks whether a
+  field is held by something outranking `ai_enrichment` before writing, so a
+  second pass overwrites its own previous answer and skips anything a human
+  has since corrected. 008's trigger only refuses a downgrade *at write time*,
+  which would abort a whole re-run; this makes the skip a query instead.
+  Verified by test: a description marked `user_supplied` survives a re-run.
+
+  One wrinkle worth knowing: 008's backfill set `normalization_source =
+  'existing'` on all 127 ingredient rows, but that column describes the
+  *normalisation*, and those columns were null. Read strictly by rank,
+  `existing` (35) outranks `ai_enrichment` (20) and no ingredient could ever
+  be normalised. 010 therefore gates ingredients on `normalized_name is null`
+  — the gap itself — which is what 008's prose intended.
 - Five recipes have zero steps (Asian Beef Udon Stir-Fry, Turkey Rosso Pesto
   Protein Pasta, Protein Berry Smoothie, Filthy cabbage, Steak salad) and two
-  of those have zero ingredients. The book's "Needs work" filter exists to
-  find them; cook mode is disabled with a reason rather than hidden.
+  of those have zero ingredients. These are the five `needs_review` rows. The
+  book's "Needs work" filter exists to find them; cook mode is disabled with a
+  reason rather than hidden. What they need is Ed, not another model pass.
 - Recipe images: nothing to build in the schema, everything to decide about
   sourcing. Written up in `docs/backlog-recipe-images.md`. Recipe artwork must
   stay inside sheets and off the always-on board (image retention).

@@ -143,6 +143,26 @@
   color: var(--ink);
 }
 
+/* Labels, not controls. Deliberately quieter than .chip so nobody tries to
+   tap one — and above the type floor anyway, because they carry meaning. */
+.recipe__tags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recipe__tags li {
+  background: var(--meal-tint);
+  border: 1px solid var(--meal-rule);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: var(--size-min);
+  color: var(--ink-soft);
+}
+
 .recipe__notes {
   margin: 0;
   font-size: 19px;

@@ -243,6 +243,17 @@ export function RecipeDetail({
 
       {recipe.description && <p className="recipe__description">{recipe.description}</p>}
 
+      {/* Read-only, and not chips — a chip in this codebase is something you
+          tap. These are labels the enrichment pass attached, and tapping one
+          would promise a filtered view the book doesn't have yet. */}
+      {recipe.tags?.length > 0 && (
+        <ul className="recipe__tags">
+          {recipe.tags.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+      )}
+
       {recipe.notes && <p className="recipe__notes">{recipe.notes}</p>}
 
       <div className="sheet__section">

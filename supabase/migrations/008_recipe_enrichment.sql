@@ -235,8 +235,22 @@ alter table recipe_ingredients add  constraint recipe_ingredients_normalized_low
 -- A composite foreign key makes the mismatch unrepresentable. No trigger, no
 -- endpoint check, no reliance on the caller getting it right.
 
-alter table recipes drop constraint if exists recipes_id_household_key;
-alter table recipes add  constraint recipes_id_household_key unique (id, household_id);
+-- Add-if-missing rather than the drop-then-add used everywhere else in this
+-- file, because this one has dependents. Three foreign keys below point at
+-- it, so a second run of this migration would fail on the DROP with
+-- "cannot drop constraint ... because other objects depend on it" — which
+-- would make the file's promise of being safe to re-run false exactly when
+-- someone needed it to be true.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'recipes_id_household_key'
+      and conrelid = 'recipes'::regclass
+  ) then
+    alter table recipes add constraint recipes_id_household_key unique (id, household_id);
+  end if;
+end $$;
 
 alter table recipe_ingredients drop constraint if exists recipe_ingredients_recipe_id_fkey;
 alter table recipe_ingredients drop constraint if exists recipe_ingredients_recipe_household_fkey;
@@ -289,11 +303,33 @@ declare
   rec    record;
   n      int;
 begin
-  -- NEW is unassigned in a DELETE trigger, so TG_OP decides which to read.
-  if tg_op = 'DELETE' then
-    target := case tg_table_name when 'recipes' then old.id else old.recipe_id end;
+  -- Nested IFs rather than a CASE expression, and the reason is not style.
+  --
+  -- One function backs triggers on two tables, so NEW and OLD are generic
+  -- PL/pgSQL records whose fields resolve at runtime against whatever row
+  -- type the invocation actually has. A CASE is handed to the SQL engine as
+  -- a single expression, so *every* field reference inside it must resolve —
+  -- including the branch that will never be taken. Firing on recipes, where
+  -- NEW has no recipe_id, therefore failed outright:
+  --
+  --   ERROR: record "new" has no field "recipe_id"
+  --
+  -- Separate IF statements make each field access its own expression,
+  -- resolved only against the row type it is valid for.
+  --
+  -- NEW is also unassigned in a DELETE trigger, so TG_OP picks the record.
+  if tg_table_name = 'recipes' then
+    if tg_op = 'DELETE' then
+      target := old.id;
+    else
+      target := new.id;
+    end if;
   else
-    target := case tg_table_name when 'recipes' then new.id else new.recipe_id end;
+    if tg_op = 'DELETE' then
+      target := old.recipe_id;
+    else
+      target := new.recipe_id;
+    end if;
   end if;
 
   select * into rec from recipes where id = target;

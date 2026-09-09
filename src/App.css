@@ -240,6 +240,109 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 
 .panel-row > .checklist-row { flex: 1; }
 
+/* The schedule label, promoted from text to a control.
+
+   Deliberately quiet — it looks like the label it replaced until you touch
+   it — because it is a second door onto something dragging already does, not
+   a new obligation. Sized to the 44px floor rather than --tap-min for the
+   same reason .panel-row__remove is. */
+.panel-row__when {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: var(--size-min);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.panel-row__when:active {
+  border-color: var(--rule);
+  background: var(--row-face);
+  color: var(--ink);
+}
+
+/* --- episodic chores ---------------------------------------------------
+
+   No checkbox and no drag handle, because neither means anything here: the
+   dishwasher has no day to be dragged onto and no done-ness to tick. The row
+   is a log line plus two people. */
+
+.panel-row--episodic {
+  border-left: 3px solid var(--person-a);
+  padding-left: 7px;
+  min-height: var(--tap-min);
+}
+
+.panel-row__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.panel-row__title {
+  font-size: var(--size-row);
+  color: var(--ink);
+}
+
+.panel-row__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--size-min);
+  color: var(--ink-soft);
+}
+
+/* Whose turn it is, given the weight the answer deserves — this is the line
+   the household is actually arguing about. */
+.panel-row__turn {
+  color: var(--person-a);
+  font-weight: 600;
+}
+
+.panel-row__whodunit {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+}
+
+/* One per person. A full --tap-min target: this is the primary action of the
+   row, pressed with a wet hand next to a sink. */
+.whodunit {
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: var(--row-face);
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The one whose turn it is leads. The other stays fully available and fully
+   legible — doing it out of turn is normal, and must not be the harder tap. */
+.whodunit--turn {
+  background: var(--person-a);
+  border-color: var(--person-a);
+  color: var(--person-ink);
+}
+
+.whodunit:active {
+  transform: scale(0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .whodunit:active { transform: none; }
+}
+
 .panel-row__remove {
   flex-shrink: 0;
   /* Below var(--tap-min) on purpose — it's a secondary, low-frequency

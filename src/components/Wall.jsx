@@ -14,11 +14,15 @@ import {
 import { daysInYear, daysLeftInYear, dayOfYear, fiscalWeek, yearProgress } from '../lib/year'
 import { groceryLines, weekCost } from '../lib/cost'
 import {
+  agoLabel,
   choreOccurrenceDate,
   choreScheduleLabel,
+  isEpisodic,
   isScheduled,
+  nextTurn,
   schedulePatchFor,
   unschedulePatch,
+  WEEKDAY_NAMES,
 } from '../lib/chores'
 import { useChoreDrag } from '../hooks/useChoreDrag'
 import { useToday } from '../hooks/useToday'
@@ -194,6 +198,7 @@ export default function Wall({ profile, people }) {
   const [budget, setBudget] = useState(12000)
   const [editing, setEditing] = useState(null)
   const [mealEditing, setMealEditing] = useState(null) // an on_date string, or null
+  const [reschedulingChore, setReschedulingChore] = useState(null)
   const [bookOpen, setBookOpen] = useState(false)
   const [bookRecipes, setBookRecipes] = useState([])
   const [bookLoading, setBookLoading] = useState(false)
@@ -316,12 +321,17 @@ export default function Wall({ profile, people }) {
   )
 
   const occurrenceFor = useCallback(
-    (chore) => choreOccurrenceDate(chore, anchorWeekStart),
-    [anchorWeekStart]
+    (chore) => choreOccurrenceDate(chore, anchorWeekStart, today),
+    [anchorWeekStart, today]
   )
 
   const choreIsDone = useCallback(
     (chore) => {
+      // An episodic chore has no done-ness to report. It is a log, and the
+      // panel renders it as one; answering "is the dishwasher done" with a
+      // boolean is the category error this whole slice removes.
+      if (isEpisodic(chore)) return false
+
       const on = occurrenceFor(chore)
       // A one-off with no date has no occurrence: any completion at all
       // means it is done, forever, which is what 'once' has always meant.
@@ -418,6 +428,40 @@ export default function Wall({ profile, people }) {
   }
 
   /**
+   * Logging an episodic chore: someone did it, today, and we know which
+   * someone because they said so by tapping their own initials.
+   *
+   * This is the fix for the quiet correctness bug in toggleChore. That writes
+   * completed_by: profile.id — whoever the session belongs to — which is
+   * right on a phone and wrong on the wall, where one signed-in account is
+   * shared by two people standing in front of it. A log built to answer "who
+   * ran the dishwasher last" would have answered with the same name forever.
+   *
+   * Upsert rather than insert: the unique key is (chore_id, on_date), so
+   * tapping the other person's initials corrects the credit instead of
+   * failing on a duplicate. Tapping the same one twice is a no-op.
+   */
+  async function logChore(chore, personId) {
+    const on = toDateInputValue(today)
+
+    const { error } = await supabase
+      .from('chore_completions')
+      .upsert(
+        {
+          household_id: profile.household_id,
+          chore_id: chore.id,
+          on_date: on,
+          completed_by: personId,
+          completed_at: new Date().toISOString(),
+        },
+        { onConflict: 'chore_id,on_date' }
+      )
+
+    if (error) setError(error.message)
+    loadChoreLog()
+  }
+
+  /**
    * Dropping a chore on a day. A weekly chore lands on that weekday every
    * week; a one-off lands on that date. Dropping it back on the panel
    * unschedules it without otherwise touching it.
@@ -426,6 +470,12 @@ export default function Wall({ profile, people }) {
     async (chore, target) => {
       const patch =
         target.kind === 'backlog' ? unschedulePatch(chore) : schedulePatchFor(chore, target.date)
+
+      // schedulePatchFor returns null for an episodic chore: it has no day to
+      // land on, and 012's constraint would reject the write anyway. Dropping
+      // one on the grid does nothing, visibly, rather than appearing to work
+      // until the next refetch undoes it.
+      if (!patch) return
 
       setChores((cs) => cs.map((c) => (c.id === chore.id ? { ...c, ...patch } : c)))
 
@@ -851,7 +901,7 @@ export default function Wall({ profile, people }) {
   const swallowNextClick = useRef(false)
 
   function handlePressStart(e) {
-    if (editing || mealEditing || dayViewing || settingsOpen || bookOpen) return
+    if (editing || mealEditing || dayViewing || settingsOpen || bookOpen || reschedulingChore) return
     // Holding a "+" button shouldn't also summon settings behind the dialog
     // it opens.
     if (e.target.closest?.('button, input, a, label')) return
@@ -1036,15 +1086,21 @@ export default function Wall({ profile, people }) {
     choreIsDone,
     personFor,
     initialsForPerson,
+    people: orderedPeople,
     onToggle: toggleChore,
+    onLog: logChore,
     onAdd: addChore,
     onRemove: removeChore,
+    onReschedule: setReschedulingChore,
     commonChores,
     onDragStart: startDrag,
     draggingId: drag?.chore?.id ?? null,
     scheduleLabelFor: choreScheduleLabel,
     isScheduled,
+    isEpisodic,
     lastDoneFor,
+    turnFor: (chore, last) => nextTurn(chore, last, orderedPeople),
+    agoFor: (iso) => agoLabel(iso, today),
   }
 
   const shoppingPanelProps = {
@@ -1197,6 +1253,34 @@ export default function Wall({ profile, people }) {
         <CookMode recipe={openRecipe} detail={openRecipe} onExit={() => setCooking(false)} />
       )}
 
+      {reschedulingChore && (
+        <ChoreScheduler
+          chore={reschedulingChore}
+          onPick={async (day) => {
+            const patch =
+              day == null
+                ? unschedulePatch(reschedulingChore)
+                : { scheduled_day: day, due_on: null }
+
+            setChores((cs) =>
+              cs.map((c) => (c.id === reschedulingChore.id ? { ...c, ...patch } : c))
+            )
+            setReschedulingChore(null)
+
+            const { error: patchError } = await supabase
+              .from('chores')
+              .update(patch)
+              .eq('id', reschedulingChore.id)
+
+            if (patchError) {
+              setError(patchError.message)
+              loadChores()
+            }
+          }}
+          onClose={() => setReschedulingChore(null)}
+        />
+      )}
+
       {drag && (
         <div
           className="chore-ghost"
@@ -1306,6 +1390,64 @@ function DayView({
         ))}
       </div>
     </Sheet>
+  )
+}
+
+/**
+ * Picking the day a chore lands on, by tapping.
+ *
+ * Dragging remains the fast path and is untouched. This exists because drag
+ * was the *only* path: on a wall-mounted iPad that means hauling a row out of
+ * a scrolling dock panel, up across a 13" screen, onto a day row that may be
+ * scrolled out of view — and it is unavailable entirely to anyone who cannot
+ * make that gesture. Seven buttons are slower for the person who can drag and
+ * possible for the person who cannot.
+ *
+ * One-offs are not offered a weekday. They carry a date, which wants a
+ * calendar rather than seven buttons; dragging one onto a day in the grid
+ * still works and remains the way to move it.
+ */
+function ChoreScheduler({ chore, onPick, onClose }) {
+  const oneOff = chore.recurrence === 'once'
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
+        <h2>{chore.title}</h2>
+
+        {oneOff ? (
+          <p className="muted">
+            This is a one-off, so it falls on a date rather than a weekday. Drag it
+            onto a day in the week to move it.
+          </p>
+        ) : (
+          <>
+            <p className="muted">Which day does this happen?</p>
+            <div className="chips">
+              {WEEKDAY_NAMES.map((name, day) => (
+                <button
+                  key={name}
+                  className={chore.scheduled_day === day ? 'chip on' : 'chip'}
+                  aria-pressed={chore.scheduled_day === day}
+                  onClick={() => onPick(day)}
+                >
+                  {name.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="actions">
+          {!oneOff && (
+            <button className="ghost" onClick={() => onPick(null)}>
+              Any day
+            </button>
+          )}
+          <button onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
   )
 }
 

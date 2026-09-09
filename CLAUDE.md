@@ -123,7 +123,11 @@ reskin — `Wall.jsx` was rebuilt to feed real data into the new components.
 - **Chore reassignment by tapping the assignee badge** — `ChecklistRow`
   (from the design bundle) doesn't expose a second tap zone for this: the
   whole row's click toggles done/not-done. The badge shows who's assigned,
-  but you can't tap it to cycle to someone else anymore.
+  but you can't tap it to cycle to someone else anymore. `assignee_id` is
+  null on every chore and probably always will be: this household alternates
+  chores rather than assigning them, which is what `rotates` is for (below).
+  On a done chore the badge now shows who actually *did* it, from the
+  completion log, rather than who it was assigned to.
 - **Landscape iPad orientation** — row/panel minimum heights (see below)
   are tuned for portrait (1024×1366pt, the "12.9" iPad in portrait" this
   was built for per the original design comments). In landscape the dock
@@ -186,6 +190,54 @@ happened to the day rows: buttons cut in half, today's weekday label
 invisible, on a Mac browser window shorter than the iPad this was tuned
 for). If you add new flex children to `Board`/`WeekGrid`/`SectionPanel`,
 give them a real computed minimum, not `min-height: 0`.
+
+## Chores
+
+Three recurrences, and the third exists because the first two could not
+describe the chore this household does most.
+
+- **`weekly`** — a rhythm. One occurrence per week, keyed to `scheduled_day`
+  or, unscheduled, to the week's Sunday. Renders as a checkbox.
+- **`once`** — an errand on a date (`due_on`). Checkbox.
+- **`anytime`** (012) — *episodic*. No schedule, no done-ness. Its completions
+  key to **today**, so four dishwasher runs in a week are four rows rather
+  than one. Renders as a log line plus one button per person.
+
+**Why `anytime` had to exist.** Nick and Ed alternate the dishwasher three or
+four times a week on no schedule. As a `weekly` chore it had exactly one
+tickable occurrence per week, so three of four runs could not be recorded and
+which one survived was arbitrary. The data agreed: four chores, zero
+assignees, and not one completion ever logged. A control that discards most
+of what you tell it teaches you to stop using it.
+
+**Whose turn is derived, never stored.** `chores.rotates` says a chore
+alternates; `nextTurn()` in `src/lib/chores.js` answers who is up by asking
+who did it last. A `next_person_id` column would be a second source of truth
+that drifts from the log the first time someone ticks out of order. `nextTurn`
+returns null — and the UI says nothing — when there is no history, the chore
+does not rotate, or the last person has left the household. It never guesses.
+
+**The wall cannot tell who tapped, so it asks.** `toggleChore` credits
+`profile.id`, which is right on a phone and wrong on the wall: one signed-in
+session shared by two people would have credited every completion to the same
+name forever, quietly poisoning both the log and the future scoreboard
+(Feature #6). Episodic rows therefore have one button per person instead of a
+checkbox — attribution and completion in the same tap. `logChore` upserts on
+`(chore_id, on_date)`, so tapping the other person corrects the credit rather
+than failing on a duplicate.
+
+**Scheduling has two doors.** Dragging (`useChoreDrag`) is unchanged and is
+still the fast path. Tapping the day label opens `ChoreScheduler` — seven
+weekday buttons — because drag was the *only* path, and on a wall-mounted
+iPad it means hauling a row out of a scrolling dock panel, across a 13"
+screen, onto a target that may be scrolled out of view. It was also the only
+path, full stop, for anyone who cannot make that gesture. One-offs are not
+offered weekdays; they carry a date, which wants a calendar, so dragging
+remains the way to move them.
+
+An `anytime` chore has no day at all: `schedulePatchFor` returns null and a
+drop on the grid does nothing visibly, rather than appearing to work until
+the next refetch undoes it.
 
 ## Authentication
 

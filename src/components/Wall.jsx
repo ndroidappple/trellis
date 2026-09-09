@@ -536,8 +536,16 @@ export default function Wall({ profile, people }) {
       is_leftover: false,
     }
     const { error } = await supabase.from('meal_plan').upsert(payload, { onConflict: 'household_id,on_date,slot' })
-    if (error) setError(error.message)
-    else loadMeals()
+    if (error) return setError(error.message)
+
+    setError(null)
+    loadMeals()
+
+    // Choosing the meal *is* the task. Routing back into an editor
+    // afterwards made the common case — put a recipe on a night — end in a
+    // dialog whose loudest button offered to undo it. The chip landing on
+    // the day is the confirmation; anyone who wants Cook/Leftovers taps it.
+    setMealEditing(null)
   }
 
   async function toggleMealLeftover(entry) {
@@ -1151,16 +1159,12 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
   const [picking, setPicking] = useState(!entry?.recipe)
   const [q, setQ] = useState('')
 
-  useEffect(() => {
-    if (entry?.recipe) setPicking(false)
-  }, [entry])
-
   if (picking) {
     const shown = recipes.filter((r) => r.title.toLowerCase().includes(q.trim().toLowerCase()))
 
     return (
       <Sheet
-        title="Pick a meal"
+        title={entry?.recipe ? 'Change meal' : 'Pick a meal'}
         subtitle={dayLabel(date)}
         onClose={entry?.recipe ? () => setPicking(false) : onClose}
       >
@@ -1185,6 +1189,9 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
                   : ''}
                 {r.cook_minutes ? ` · ${r.cook_minutes} min` : ''}
                 {r.status === 'conditional' ? ' · conditional' : ''}
+                {/* Changing a meal without being shown which one is
+                    currently on the plan means picking blind. */}
+                {r.id === entry?.recipe?.id ? ' · on the plan now' : ''}
               </span>
             </button>
           ))}
@@ -1224,14 +1231,21 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
           </button>
         </div>
 
+        {/* .card button is filled green by default, so whichever action
+            carries no class reads as the one to press. That was "Change
+            meal", which meant the strongest signal on screen, immediately
+            after successfully planning a night, was an offer to undo it.
+            Done is the affirmative exit and takes the emphasis; the other
+            two are things you occasionally want, not things to be nudged
+            towards. */}
         <div className="actions">
-          <button onClick={() => setPicking(true)}>Change meal</button>
+          <button className="ghost" onClick={() => setPicking(true)}>
+            Change meal
+          </button>
           <button className="ghost danger" onClick={onClear}>
             Clear
           </button>
-          <button className="ghost" onClick={onClose}>
-            Close
-          </button>
+          <button onClick={onClose}>Done</button>
         </div>
       </div>
     </div>

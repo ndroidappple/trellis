@@ -74,10 +74,18 @@
   gap: 8px;
   overflow-y: auto;
   overscroll-behavior: contain;
+
+  /* Keeps the row's × clear of the scrollbar. iPadOS draws overlay
+     scrollbars on top of content and reserves nothing for them, so
+     scrollbar-gutter does nothing there — real padding is the only thing
+     that moves the × out from under the bar you are dragging. */
+  padding-right: 12px;
 }
 
 .panel-list {
   flex: 1;
+  /* Same reason as .panel-rows above — the shopping rows carry an × too. */
+  padding-right: 12px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-auto-rows: min-content;

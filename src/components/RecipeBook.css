@@ -529,6 +529,16 @@
   color: var(--ink-soft);
 }
 
+/* The one-round-trip gap between asking for a method and having one. Same
+   surface, same type size, centred — so it reads as cook mode arriving rather
+   than as a different screen that flashed past. */
+.cook--loading {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
 .cook__body {
   flex: 1 1 auto;
   min-height: 180px;
@@ -545,17 +555,38 @@
 /* Advancing by tapping the step, so it has to look touchable — but barely.
    This is a 40px-type reading surface first and a control second, and a
    button-shaped panel around the instruction would read as a dialog. */
-.cook__body.is-tappable {
+/* The reading area is two tap zones: the left 30% goes back, the rest goes
+   on. BACK_ZONE in RecipeBook.jsx owns that number — if it changes, the four
+   percentages below change with it, or the highlight will draw an edge in a
+   different place from the one the tap is judged against, which is worse than
+   no highlight at all.
+
+   Painted as a background gradient rather than as positioned children,
+   because this element scrolls: a long step overflows, and an absolutely
+   positioned overlay inside a scroll container travels up the screen with the
+   text. A background is laid against the element's own box and stays put
+   while the words move under it. */
+.cook__body {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--dur-state) var(--ease-standard);
 }
 
 /* The acknowledgement matters more here than almost anywhere else in the app:
    you are looking at it from a step back with wet hands, and the only other
-   confirmation you get is the words changing. */
-.cook__body.is-tappable:active {
-  background: var(--chip-face);
+   confirmation you get is the words changing.
+
+   No transition on this one. Everywhere else a state change gets --dur-state
+   so the eye can follow it; here the whole job is to answer "did that
+   register" before you have finished lifting your finger, and 140ms of fade
+   is 140ms of not knowing. The hard edge at 30% is the second half of the
+   job — it is the only moment the boundary is ever drawn, so it should be a
+   line and not a blur. */
+.cook__body[data-press='back'] {
+  background: linear-gradient(to right, var(--chip-face) 0 30%, transparent 30%);
+}
+
+.cook__body[data-press='next'] {
+  background: linear-gradient(to right, transparent 0 30%, var(--chip-face) 30%);
 }
 
 .cook__hint {

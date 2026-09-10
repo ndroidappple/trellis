@@ -14,6 +14,16 @@ export interface DayData {
   shortDayOfWeek: string;
   isToday: boolean;
   events: EventChipData[];
+  /**
+   * Whether this day still has a meal slot free. Computed by Wall, because
+   * how many slots a day has and which are taken is a fact about the meal
+   * plan — the grid only needs to know whether to offer the button.
+   *
+   * It used to be derived here as "no meal chip on this row", which was the
+   * right answer while a day could only hold a dinner. Once it can hold four,
+   * that test hides the button as soon as breakfast is planned.
+   */
+  canAddMeal?: boolean;
 }
 
 interface Props {
@@ -51,7 +61,6 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
   const limit = visibleChipCount(level);
   const shown = day.events.slice(0, limit);
   const hidden = day.events.length - shown.length;
-  const hasMeal = day.events.some((e) => e.kind === 'meal');
 
   const openDay = () => onOpenDay?.(day.date);
 
@@ -128,14 +137,20 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
           </span>
         )}
 
-        {!loading && onAddMeal && !hasMeal && (
+        {/* "Meal", not "Dinner". The button wrote a dinner and said so, which
+            was honest right up until the day could hold a breakfast, a lunch
+            and a snack as well — at which point the label would have been the
+            only thing still insisting there was one meal a night. Dinner is
+            still what it pre-selects; it just no longer claims to be all a day
+            can have. */}
+        {!loading && onAddMeal && day.canAddMeal !== false && (
           <button
             type="button"
             className="day-row__add-meal"
-            aria-label={`Plan dinner on ${day.dayOfMonth}`}
+            aria-label={`Plan a meal on ${day.dayOfMonth}`}
             onClick={only(() => onAddMeal(day.date))}
           >
-            + Dinner
+            + Meal
           </button>
         )}
 

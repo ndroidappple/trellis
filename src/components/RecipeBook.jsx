@@ -504,6 +504,24 @@ function EditHelp({ onClose }) {
 /* -------------------------------------------------------------- cook mode */
 
 /**
+ * How much of the reading area, measured from the left edge, means "back".
+ *
+ * Forward is the overwhelmingly common move, so it keeps the larger share and
+ * the whole right-hand side of the screen — which is also the side a
+ * right-handed cook's hand is already on. Back is the correction, and a
+ * correction wants a target you can hit without aiming rather than the biggest
+ * one on screen.
+ *
+ * 30% of a 12.9" iPad in portrait is about 300pt: far above anything anyone
+ * misses, and comfortably clear of the middle, where a tap meant for "next"
+ * would otherwise have to be placed with care. Below about a quarter the zone
+ * starts to need looking at, which defeats the point of the mode; much above a
+ * third and the forward tap — the one made twenty times a recipe — starts
+ * feeling hemmed in.
+ */
+const BACK_ZONE = 0.3
+
+/**
  * One step at a time, at a size you can read from the other side of a hob,
  * with the ingredients one tap away.
  *
@@ -513,13 +531,30 @@ function EditHelp({ onClose }) {
  * actual problem this feature exists to solve. iOS releases the lock
  * whenever the tab is hidden, so it's re-requested on visibilitychange —
  * the same reason useToday listens there.
+ *
+ * The ambient screen timeout is suspended for as long as this is open. The two
+ * features want opposite things from the same screen and cook mode wins: it is
+ * the one surface in Trellis whose entire purpose is to keep showing you
+ * something while you are demonstrably not touching the iPad.
  */
-export function CookMode({ recipe, detail, onExit }) {
+export function CookMode({ recipe, detail, initialIndex = 0, onIndexChange, onExit }) {
   const steps = detail?.steps ?? []
   const ingredients = detail?.ingredients ?? []
-  const [index, setIndex] = useState(0)
+
+  // Clamped, because the remembered step comes from localStorage and the
+  // recipe may have been edited — or replaced entirely — since it was written.
+  const [index, setIndex] = useState(() =>
+    Math.min(Math.max(0, initialIndex), Math.max(0, steps.length - 1))
+  )
   const [showIngredients, setShowIngredients] = useState(false)
+  const [pressing, setPressing] = useState(null)
   const lockRef = useRef(null)
+
+  // Reported rather than written from in here, so the one place that owns
+  // "where were we" is the one place that can also decide to forget it.
+  useEffect(() => {
+    onIndexChange?.(index)
+  }, [index, onIndexChange])
 
   useEffect(() => {
     if (!('wakeLock' in navigator)) return
@@ -553,42 +588,86 @@ export function CookMode({ recipe, detail, onExit }) {
 
   const step = steps[index]
   const last = index === steps.length - 1
+  const first = index === 0
 
   /*
-   * Tap the step to go to the next one.
+   * Tap the step to move through the recipe: left third back, the rest onward.
    *
-   * The Next button is 52px in a corner and your hands are covered in raw
-   * chicken. The step text is most of the screen, so it is the target you can
-   * actually hit without looking — and without wiping your hands first, which
-   * is the moment people put the iPad down and stop using cook mode at all.
+   * The buttons in the footer are 52px in a corner and your hands are covered
+   * in raw chicken. The step text is most of the screen, so it is the target
+   * you can actually hit without looking — and without wiping your hands
+   * first, which is the moment people put the iPad down and stop using cook
+   * mode at all. Going *back* had only the corner button until now, so the one
+   * move you make when you have missed something was the one move that
+   * required clean hands.
    *
-   * Two things stop it misfiring. The step text scrolls when it is long, so a
-   * drag that happens to end where it started is a scroll and not a tap —
+   * Three things stop it misfiring. The step text scrolls when it is long, so
+   * a drag that happens to end where it started is a scroll and not a tap —
    * hence the same 12px slop the board's long-press uses (LONG_PRESS_SLOP_PX
-   * in Wall.jsx). And it never advances off the last step: "Finish" exits the
-   * mode entirely, which is not something a stray touch should be able to do
-   * halfway through a recipe.
+   * in Wall.jsx). Controls inside the area handle their own taps. And neither
+   * zone ever runs off the end of the recipe: the last step does not advance,
+   * because "Finish" exits the mode entirely and that is not something a stray
+   * touch should do halfway through dinner, and the first step does not go
+   * back to nothing.
    */
   const tapOrigin = useRef(null)
+
+  /** Which half of the reading area a point falls in. */
+  function zoneOf(e) {
+    const box = e.currentTarget.getBoundingClientRect()
+    return e.clientX - box.left < box.width * BACK_ZONE ? 'back' : 'next'
+  }
 
   function beginTap(e) {
     // Controls handle their own taps. Same guard as the board's long press.
     if (e.target.closest?.('button, a, input, label')) return
-    tapOrigin.current = { x: e.clientX, y: e.clientY }
+
+    const zone = zoneOf(e)
+    tapOrigin.current = { x: e.clientX, y: e.clientY, zone }
+
+    // The acknowledgement is per-zone now. Lighting the whole reading area on
+    // a tap that is about to go backwards would say "yes" to the wrong
+    // question — from a step back with wet hands, that flash is most of the
+    // feedback you get before the words change.
+    setPressing(zone === 'back' ? (first ? null : 'back') : last ? null : 'next')
+  }
+
+  function clearPress() {
+    tapOrigin.current = null
+    setPressing(null)
   }
 
   function endTap(e) {
     const origin = tapOrigin.current
-    tapOrigin.current = null
-    if (!origin || last) return
+    clearPress()
+    if (!origin) return
 
     const moved =
       Math.abs(e.clientX - origin.x) > TAP_SLOP_PX ||
       Math.abs(e.clientY - origin.y) > TAP_SLOP_PX
     if (moved) return
 
-    setIndex((i) => Math.min(steps.length - 1, i + 1))
+    // Judged from where the finger went down, not where it came up. A tap that
+    // starts in one zone and drifts a few pixels into the other is one tap, and
+    // it means whatever it meant when it landed.
+    if (origin.zone === 'back') {
+      if (!first) setIndex((i) => Math.max(0, i - 1))
+      return
+    }
+
+    if (!last) setIndex((i) => Math.min(steps.length - 1, i + 1))
   }
+
+  /**
+   * What the zones currently do, said out loud.
+   *
+   * A tap target with no edges is one nobody finds, and now there are two of
+   * them side by side. Each half drops out of the sentence at the end of the
+   * recipe it cannot move through, so the line never offers a tap that does
+   * nothing — which is how you learn the zones are real rather than
+   * decorative.
+   */
+  const hints = [!first && 'tap left to go back', !last && 'tap to continue'].filter(Boolean)
 
   return (
     <div className="cook" role="dialog" aria-modal="true" aria-label={`Cooking ${recipe.title}`}>
@@ -597,25 +676,36 @@ export function CookMode({ recipe, detail, onExit }) {
           <p className="cook__recipe">{recipe.title}</p>
           <p className="cook__progress">
             Step {index + 1} of {steps.length}
-            {/* Says so, because a tap target with no edges is one nobody
-                finds. Drops away on the last step, where tapping does
-                nothing. */}
-            {!last && <span className="cook__hint"> · tap to continue</span>}
+            {hints.length > 0 && <span className="cook__hint"> · {hints.join(' · ')}</span>}
           </p>
         </div>
-        <button className="sheet__close" onClick={onExit}>
+        {/* Stepping out, not finishing. The distinction is the whole reason
+            the menu can offer to put you back on step four: "Done" here means
+            something interrupted you, and that is exactly the state worth
+            remembering. */}
+        <button className="sheet__close" onClick={() => onExit(false)}>
           Done
         </button>
       </header>
 
       <div
-        className={last ? 'cook__body' : 'cook__body is-tappable'}
+        className="cook__body"
+        data-back={first ? 'off' : 'on'}
+        data-next={last ? 'off' : 'on'}
+        data-press={pressing ?? 'none'}
         onPointerDown={beginTap}
         onPointerUp={endTap}
-        onPointerCancel={() => {
-          tapOrigin.current = null
-        }}
+        onPointerCancel={clearPress}
+        onPointerLeave={clearPress}
       >
+        {/* Nothing marks the boundary at rest, deliberately. This screen is one
+            40px sentence read from across a kitchen, and a permanent divider
+            down it would be furniture in the middle of the only thing here
+            worth looking at. The press does the teaching instead: putting a
+            finger down lights that zone and draws the edge, which is both the
+            acknowledgement and the lesson — and because a tap is cancelled by
+            travelling 12px, seeing the wrong side light up is something you can
+            still slide out of without it firing. */}
         <p className="cook__step">{step?.body}</p>
       </div>
 
@@ -637,10 +727,10 @@ export function CookMode({ recipe, detail, onExit }) {
         <button className="ghost" onClick={() => setShowIngredients((v) => !v)}>
           {showIngredients ? 'Hide ingredients' : 'Ingredients'}
         </button>
-        <button className="ghost" onClick={() => setIndex((i) => Math.max(0, i - 1))} disabled={index === 0}>
+        <button className="ghost" onClick={() => setIndex((i) => Math.max(0, i - 1))} disabled={first}>
           Back
         </button>
-        <button onClick={() => (last ? onExit() : setIndex((i) => i + 1))}>
+        <button onClick={() => (last ? onExit(true) : setIndex((i) => i + 1))}>
           {last ? 'Finish' : 'Next'}
         </button>
       </div>

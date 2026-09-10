@@ -1244,7 +1244,10 @@ These are **future possibilities, not commitments**.
 
 **Priority:** Medium
 **Category:** Wall Experience / Hardware Care / Delight
-**Status:** Backlog
+**Status:** **Shipped (first version), 9 Sep 2026** — pure ambient, one scene,
+household default plus a per-device override. Deeper versions (per-theme
+scenes, a drifting information layer, weather-reactive) remain backlog and are
+listed under "What shipped, and what did not" below.
 **Depends On:** Nothing to ship a first version. Deeper versions depend on the theme system (#3) and weather (#4).
 **Primary Goal:** After a period of no interaction, replace the board with a slow, quiet animation — protecting the display, calming the room, and giving each Trellis theme a face it wears most of the day.
 
@@ -1449,19 +1452,172 @@ leak memory over a multi-week uptime.
 
 ## 11. Definition of Done
 
-- [ ] The board fades to an ambient scene after a configurable idle period.
-- [ ] Any touch restores the board, and that touch does not activate the
-      control beneath it.
-- [ ] The idle timer survives the iPad sleeping and waking.
-- [ ] The board stays mounted; realtime and the clock hook keep running.
-- [ ] Offline and error states remain visible rather than being covered.
-- [ ] `prefers-reduced-motion` is honoured.
-- [ ] Timeout is configurable, and the wall and a phone can differ.
-- [ ] At least one theme has a finished scene.
-- [ ] A darker night variant follows real local time.
-- [ ] No burn-in-prone static elements in the ambient scene.
-- [ ] Verified running on the actual wall for several days, not just in a
-      browser tab.
+- [x] The board fades to an ambient scene after a configurable idle period.
+      2.4s fade in, `Screensaver.jsx`.
+- [x] Any touch restores the board, and that touch does not activate the
+      control beneath it. Verified: the pointerdown is `preventDefault`ed and
+      the following click is caught capture-phase at the window, so zero
+      clicks reach the page.
+- [x] The idle timer survives the iPad sleeping and waking. `useIdle` stores a
+      last-activity timestamp and compares it against a fresh `Date.now()` on
+      a 15s tick — never one long `setTimeout` — and a wake resets rather than
+      resuming mid-countdown.
+- [x] The board stays mounted; realtime and the clock hook keep running. The
+      scene is a sibling overlay at `z-index: 40`, rendered last in `Wall`.
+- [x] Offline and error states remain visible rather than being covered.
+      `screensaverAllowed` requires `syncState === 'live'` and no error.
+- [x] `prefers-reduced-motion` is honoured — see the note below, because the
+      answer is not the obvious one.
+- [x] Timeout is configurable, and the wall and a phone can differ. Household
+      default in `board_settings.screensaverMin` (no migration — it is jsonb),
+      per-device override in `localStorage`.
+- [x] At least one theme has a finished scene. Classic: a wash plus four
+      drifting fields of light on mutually prime periods.
+- [x] A darker night variant follows real local time (22:00–06:00, and it
+      slows down as well as darkening).
+- [x] No burn-in-prone static elements in the ambient scene. No text at all,
+      and every layer travels most of the screen over its period.
+- [ ] **Verified running on the actual wall for several days, not just in a
+      browser tab.** The only item still open, and it cannot be closed from
+      here. Checked in a browser: the fade, the night variant, the swallowed
+      wake touch, the pause when the document is hidden, and that the drift
+      layers actually move (~4.9px in 2.5s on a 137s period). What a browser
+      cannot tell us is the thing the feature exists for — whether it holds up
+      over weeks without heat, drain or memory growth.
+      **Also still unconfirmed: iPadOS Auto-Lock must be set to Never** (§3),
+      or iPadOS blanks the screen first and none of this is ever seen.
+
+## 12. What shipped, and what did not
+
+**Shipped.** Pure ambient, one scene, per the §6 recommendation.
+
+**Deliberately not shipped, and still backlog:**
+
+- **The drifting information layer** (§6). The recommendation was to build
+  pure ambient first and add it once the motion system works. The motion
+  system now works, so this is the natural next slice — with the constraint
+  from §6 intact: any text must drift and never occupy fixed pixels.
+- **Per-theme scenes** (§7). Blocked on #3 existing at all.
+- **Weather-reactive Sky** (§7). Blocked on #4.
+- **A configurable night hour** (§8). Hardcoded 22:00–06:00. A fourth chip row
+  on a wall dialog to settle a question with one obvious answer in a house
+  where people sleep did not seem worth it. `NIGHT_FROM_HOUR` /
+  `NIGHT_TO_HOUR` in `src/lib/screensaver.js` when it is.
+- **Waking on a realtime data change** (§4, listed there as an open question).
+  Shipped without it, as suggested.
+
+**One decision worth recording, because it went against the brief.**
+
+§5 asks for `prefers-reduced-motion` to be honoured "with a still or near-still
+variant". Built literally, that is a contradiction: the drifting light exists
+*because* it moves, and a still bright highlight parked on the same pixels for
+hours is precisely the image retention this feature was written to prevent —
+the burn-in bug wearing the costume of an accessibility fix.
+
+So under reduced motion the bright shapes are removed altogether rather than
+frozen, leaving a flat, very dark field: nothing moves, and nothing is bright
+enough to leave a mark. The arrival keeps a short fade, since an opacity change
+is not travel and a hard cut still reads as a fault.
+
+---
+
+# Feature #10 — One front door: main menu, cook-mode stepping, meal slots
+
+**Priority:** —
+**Category:** Navigation / Wall Experience
+**Status:** **Shipped, 9 Sep 2026**
+**Primary Goal:** Give the board a single labelled way out of the week, make
+the method reachable from the night it is being cooked, and stop the app
+insisting a day holds exactly one meal.
+
+## 1. What was wrong
+
+Three separate complaints, one underlying cause: the board had no navigation
+model, so every new room was filed wherever there was space.
+
+- **There was no main menu.** The header carried a lone "Recipes" button
+  wedged between the sync dot and the week arrows — a doorway to another room
+  filed among the controls for moving around this one.
+- **Turning a dock section off removed the only route to its page.** The panel
+  head *is* the door, and `SectionPanel` returns null at Off. So a household
+  that switched Shopping off to free board space also lost per-row delete,
+  "clear ticked", and the named list of unpriced ingredients — none of which
+  exist anywhere else. **A layout preference quietly took away data.** This is
+  the one that was a bug rather than a rough edge.
+- **Settings were only behind an undocumented 650ms long-press**, so the way
+  to undo the above was a gesture you had to already know about.
+- **Cook mode sat three layers deep** — open the book, find the recipe among
+  eighteen, press Cook — even on a night the board already knew what dinner
+  was. A search performed for an answer the app was currently displaying.
+- **Back did not mean back.** Opening a recipe from a day view and closing it
+  landed you on the shelf: a screen you had never visited, showing eighteen
+  recipes you had not asked for.
+- **Cook mode forgot its place.** `index` lived in the component, the component
+  unmounted on exit, and re-entering started at step one — on a device whose
+  ErrorBoundary self-reloads after a crash.
+
+## 2. What shipped
+
+- **`MainMenu.jsx`** — one header button, "Menu", replacing "Recipes". A
+  dialog rather than a sheet: it is six rows, and the board showing through
+  behind them is the point. Recipe book, Weekly To Do, Shopping and Settings,
+  each carrying its live count, and each saying so when its panel is switched
+  off on the board.
+- **A cook row at the top of the menu**, when today has a meal with a method
+  written down: straight into cook mode in one tap. It prefers a
+  *half-finished* recipe over a planned one — "Back to step 4" — because
+  stepping out mid-recipe is a stronger statement of intent than planning was.
+  Both are named, never described, since the whole value of the row is
+  confirming it is the right one before committing a tap.
+- **Cook progress in `localStorage`** (`lib/cookProgress.js`), expiring after
+  6 hours so last night's dinner is never offered as resumable this morning.
+  Per-device, not per-household: a cook in progress is a fact about *this
+  screen right now*, and syncing it would have one surface snatch the other's
+  place mid-recipe.
+- **Cook mode steps both ways by tapping.** Left 30% goes back, the rest goes
+  on. Going back previously had only a 52px corner button, so the one move you
+  make when you have missed something was the one move that required clean
+  hands. Nothing marks the boundary at rest — the press lights the zone and
+  draws the edge, which is both the acknowledgement and the lesson, and a tap
+  is still cancelled by travelling 12px, so seeing the wrong side light up is
+  something you can slide out of.
+- **Real meal slots** (`lib/meals.js`). `meal_plan.slot` has accepted
+  breakfast / lunch / dinner / snack since `004_recipes.sql`, with
+  `unique (household_id, on_date, slot)`; the app only ever wrote `'dinner'`.
+  All four are now reachable, the day row button says "+ Meal", and the board
+  shows every slot. **No migration — the schema was already right.**
+
+## 3. Decisions worth keeping
+
+- **Dinner keeps every advantage.** It is pre-selected by `nextFreeSlot`, it
+  sorts where a day puts it, and planning one costs no more taps than before.
+  `MealsCard.jsx`'s original note still holds — "breakfast and lunch are
+  standing routines in this household" — so the other three had to become
+  possible without becoming a tax on the common case.
+- **"+ Meal" was not a rename.** Relabelling alone would have promised four
+  slots and still written one, and `mealEntryFor`'s `slot === 'dinner'` filter
+  would have made any other slot invisible on the board. The label could only
+  tell the truth once the reads and writes did.
+- **The chip meta was wrong twice.** "Cooking tonight" was wrong about the
+  meal the moment there was more than one, and had *already* been wrong about
+  the day — a dinner five days out said "tonight". Now `mealMeta` says the
+  slot, and "· leftovers" when it is.
+- **A slot already holding something stays pickable** in the editor, marked
+  with a `·`. Switching to it is how you change that meal; refusing would be
+  worse. But it must be visible, because the unique constraint means picking a
+  recipe there replaces what is on it.
+
+## 4. Known gaps
+
+- `mealsFor` and the days memo both filter `mealPlan` per day, so a week's
+  render is 7 passes over the plan. Fine at 7–28 rows; worth an index if meal
+  planning ever grows past a week on screen.
+- The menu's cook row picks dinner, or the last planned slot if there is no
+  dinner. It does not consider the time of day — planning a breakfast and a
+  dinner on the same day offers the dinner all morning.
+- `RecipeDetail`'s "Plan a night" still means dinner specifically, which is
+  right for a footer that asks "Which night?" and offers seven days. If meal
+  slots turn out to be used, that footer is the next thing to revisit.
 
 ---
 
@@ -1939,10 +2095,12 @@ Ordered by what should be picked up next, not by feature number.
 | 1 | **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor |
 | 2 | **#6 Chores Scoreboard** | Medium-High | Settle who did what over a period — **unblocked by #9A** |
 | 3 | **#2 Tier 1 remainder** | High | Calendar unification, search/saved views, push reminders |
-| 4 | **#5 Ambient Screen Timeout** | Medium | Protect the display and give the wall a resting face |
-| 5 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
-| 6 | **#3 Themes** | Low | Personalization and visual delight |
-| 7 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+| 4 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
+| 5 | **#3 Themes** | Low | Personalization and visual delight |
+| 6 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+| 7 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
+| — | **#5 Ambient Screen Timeout (first version)** | **Shipped** | Pure ambient, night variant, per-device timeout — wall soak still open |
+| — | **#10 Main menu, cook-mode tap zones, meal slots** | **Shipped** | One front door; left/right stepping; four meal slots per day |
 | — | **#9 Weekly To Do + full pages + shopping aisles** | **Shipped** | 9A/9B/9C, both full-page views, migration 013 |
 | — | **#1 Meal Planner Data Enrichment — Phase 1** | **Shipped** | Recipe/meal data foundation — complete in 008/010/011 |
 

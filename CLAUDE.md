@@ -67,6 +67,28 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
 - `src/lib/supabase.js` — client, reads `VITE_SUPABASE_URL` /
   `VITE_SUPABASE_ANON_KEY` from `.env.local` (gitignored via the `*.local`
   rule).
+- `src/components/MainMenu.jsx` — the board's front door, opened by the
+  header's `Menu` button. A dialog, not a sheet: six rows, and the board
+  showing through behind them is the point. Holds the recipe book, both dock
+  pages, settings, and — when today has a meal with a method — a one-tap row
+  straight into cook mode, which prefers a half-finished recipe ("Back to step
+  4") over a merely planned one.
+
+  It exists because the header used to carry a lone `Recipes` button among the
+  week arrows, and because **switching a dock section to Off removed the only
+  route to its full page** — the panel head is the door, and `SectionPanel`
+  returns null at Off. A layout preference was taking away per-row delete,
+  "clear ticked" and the unpriced-ingredient list. The menu names each section
+  even when its panel is hidden.
+- `src/components/Screensaver.jsx` + `src/hooks/useIdle.js` +
+  `src/lib/screensaver.js` — Feature #5, first version. See "Ambient screen
+  timeout" below.
+- `src/lib/meals.js` — meal slots. See "Meal slots" below.
+- `src/lib/cookProgress.js` — where you had got to in a recipe, in
+  `localStorage`, expiring after 6 hours. Per-device rather than per-household
+  on purpose: a cook in progress is a fact about *this screen right now*, and
+  syncing it would have the wall and a phone snatch each other's place
+  mid-recipe.
 - `src/lib/week.js` — date helpers, Sunday-start week, no date library.
 - `src/lib/cost.js` — weekly grocery cost projection from the meal plan
   (leftover nights are free; shared ingredients across recipes are
@@ -79,14 +101,35 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   `RecipeBook` (the shelf: search over titles *and* ingredient names, four
   filters), `RecipeDetail` (one recipe, plus "plan a night" against the week
   currently on the board), and `CookMode` (one step at a time at 40px, holding
-  a screen wake lock). **Tapping the step advances it** — the Next button is
-  52px in a corner and your hands are covered in raw chicken, so the reading
-  area is the target you can actually hit. It rejects a tap that travelled more
-  than `TAP_SLOP_PX` (the step text scrolls, and a scroll is not a tap), one
-  that started on a control, and any tap on the last step — "Finish" exits the
-  mode, which is not something a stray touch should do mid-recipe.
-  Reached from a `Recipes` button in the board header, or
-  from a day view that already has a meal on it. `Wall.jsx` fetches the whole
+  a screen wake lock). **Tapping the step moves through it — the left 30%
+  (`BACK_ZONE`) goes back, the rest goes on.** The footer buttons are 52px in a
+  corner and your hands are covered in raw chicken, so the reading area is the
+  target you can actually hit; going back used to have only the corner button,
+  which made the one move you make when you have missed something the one move
+  that required clean hands.
+
+  Nothing marks the boundary at rest — this screen is one 40px sentence read
+  from across a kitchen, and a permanent divider down it would be furniture in
+  the middle of the only thing worth looking at. The press does the teaching:
+  `data-press` lights that zone and draws a hard edge at 30%, which is both the
+  acknowledgement and the lesson. **If `BACK_ZONE` changes, the four
+  percentages in `.cook__body[data-press=…]` change with it**, or the highlight
+  draws an edge somewhere other than where the tap is judged.
+
+  It rejects a tap that travelled more than `TAP_SLOP_PX` (the step text
+  scrolls, and a scroll is not a tap) — which doubles as the escape hatch: see
+  the wrong side light up, slide 12px, nothing fires. It ignores taps starting
+  on a control, never advances off the last step ("Finish" exits, not something
+  a stray touch should do mid-recipe) and never goes back off the first. Zones
+  are judged from where the finger **landed**, not where it lifted.
+
+  `onExit(finished)` distinguishes the Finish button from the header's Done:
+  finishing clears the remembered step, stepping out keeps it, which is what
+  makes the menu able to offer "Back to step 4".
+
+  Reached from the `Menu` button in the board header, from a day view that
+  already has a meal on it (which offers cook mode *directly* now, not via the
+  recipe), or from the menu's cook row. `Wall.jsx` fetches the whole
   bank in one lazy query (`RECIPE_BOOK_QUERY`) the first time the book opens —
   18 recipes / 127 ingredients / 56 steps is small enough that this beats a
   round trip per recipe, and the detail view then opens with no spinner.
@@ -161,7 +204,11 @@ reskin — `Wall.jsx` was rebuilt to feed real data into the new components.
   was built for per the original design comments). In landscape the dock
   panels will get tight or clipped. Not addressed yet.
 
-**Settings:** long-press the board (~650ms) opens a dialog to set each
+**Settings:** `Menu → Settings`, or long-press the board (~650ms). The
+long-press still works and is still undocumented in the UI; it stopped being
+the *only* way in when the menu arrived, which mattered because the dialog is
+where you undo switching a section off, and switching a section off used to
+hide its page. The dialog sets each
 section (To-Do, Shopping) to Full / Compact / Off. Persisted on
 `household.board_settings` (jsonb), synced via Supabase realtime so the
 wall and a phone agree. `SectionDock` computes 1 vs. 2 columns from
@@ -218,6 +265,100 @@ happened to the day rows: buttons cut in half, today's weekday label
 invisible, on a Mac browser window shorter than the iPad this was tuned
 for). If you add new flex children to `Board`/`WeekGrid`/`SectionPanel`,
 give them a real computed minimum, not `min-height: 0`.
+
+## Ambient screen timeout (Feature #5, first version)
+
+After a configurable idle period the board fades into a slow ambient scene.
+This is the state the iPad is in for most of its life, which inverts the usual
+priority: the "idle" screen is really the primary visual surface.
+
+It is not decoration. **Slow movement is a functional requirement.** The week
+rules, panel edges and header are static geometry in fixed positions for weeks
+— the exact condition that burns a display — so every layer in the scene
+travels, and there is no text, because text is the one thing that would sit in
+fixed pixels and reintroduce the problem. The second job is light pollution: an
+always-lit screen in a room people relax in is a lamp nobody asked for, hence
+the much darker, slower night variant (22:00–06:00, `NIGHT_FROM_HOUR` /
+`NIGHT_TO_HOUR`).
+
+- **The idle timer is never a long `setTimeout`.** Timers do not survive an
+  iPad suspending — a ten-minute timer set at 21:50 on a device that sleeps at
+  21:52 fires whenever the hardware feels like it. `useIdle` stores a
+  last-activity timestamp and compares it against a fresh `Date.now()` on a 15s
+  tick, the same shape as the midnight rollover in `useToday`. A late tick
+  costs nothing; it reads the real clock and gets the right answer anyway.
+- **A wake is a fresh start, not a resumed countdown.** Coming back to a board
+  that fades out four seconds later reads as a fault.
+- **The board stays mounted.** The scene is a sibling overlay at `z-index: 40`,
+  rendered last in `Wall`. Unmounting the board would tear down five realtime
+  channels and the clock hook, and the wall would return showing a stale week.
+- **Three things suspend it entirely** (`screensaverAllowed`): cook mode, which
+  holds a wake lock and exists to keep showing you a step while your hands are
+  full; anything but a live connection; and an error on screen. The last two
+  are the same argument — a beautiful animation over a board that stopped
+  updating four hours ago is the "green dot over a stale week" failure in a
+  prettier costume.
+- **The waking touch is swallowed.** Same bug class as the long-press: one
+  touch meaning something to the wall and something else to the widget under
+  it. The pointerdown is `preventDefault`ed and the following click is caught
+  capture-phase at the window and released on a 700ms timer, since a swipe or a
+  cancelled touch ends in no click at all. Verified: zero clicks leak through.
+- **Timeout is the one board setting that is wrong at household scope.** Every
+  other setting describes the board, so the wall and a phone agreeing is the
+  point; this one describes a *device*. Household default lives in
+  `board_settings.screensaverMin` — jsonb, so **no migration was needed** — and
+  any device may pin its own in `localStorage`. `null` there means "follow the
+  household", which is deliberately distinct from `'never'`: a device that
+  chose never must not start fading again because someone changed the default
+  from a phone.
+- **`prefers-reduced-motion` removes the bright shapes rather than freezing
+  them.** The brief asked for "a still or near-still variant", which taken
+  literally is a contradiction — a still highlight parked on the same pixels
+  for hours is the image retention this feature exists to prevent. What remains
+  is a flat, very dark field. The arrival keeps a short fade; an opacity change
+  is not travel, and a hard cut still reads as a fault.
+- **Periods are mutually prime** (137 / 181 / 223 / 269 / 307s). On round
+  durations four layers resynchronise every couple of minutes into a figure the
+  eye learns and anticipates; on primes the combination does not repeat for
+  over eleven days.
+- **Paused when the document is hidden**, explicitly. Browsers throttle
+  offscreen animation but do not reliably stop it, and pausing also makes the
+  return seamless — the timeline resumes rather than snapping.
+
+**Not yet verified on the actual wall**, which is the only open item on the
+feature's Definition of Done and cannot be closed from a browser. It also
+requires **Settings → Display & Brightness → Auto-Lock → Never** on the iPad,
+or iPadOS blanks the screen first and none of this is ever seen.
+
+## Meal slots
+
+`meal_plan.slot` has accepted `breakfast | lunch | dinner | snack` since
+`004_recipes.sql`, with `unique (household_id, on_date, slot)`. The app only
+ever wrote `'dinner'`, on the reasoning still recorded in `MealsCard.jsx`:
+"v1 plans dinners only. Breakfast and lunch are standing routines in this
+household." All four are now reachable. **No migration — the schema was
+already right; three hardcoded call sites were not.**
+
+- **Dinner keeps every advantage.** `nextFreeSlot` pre-selects it, `bySlot`
+  sorts chronologically (the order of a *day*, not of importance — a list that
+  put dinner first because dinner matters most would be unreadable), and
+  planning one costs no more taps than before.
+- **"+ Meal" was not a rename.** Relabelling alone would have promised four
+  slots and still written one, and `mealEntryFor`'s `slot === 'dinner'` filter
+  would have made every other slot invisible on the board. The label could only
+  tell the truth once the reads and writes did.
+- **`mealMeta` replaced "Cooking tonight"**, which was wrong about the meal the
+  moment there was more than one and had *already* been wrong about the day — a
+  dinner five days out said "tonight".
+- **A taken slot stays pickable in the editor, marked with a `·`.** Switching
+  to it is how you change that meal, so refusing would be wrong; but the unique
+  constraint means picking a recipe there *replaces* what is on it, and a
+  control that silently overwrites is worse than one that says so.
+- **`nextFreeSlot` returns null once a day is full**, which hides the add
+  button rather than offering a tap that would upsert over an existing meal.
+- **`RecipeDetail`'s "Plan a night" still means dinner specifically**, which
+  suits a footer that asks "Which night?" and offers seven days. If slots turn
+  out to get used, that footer is the next thing to revisit.
 
 ## Chores, which are also tasks
 
@@ -424,6 +565,31 @@ link. Settled the hard way; the constraints below are all load-bearing.
   again.
 
 ## Open items from the last session
+
+- **The ambient screen timeout has not been seen on the wall.** Everything
+  checkable in a browser is checked (fade, night variant, swallowed wake touch,
+  pause when hidden, and that the drift layers genuinely move — ~4.9px in 2.5s
+  on a 137s period). What a browser cannot answer is whether it holds up over
+  weeks without heat, battery drain or memory growth, which is the entire point
+  of the feature. **Confirm iPadOS Auto-Lock is set to Never** first, or the
+  device blanks the screen before Trellis ever gets to show anything.
+- **Nothing on the wall has ever written a non-dinner meal.** Slots work and
+  are reachable, but the household has only ever planned dinners, so breakfast
+  / lunch / snack are untested against real use rather than untested against
+  code. Watch whether they get used at all before building anything further on
+  them — `RecipeDetail`'s dinner-only "Plan a night" is the obvious next
+  question, and it is only worth answering if the answer matters.
+- The menu's cook row picks dinner, or the last planned slot if there is no
+  dinner. It ignores the time of day, so a day with both a breakfast and a
+  dinner offers the dinner all morning.
+- `mealsFor` and the days memo each filter `mealPlan` per day, so rendering a
+  week is 7 passes over the plan. Irrelevant at 7–28 rows; worth an index if
+  meal planning ever shows more than a week.
+- Still no test runner, and this session added three more pure modules that
+  want one — `meals.js` (`nextFreeSlot`, `bySlot`), `screensaver.js`
+  (`timeoutMsFor`, `isNightAt`) and `cookProgress.js` (the 6-hour expiry).
+  Together with `cost.js`, `week.js` and `useToday`, that is now a real case
+  for just adding vitest.
 
 - Slice 9 is verified on the wall (8 Sep 2026): long-press with a fingertip,
   full-screen Home Screen launch, the 180ms sheet transition, and the

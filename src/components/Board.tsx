@@ -48,8 +48,8 @@ interface Props {
   dragging?: boolean;
   dragOverDate?: string | null;
   onOpenDay?: (date: string) => void;
-  /** Opens the recipe book. The board's only permanent door out of the week. */
-  onOpenBook?: () => void;
+  /** Opens the main menu. The board's only permanent door out of the week. */
+  onOpenMenu?: () => void;
   /** Open each dock section as a full page. */
   onOpenChores?: () => void;
   onOpenShopping?: () => void;
@@ -98,18 +98,26 @@ export function Board(props: Props) {
           )}
         </div>
         <div className="board__header-right">
-          {/* Spelled out rather than a glyph. The settings dialog can afford
-              to hide behind a long-press because nobody goes looking for it;
-              a recipe book that nobody can find is just a database.
+          {/* Spelled out rather than a glyph, and still the same argument: a
+              recipe book that nobody can find is just a database. It said
+              "Recipes" until the app had more than one room behind it — the
+              To-Do and Shopping pages, and the settings that had never been
+              advertised anywhere at all — at which point a header that grew a
+              button per room would have buried the week under its own index.
+
+              One door, named for what it is. What was behind that button is
+              now the first thing inside this one, so the book costs a tap it
+              did not cost before; three other places that previously cost a
+              gesture you had to be told about now cost the same tap.
 
               First in the cluster and fenced off by a rule, because it is
               the only control here that leaves the week. Sitting it between
               "Today" and the arrows filed a doorway to another room among
               the controls for moving around this one. */}
-          {props.onOpenBook && (
+          {props.onOpenMenu && (
             <>
-              <button className="board__book" onClick={props.onOpenBook}>
-                Recipes
+              <button className="board__menu" onClick={props.onOpenMenu} aria-haspopup="dialog">
+                Menu
               </button>
               <span className="board__header-rule" aria-hidden="true" />
             </>

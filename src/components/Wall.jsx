@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   addDays,
@@ -38,9 +38,30 @@ import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
 import { ShoppingSheet, ToDoSheet } from './PanelSheets'
+import MainMenu from './MainMenu'
+import Screensaver from './Screensaver'
+import { useIdle } from '../hooks/useIdle'
+import { clearCookProgress, readCookProgress, writeCookProgress } from '../lib/cookProgress'
+import {
+  DEFAULT_TIMEOUT_MIN,
+  TIMEOUT_OPTIONS,
+  isNightAt,
+  readDeviceTimeout,
+  timeoutMsFor,
+  writeDeviceTimeout,
+} from '../lib/screensaver'
+import { DEFAULT_SLOT, MEAL_SLOTS, bySlot, mealMeta, nextFreeSlot, slotLabel } from '../lib/meals'
 import './Sheet.css'
 
-const DEFAULT_SETTINGS = { chores: 'full', shopping: 'full', flourish: ['week'] }
+const DEFAULT_SETTINGS = {
+  chores: 'full',
+  shopping: 'full',
+  flourish: ['week'],
+  // The household's default idle timeout, in minutes. Lives in the same jsonb
+  // blob as the panel modes, so it needed no migration — and any device may
+  // override it locally, which is the whole argument in lib/screensaver.js.
+  screensaverMin: DEFAULT_TIMEOUT_MIN,
+}
 const LONG_PRESS_MS = 650
 
 /**
@@ -149,6 +170,7 @@ const MEAL_PLAN_QUERY = `
   id, on_date, slot, is_leftover,
   recipe:recipes (
     id, title, cost_confidence,
+    steps:recipe_steps ( id ),
     ingredients:recipe_ingredients (
       name, preferred_product, purchase_qty, manual_cost_cents, ingredient_category,
       product:products ( id, name, pre_tax_cents, tax_rate_bps )
@@ -203,13 +225,28 @@ export default function Wall({ profile, people }) {
   const [staples, setStaples] = useState([])
   const [budget, setBudget] = useState(12000)
   const [editing, setEditing] = useState(null)
-  const [mealEditing, setMealEditing] = useState(null) // an on_date string, or null
+  // { date, slot } — a slot is now part of *which* meal is being edited, not
+  // an assumption made when it is saved.
+  const [mealEditing, setMealEditing] = useState(null)
   const [reschedulingChore, setReschedulingChore] = useState(null)
   const [bookOpen, setBookOpen] = useState(false)
   const [bookRecipes, setBookRecipes] = useState([])
   const [bookLoading, setBookLoading] = useState(false)
   const [recipeOpen, setRecipeOpen] = useState(null) // a recipe id, or null
   const [cooking, setCooking] = useState(false)
+  /**
+   * Which layer the book was entered at, so closing a recipe goes back where
+   * you came from.
+   *
+   * Opening a recipe straight from a day, or from the menu's cook row, used
+   * to leave you on the shelf when you closed it — a screen you had never
+   * visited, showing eighteen recipes you had not asked for. "Back" has to
+   * mean back.
+   */
+  const [bookEntry, setBookEntry] = useState('shelf')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [cookProgress, setCookProgress] = useState(null)
+  const [deviceTimeout, setDeviceTimeout] = useState(readDeviceTimeout)
   const [dayViewing, setDayViewing] = useState(null) // an on_date string, or null
   const [sectionOpen, setSectionOpen] = useState(null) // 'chores' | 'shopping' | null
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
@@ -801,16 +838,22 @@ export default function Wall({ profile, people }) {
     })
   }
 
-  const mealEntryFor = useCallback(
-    (date) => mealPlan.find((p) => p.on_date === date && p.slot === 'dinner'),
+  /** Every meal on a day, in the order the day happens. */
+  const mealsFor = useCallback(
+    (date) => mealPlan.filter((p) => p.on_date === date).sort(bySlot),
     [mealPlan]
   )
 
-  async function pickMeal(date, recipeId) {
+  const mealEntryAt = useCallback(
+    (date, slot) => mealPlan.find((p) => p.on_date === date && p.slot === slot),
+    [mealPlan]
+  )
+
+  async function pickMeal(date, slot, recipeId) {
     const payload = {
       household_id: profile.household_id,
       on_date: date,
-      slot: 'dinner',
+      slot,
       recipe_id: recipeId,
       is_leftover: false,
     }
@@ -824,6 +867,8 @@ export default function Wall({ profile, people }) {
     // afterwards made the common case — put a recipe on a night — end in a
     // dialog whose loudest button offered to undo it. The chip landing on
     // the day is the confirmation; anyone who wants Cook/Leftovers taps it.
+    // Still true with four slots: the slot was chosen before the recipe, so
+    // by the time a recipe is picked there is nothing left to decide.
     setMealEditing(null)
   }
 
@@ -880,7 +925,28 @@ export default function Wall({ profile, people }) {
   const openBook = useCallback(
     (recipeId = null) => {
       setRecipeOpen(recipeId)
+      setBookEntry(recipeId ? 'recipe' : 'shelf')
       setBookOpen(true)
+      loadBook()
+    },
+    [loadBook]
+  )
+
+  /**
+   * Straight into cook mode, without stopping at the shelf or the recipe.
+   *
+   * The book is still fetched lazily, so for one round trip there is a recipe
+   * id and no recipe. That gap renders as a cook-mode-shaped loading screen
+   * rather than as the shelf, which is what `cooking` guarding the shelf below
+   * is for: asking for a method and being shown eighteen other recipes for
+   * half a second reads as the tap having missed.
+   */
+  const startCook = useCallback(
+    (recipeId) => {
+      setRecipeOpen(recipeId)
+      setBookEntry('recipe')
+      setBookOpen(true)
+      setCooking(true)
       loadBook()
     },
     [loadBook]
@@ -891,6 +957,37 @@ export default function Wall({ profile, people }) {
   function closeBook() {
     setBookOpen(false)
     setRecipeOpen(null)
+    setCooking(false)
+  }
+
+  /** Back out of one recipe — to the shelf if that is where you came in. */
+  function closeRecipe() {
+    if (bookEntry === 'recipe') return closeBook()
+    setRecipeOpen(null)
+  }
+
+  /**
+   * Cook mode reporting where it has got to.
+   *
+   * Written straight to localStorage rather than held in React state: this
+   * fires on every step, and putting it in state would re-render the whole
+   * board — week grid, both dock panels — twenty times a recipe to update
+   * something nothing on screen is showing. The menu reads it back when it
+   * opens, which is the only moment it is ever looked at.
+   */
+  const handleCookIndex = useCallback(
+    (index) => {
+      if (recipeOpen) writeCookProgress(recipeOpen, index)
+    },
+    [recipeOpen]
+  )
+
+  /**
+   * `finished` is the Finish button on the last step; anything else is
+   * stepping out mid-recipe, which is exactly the case worth remembering.
+   */
+  function exitCook(finished) {
+    if (finished) clearCookProgress()
     setCooking(false)
   }
 
@@ -982,6 +1079,125 @@ export default function Wall({ profile, people }) {
     }
   }
 
+  function setDeviceScreensaver(value) {
+    writeDeviceTimeout(value)
+    setDeviceTimeout(value)
+  }
+
+  // ------------------------------------------------------ ambient timeout
+  //
+  // The state the wall is actually in for most of its life. See
+  // Screensaver.jsx for what the scene is doing and why it has to move;
+  // this is only the decision about when it is allowed to.
+
+  /**
+   * Three things suspend the fade, and each is a case where covering the
+   * screen would be actively wrong rather than merely unwelcome.
+   *
+   * **Cook mode.** It holds a wake lock and exists to keep showing you a step
+   * while your hands are full — it is the one surface whose whole point is to
+   * stay lit while nobody is touching the iPad. An ambient scene over it would
+   * defeat the feature it was layered on top of.
+   *
+   * **Anything but a live connection.** A beautiful animation over a board
+   * that stopped updating four hours ago is precisely the "green dot over a
+   * stale week" failure in a prettier costume. Offline has to stay visible,
+   * so the scene stands down and lets the header say so.
+   *
+   * **An error on screen.** Same argument, louder: the board is the only
+   * debugger this device has.
+   */
+  const screensaverAllowed = !cooking && syncState === 'live' && !error
+  const idleTimeoutMs = timeoutMsFor(settings.screensaverMin, deviceTimeout)
+  const { idle, wake } = useIdle({ timeoutMs: idleTimeoutMs, enabled: screensaverAllowed })
+
+  /**
+   * Night is a property of the hour, and `today` only moves at midnight — so
+   * it needs its own tick. It runs only while the scene is up, because the
+   * question "is it night" has no consumer while the board is showing, and a
+   * minute timer running for weeks to answer nobody is exactly the kind of
+   * thing that makes a wall device warm.
+   */
+  const [night, setNight] = useState(() => isNightAt(new Date()))
+
+  useEffect(() => {
+    if (!idle) return
+    setNight(isNightAt(new Date()))
+    const tick = setInterval(() => setNight(isNightAt(new Date())), 60_000)
+    return () => clearInterval(tick)
+  }, [idle])
+
+  function handleWake() {
+    wake()
+    // Land on the current week, not wherever the board was left paged to
+    // hours ago. Someone walking up to a sleeping wall is asking what is
+    // happening now; being shown March because that is where the last person
+    // left it is the board lying by omission.
+    if (!isCurrentWeek) setAnchor(startOfWeek(today))
+  }
+
+  // ------------------------------------------------------------- the menu
+
+  const todayIso = toDateInputValue(today)
+
+  /**
+   * The one row in the menu that isn't a room: the shortest path to a method.
+   *
+   * Resuming wins over starting, because a half-finished recipe is a stronger
+   * statement of intent than a planned one — and because the recipe you
+   * stepped out of is usually the recipe you are coming back to. Both are
+   * named rather than described ("Resume Chicken Katsu", not "Resume
+   * cooking"), since the whole value of the row is confirming it is the right
+   * one before you commit a tap to it.
+   */
+  const cookRow = useMemo(() => {
+    if (cookProgress) {
+      const known =
+        bookRecipes.find((r) => r.id === cookProgress.recipeId) ??
+        recipes.find((r) => r.id === cookProgress.recipeId)
+
+      // No title means no honest row. A "Resume" button that cannot say what
+      // it would resume is asking for blind trust in a guess.
+      if (known) {
+        return {
+          heading: 'Carry on',
+          label: known.title,
+          meta: `Back to step ${cookProgress.index + 1}`,
+          recipeId: cookProgress.recipeId,
+          index: cookProgress.index,
+        }
+      }
+    }
+
+    const todays = mealsFor(todayIso)
+    // Dinner is what this household cooks; anything else planned today only
+    // gets the row when dinner isn't there to take it.
+    const pick = todays.find((m) => m.slot === DEFAULT_SLOT) ?? todays[todays.length - 1]
+    if (!pick?.recipe) return null
+
+    // Two of the eighteen recipes still have no method. Offering to cook one
+    // would open an empty screen, so the row simply isn't there — the recipe
+    // detail already explains why, and is one tap further on.
+    if ((pick.recipe.steps?.length ?? 0) === 0) return null
+
+    return {
+      heading: 'Today',
+      label: `Cook ${pick.recipe.title}`,
+      meta: pick.is_leftover
+        ? `${slotLabel(pick.slot)} · leftovers, same method`
+        : `${slotLabel(pick.slot)} · straight to the steps`,
+      recipeId: pick.recipe.id,
+      index: 0,
+    }
+  }, [bookRecipes, cookProgress, mealsFor, recipes, todayIso])
+
+  function openMenu() {
+    // Read at open rather than held in state: cook mode writes it on every
+    // step, and this is the only moment anything looks at it.
+    setCookProgress(readCookProgress())
+    setMenuOpen(true)
+  }
+
   const pressTimer = useRef(null)
   const pressOrigin = useRef(null)
 
@@ -994,6 +1210,7 @@ export default function Wall({ profile, people }) {
 
   function handlePressStart(e) {
     if (editing || mealEditing || dayViewing || settingsOpen || bookOpen || reschedulingChore) return
+    if (menuOpen) return
     // Holding a "+" button shouldn't also summon settings behind the dialog
     // it opens.
     if (e.target.closest?.('button, input, a, label')) return
@@ -1052,12 +1269,16 @@ export default function Wall({ profile, people }) {
           })
         }
 
-        const meal = mealPlan.find((p) => p.on_date === iso && p.slot === 'dinner')
-        if (meal?.recipe) {
+        // Every slot the day holds, in the order the day happens. This used
+        // to reach past three of them to find the dinner, which is why a
+        // lunch written straight into the table was invisible on the board.
+        const meals = mealPlan.filter((p) => p.on_date === iso).sort(bySlot)
+        for (const meal of meals) {
+          if (!meal.recipe) continue
           dayEvents.push({
             id: `meal:${meal.id}`,
             title: meal.recipe.title,
-            meta: meal.is_leftover ? 'Leftovers' : 'Cooking tonight',
+            meta: mealMeta(meal),
             kind: 'meal',
           })
         }
@@ -1071,6 +1292,9 @@ export default function Wall({ profile, people }) {
           // that's what makes the highlight move at midnight.
           isToday: isSameDay(d, today),
           events: dayEvents,
+          // The grid can no longer work this out from "is there a meal chip",
+          // now that four of them can sit on one day.
+          canAddMeal: nextFreeSlot(meals) != null,
         }
       }),
     [anchor, chores, choreIsDone, events, mealPlan, occurrenceFor, personFor, today]
@@ -1127,7 +1351,8 @@ export default function Wall({ profile, people }) {
     if (id.startsWith('meal:')) {
       const planId = id.slice('meal:'.length)
       const entry = mealPlan.find((p) => p.id === planId)
-      if (entry) setMealEditing(entry.on_date)
+      // The chip knows its own slot, so tapping breakfast opens breakfast.
+      if (entry) setMealEditing({ date: entry.on_date, slot: entry.slot })
       return
     }
     const ev = events.find((e) => e.id === id)
@@ -1139,7 +1364,12 @@ export default function Wall({ profile, people }) {
   }
 
   function handleAddMeal(dateIso) {
-    setMealEditing(dateIso)
+    // Dinner unless dinner is taken, then the earliest slot still free. The
+    // button is hidden once a day is full, so this is never null here — but
+    // it falls back rather than trusting that, because an upsert on a taken
+    // slot would quietly replace a meal instead of adding one.
+    const slot = nextFreeSlot(mealsFor(dateIso)) ?? DEFAULT_SLOT
+    setMealEditing({ date: dateIso, slot })
   }
 
   function handleOpenDay(dateIso) {
@@ -1282,7 +1512,7 @@ export default function Wall({ profile, people }) {
         dragging={drag != null}
         dragOverDate={drag?.over?.kind === 'day' ? drag.over.date : null}
         onOpenDay={handleOpenDay}
-        onOpenBook={() => openBook()}
+        onOpenMenu={openMenu}
         onOpenChores={() => setSectionOpen('chores')}
         onOpenShopping={() => setSectionOpen('shopping')}
         initialsFor={initialsForPerson}
@@ -1341,12 +1571,15 @@ export default function Wall({ profile, people }) {
 
       {mealEditing && (
         <MealEditor
-          date={mealEditing}
-          entry={mealEntryFor(mealEditing)}
+          date={mealEditing.date}
+          slot={mealEditing.slot}
+          entry={mealEntryAt(mealEditing.date, mealEditing.slot)}
+          takenSlots={mealsFor(mealEditing.date).map((m) => m.slot)}
           recipes={recipes}
-          onPick={(recipeId) => pickMeal(mealEditing, recipeId)}
-          onToggleLeftover={() => toggleMealLeftover(mealEntryFor(mealEditing))}
-          onClear={() => clearMeal(mealEntryFor(mealEditing))}
+          onSlot={(slot) => setMealEditing({ date: mealEditing.date, slot })}
+          onPick={(recipeId) => pickMeal(mealEditing.date, mealEditing.slot, recipeId)}
+          onToggleLeftover={() => toggleMealLeftover(mealEntryAt(mealEditing.date, mealEditing.slot))}
+          onClear={() => clearMeal(mealEntryAt(mealEditing.date, mealEditing.slot))}
           onClose={() => setMealEditing(null)}
         />
       )}
@@ -1355,7 +1588,8 @@ export default function Wall({ profile, people }) {
         <DayView
           date={dayViewing}
           events={dayEventsFor(dayViewing)}
-          meal={mealEntryFor(dayViewing)}
+          meals={mealsFor(dayViewing)}
+          canAddMeal={nextFreeSlot(mealsFor(dayViewing)) != null}
           peopleById={orderedPeople}
           onEventPress={(ev) => {
             setDayViewing(null)
@@ -1365,23 +1599,67 @@ export default function Wall({ profile, people }) {
             setDayViewing(null)
             handleAddDay(dayViewing)
           }}
-          onEditMeal={() => {
+          onEditMeal={(slot) => {
             setDayViewing(null)
-            setMealEditing(dayViewing)
+            setMealEditing({ date: dayViewing, slot })
           }}
-          onViewRecipe={() => {
-            const entry = mealEntryFor(dayViewing)
+          onAddMeal={() => {
+            setDayViewing(null)
+            handleAddMeal(dayViewing)
+          }}
+          onViewRecipe={(entry) => {
             setDayViewing(null)
             openBook(entry?.recipe?.id ?? null)
+          }}
+          onCook={(entry) => {
+            setDayViewing(null)
+            startCook(entry.recipe.id)
           }}
           onClose={() => setDayViewing(null)}
         />
       )}
 
+      {menuOpen && (
+        <MainMenu
+          cook={cookRow}
+          sections={settings}
+          choresCount={
+            booted ? `${choresDone} of ${trackableChores.length} done this week` : undefined
+          }
+          shoppingCount={booted ? `${shoppingRemaining} to buy` : undefined}
+          onCook={() => {
+            setMenuOpen(false)
+            startCook(cookRow.recipeId)
+          }}
+          onRecipes={() => {
+            setMenuOpen(false)
+            openBook()
+          }}
+          onChores={() => {
+            setMenuOpen(false)
+            setSectionOpen('chores')
+          }}
+          onShopping={() => {
+            setMenuOpen(false)
+            setSectionOpen('shopping')
+          }}
+          onSettings={() => {
+            setMenuOpen(false)
+            setSettingsOpen(true)
+          }}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
+
       {/* Three layers, one at a time: the shelf, a recipe, cooking it. Each
           later one covers the one before, so closing cook mode lands back on
-          the recipe rather than dumping you at the board mid-dinner. */}
-      {bookOpen && !openRecipe && (
+          the recipe rather than dumping you at the board mid-dinner.
+
+          `!cooking` on the shelf is what makes the menu's cook row safe: it
+          opens the book and cook mode in the same breath, and for one round
+          trip there is a recipe id and no recipe yet. Without the guard that
+          gap renders as eighteen recipes you did not ask for. */}
+      {bookOpen && !openRecipe && !cooking && (
         <RecipeBook
           recipes={bookRecipes}
           loading={bookLoading}
@@ -1398,16 +1676,35 @@ export default function Wall({ profile, people }) {
           planDays={planDays}
           plannedDate={mealPlan.find((p) => p.recipe?.id === openRecipe.id)?.on_date}
           onPlan={(date) => {
-            pickMeal(date, openRecipe.id)
+            // "Plan a night" means dinner — the footer asks "Which night?" and
+            // offers seven days, not twenty-eight slots. Upserting over an
+            // existing dinner is the behaviour this has always had: choosing a
+            // recipe for a night replaces that night's.
+            pickMeal(date, DEFAULT_SLOT, openRecipe.id)
             closeBook()
           }}
           onCook={() => setCooking(true)}
-          onClose={() => setRecipeOpen(null)}
+          onClose={closeRecipe}
         />
       )}
 
       {cooking && openRecipe && (
-        <CookMode recipe={openRecipe} detail={openRecipe} onExit={() => setCooking(false)} />
+        <CookMode
+          recipe={openRecipe}
+          detail={openRecipe}
+          initialIndex={cookProgress?.recipeId === openRecipe.id ? cookProgress.index : 0}
+          onIndexChange={handleCookIndex}
+          onExit={exitCook}
+        />
+      )}
+
+      {/* The book is fetched lazily and cook mode can be asked for before it
+          lands. One round trip, but on a screen someone crossed a kitchen to
+          reach — so it says what it is doing rather than showing nothing. */}
+      {cooking && !openRecipe && (
+        <div className="cook cook--loading" role="status" aria-live="polite">
+          <p className="cook__step">Getting the method…</p>
+        </div>
       )}
 
       {reschedulingChore && (
@@ -1442,11 +1739,20 @@ export default function Wall({ profile, people }) {
       {settingsOpen && (
         <SettingsPanel
           settings={settings}
+          deviceTimeout={deviceTimeout}
           onChange={updateSetting}
+          onDeviceTimeout={setDeviceScreensaver}
           onToggleFlourish={toggleFlourish}
           onClose={() => setSettingsOpen(false)}
         />
       )}
+
+      {/* Last in the tree and highest in the stack, because it covers
+          everything — an open sheet or a half-finished dialog is just as easy
+          to walk away from as the board. The board underneath stays mounted
+          throughout: unmounting it would tear down five realtime channels and
+          the clock hook, and the wall would come back showing a stale week. */}
+      {idle && <Screensaver night={night} onWake={handleWake} />}
 
       {/* Deletion on a shared wall is the one action nobody can take back by
           hand — the other person's chore is simply gone, with no record it
@@ -1483,15 +1789,19 @@ export default function Wall({ profile, people }) {
 function DayView({
   date,
   events,
-  meal,
+  meals,
+  canAddMeal,
   peopleById,
   onEventPress,
   onAddEvent,
   onEditMeal,
+  onAddMeal,
   onViewRecipe,
+  onCook,
   onClose,
 }) {
   const nameFor = (ownerId) => peopleById.find((p) => p.id === ownerId)?.display_name
+  const planned = meals.filter((m) => m.recipe)
 
   return (
     <Sheet
@@ -1499,23 +1809,66 @@ function DayView({
       onClose={onClose}
       footer={<button onClick={onAddEvent}>Add event</button>}
     >
+      {/* "Dinner" until a day could hold four meals. The heading now counts
+          what is actually there, and each meal is its own row carrying its own
+          slot — so tapping the lunch edits the lunch, rather than every tap in
+          this section meaning "the dinner" as it used to. */}
       <div className="sheet__section">
-        <span className="sheet__heading">Dinner</span>
-        <button className="sheet-row" onClick={onEditMeal}>
-          <span>{meal?.recipe ? meal.recipe.title : 'Nothing planned'}</span>
-          <span className="sheet-row__meta">
-            {meal?.recipe ? (meal.is_leftover ? 'Leftovers' : 'Cooking') : 'Tap to plan'}
-          </span>
-        </button>
+        <span className="sheet__heading">
+          {planned.length === 0
+            ? 'Meals'
+            : planned.length === 1
+              ? '1 meal'
+              : `${planned.length} meals`}
+        </span>
 
-        {/* The night you're actually cooking is the likeliest reason to want
-            the recipe, so the shortest path to it starts here rather than
-            back at the board header. Leftovers get it too — reheating
-            instructions live in the same steps. */}
-        {meal?.recipe && (
-          <button className="sheet-row" onClick={onViewRecipe}>
-            <span>Open the recipe</span>
-            <span className="sheet-row__meta">Ingredients, method, cook mode</span>
+        {planned.length === 0 && (
+          <button className="sheet-row" onClick={onAddMeal}>
+            <span>Nothing planned</span>
+            <span className="sheet-row__meta">Tap to plan</span>
+          </button>
+        )}
+
+        {planned.map((meal) => (
+          <Fragment key={meal.id}>
+            <button className="sheet-row" onClick={() => onEditMeal(meal.slot)}>
+              <span>{meal.recipe.title}</span>
+              <span className="sheet-row__meta">{mealMeta(meal)}</span>
+            </button>
+
+            {/* The meal you're actually cooking is the likeliest reason to
+                want the method, so the shortest path to it starts here rather
+                than back at the board header. Leftovers get it too — reheating
+                instructions live in the same steps.
+
+                Cook mode is offered directly, and only when there is a method
+                to show: this row used to land on the recipe with a Cook button
+                below the fold on a long one, which is a screen and two taps
+                between standing at the hob and reading step one. */}
+            {meal.recipe.steps?.length > 0 ? (
+              <button className="sheet-row" onClick={() => onCook(meal)}>
+                <span>Cook it</span>
+                <span className="sheet-row__meta">
+                  {meal.recipe.steps.length} steps · or open the full recipe below
+                </span>
+              </button>
+            ) : null}
+
+            <button className="sheet-row" onClick={() => onViewRecipe(meal)}>
+              <span>Open the recipe</span>
+              <span className="sheet-row__meta">
+                {meal.recipe.steps?.length > 0
+                  ? 'Ingredients and method'
+                  : 'Ingredients — no method written down yet'}
+              </span>
+            </button>
+          </Fragment>
+        ))}
+
+        {planned.length > 0 && canAddMeal && (
+          <button className="sheet-row" onClick={onAddMeal}>
+            <span>Add another meal</span>
+            <span className="sheet-row__meta">Breakfast, lunch or a snack</span>
           </button>
         )}
       </div>
@@ -1900,19 +2253,66 @@ function dayLabel(dateIso) {
  * into the recipe search when there's no meal yet; drops into a summary
  * view (leftovers toggle, change, clear) once one is picked.
  */
-function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, onClose }) {
+function MealEditor({
+  date,
+  slot,
+  entry,
+  takenSlots,
+  recipes,
+  onSlot,
+  onPick,
+  onToggleLeftover,
+  onClear,
+  onClose,
+}) {
   const [picking, setPicking] = useState(!entry?.recipe)
   const [q, setQ] = useState('')
+
+  /**
+   * Which meal of the day this is.
+   *
+   * Above the search field rather than below it, because it is the question
+   * that comes first: you decide you are planning a lunch and then go looking
+   * for one. Underneath the list it would be a correction you make after
+   * realising the recipe you just picked landed on the wrong meal.
+   *
+   * A slot already holding something stays pickable — switching to it is how
+   * you change that meal — but it says so, because `meal_plan` is unique on
+   * (household, date, slot) and picking a recipe there replaces what is on it.
+   * A control that silently overwrites is worse than one that refuses.
+   */
+  const slotRow = (
+    <div className="settings-row">
+      <span className="settings-row__label">Meal</span>
+      <div className="chips">
+        {MEAL_SLOTS.map((s) => {
+          const taken = takenSlots.includes(s.id) && s.id !== slot
+          return (
+            <button
+              key={s.id}
+              className={s.id === slot ? 'chip on' : 'chip'}
+              aria-pressed={s.id === slot}
+              onClick={() => onSlot(s.id)}
+            >
+              {s.label}
+              {taken && ' ·'}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 
   if (picking) {
     const shown = recipes.filter((r) => r.title.toLowerCase().includes(q.trim().toLowerCase()))
 
     return (
       <Sheet
-        title={entry?.recipe ? 'Change meal' : 'Pick a meal'}
+        title={entry?.recipe ? 'Change meal' : `Pick a ${slotLabel(slot).toLowerCase()}`}
         subtitle={dayLabel(date)}
         onClose={entry?.recipe ? () => setPicking(false) : onClose}
       >
+        {slotRow}
         {/* No autoFocus. Picking a meal starts by *reading* the list, and an
             unrequested keyboard covers half of it on an iPad. The field is
             there when someone wants to narrow things down; until they tap
@@ -1950,6 +2350,7 @@ function MealEditor({ date, entry, recipes, onPick, onToggleLeftover, onClear, o
     <div className="scrim" onClick={onClose}>
       <div className="card dialog" onClick={(e) => e.stopPropagation()}>
         <h2>{dayLabel(date)}</h2>
+        <p className="muted">{slotLabel(slot)}</p>
         <p>
           {entry.recipe.title}
           {entry.recipe.cost_confidence === 'unknown' && <span className="tag"> unpriced</span>}
@@ -2001,15 +2402,25 @@ const MODE_LABELS = { full: 'Full', compact: 'Compact', off: 'Off' }
 const MODE_OPTIONS = ['full', 'compact', 'off']
 const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping' }
 
-function SettingsPanel({ settings, onChange, onToggleFlourish, onClose }) {
+function SettingsPanel({
+  settings,
+  deviceTimeout,
+  onChange,
+  onDeviceTimeout,
+  onToggleFlourish,
+  onClose,
+}) {
   const chosen = toFlourishIds(settings.flourish)
   const atMax = chosen.length >= MAX_FLOURISHES
+
+  const householdMin = settings.screensaverMin ?? DEFAULT_TIMEOUT_MIN
+  const effectiveMin = deviceTimeout ?? householdMin
 
   return (
     <div className="scrim" onClick={onClose}>
       <div className="card dialog" onClick={(e) => e.stopPropagation()}>
         <h2>Board settings</h2>
-        <p className="muted">Hold anywhere on the board to reopen this.</p>
+        <p className="muted">Menu → Settings, or hold anywhere on the board.</p>
 
         {Object.keys(SECTION_LABELS).map((key) => (
           <div key={key} className="settings-row">
@@ -2057,6 +2468,64 @@ function SettingsPanel({ settings, onChange, onToggleFlourish, onClose }) {
           {atMax
             ? `Showing ${MAX_FLOURISHES} — untick one to swap it out. Together they use their short forms.`
             : `Pick up to ${MAX_FLOURISHES}. Two or more switch to short forms so the header still fits.`}
+        </p>
+
+        {/*
+          Two rows, because this is the one setting where the wall and a phone
+          genuinely want different answers — the wall hangs in a room and wants
+          to fade out; a phone already has an idle behaviour and it is called
+          locking. Everything else here describes the board, so both agreeing
+          is the point; forcing agreement on this one means whichever surface
+          loses is wrong all the time.
+        */}
+        <div className="settings-row">
+          <span className="settings-row__label">Screen timeout</span>
+          <div className="chips">
+            {TIMEOUT_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                className={householdMin === o.value ? 'chip on' : 'chip'}
+                aria-pressed={householdMin === o.value}
+                onClick={() => onChange('screensaverMin', o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="settings-row">
+          <span className="settings-row__label">This device</span>
+          <div className="chips">
+            {/* Null is "no opinion, follow the household", which is a
+                different thing from Never — a device that has chosen Never
+                must not start fading again because someone changed the
+                default from a phone. */}
+            <button
+              className={deviceTimeout == null ? 'chip on' : 'chip'}
+              aria-pressed={deviceTimeout == null}
+              onClick={() => onDeviceTimeout(null)}
+            >
+              Match
+            </button>
+            {TIMEOUT_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                className={deviceTimeout === o.value ? 'chip on' : 'chip'}
+                aria-pressed={deviceTimeout === o.value}
+                onClick={() => onDeviceTimeout(o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <p className="settings-row__hint">
+          {effectiveMin === 'never'
+            ? 'This screen never fades.'
+            : `This screen fades to the ambient scene after ${effectiveMin} minutes, and darkens after 10pm. Any touch brings the board back.`}
+          {deviceTimeout != null && ' Set here only — other devices follow the household setting.'}
         </p>
 
         <div className="actions">

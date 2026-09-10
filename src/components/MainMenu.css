@@ -1,0 +1,136 @@
+/*
+ * The menu dialog.
+ *
+ * Its own classes rather than `.card`'s, on purpose. `.card button` sets the
+ * solid green primary fill, and this panel is a list of six equal doors — none
+ * of which is the primary action, because which one you want is the question
+ * the menu exists to ask. Reusing `.card` would have meant fighting that rule
+ * with specificity, which this codebase has already lost once (see the note
+ * above `.card .chip` in App.css).
+ */
+
+.menu {
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  box-shadow: var(--lift);
+  padding: 28px;
+  width: min(520px, 100%);
+
+  /* On a short window — a phone in landscape, a small browser — six rows plus
+     three headings will outrun the viewport. The scrim already leaves 24px of
+     margin, so cap against that and let the panel scroll inside itself rather
+     than run off the bottom with no sign anything is down there. */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.menu__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 30px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.menu__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Matches .sheet__heading — the rooms behind these rows use it, so the label
+   above the door and the label inside it are the same piece of type. */
+.menu__heading {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.menu__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+
+  background: var(--row-face);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-height: var(--tap-min);
+
+  font-family: var(--font-text);
+  color: var(--ink);
+  cursor: pointer;
+
+  transition: transform var(--dur-tap) var(--ease-standard),
+    background-color var(--dur-state) var(--ease-standard);
+}
+
+.menu__row:active {
+  transform: scale(0.99);
+  background: var(--today-face);
+  border-color: var(--person-a);
+}
+
+.menu__row-label {
+  font-size: 21px;
+  font-weight: 500;
+}
+
+/* --size-min is 17px and this is real information — the chore count, the
+   number left to buy, which step you were on — not fine print. */
+.menu__row-meta {
+  font-size: var(--size-min);
+  color: var(--ink-soft);
+}
+
+/* Tonight's dinner. The one row here that is an errand rather than a place,
+   and the only one that earns colour: filled means recorded elsewhere in this
+   app, so this stays a tint and a ruled edge — it is pointing at something,
+   not reporting that it happened. */
+.menu__row--go {
+  background: var(--meal-tint);
+  border-color: var(--meal-rule);
+}
+
+.menu__row--go .menu__row-label {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 23px;
+}
+
+.menu__close {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.menu__close:active {
+  background: var(--chip-face);
+  color: var(--ink);
+}
+
+/* A transform with no duration still snaps, so the tokens alone are not
+   enough — the same reason every other pressable block in here carries one of
+   these. */
+@media (prefers-reduced-motion: reduce) {
+  .menu__row:active {
+    transform: none;
+  }
+}

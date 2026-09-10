@@ -158,7 +158,7 @@ p.board__sub {
 
 /* Same shape as Today, one step quieter — it's always there, so it mustn't
    compete with a control that only appears when it has something to say. */
-.board__book {
+.board__menu {
   background: transparent;
   border: 1px solid var(--rule);
   border-radius: 999px;
@@ -170,7 +170,7 @@ p.board__sub {
   cursor: pointer;
 }
 
-.board__book:active {
+.board__menu:active {
   background: var(--slat-face);
   color: var(--ink);
 }

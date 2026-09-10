@@ -38,7 +38,18 @@
    * on it, and a row you cannot read is worse than one you can ignore. */
   --past-face: #EFEFE6;
   --past-rule: #E2E2D6;
-  --rule: #D9D9CB;         /* hairlines, borders, unchecked boxes */
+  /* Hairlines, borders, unchecked boxes.
+   *
+   * Was #D9D9CB, which is 1.39:1 against --slat-face — below the threshold
+   * where a line reliably reads as a line at the distance this board is
+   * looked at. Every separator, every input border and every unchecked
+   * checkbox in the app sat there, which is a large part of why the UI read
+   * as flat before anything was raised off the page.
+   *
+   * 2.04:1 on paper, 1.64:1 on the ground, 1.90:1 on today's row. Still a
+   * hairline and still quiet — the aesthetic is paper and pencil, not ruled
+   * boxes — but now actually visible from across a kitchen. */
+  --rule: #B4B4A3;
 
   /* Depth, spent once. Two very soft layers — a tight contact shadow and a
    * wider ambient one — because a single hard shadow reads as a sticker. */

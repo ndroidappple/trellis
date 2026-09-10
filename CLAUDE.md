@@ -189,6 +189,14 @@ fresh project, not something to run casually against the live one.
 data written through the app, not seed data. A rebuilt project starts with
 the price book and recipe bank but an empty week.
 
+`015_ingredient_purchase_quantities.sql` fills the four ingredient rows that
+carried a product but no `purchase_qty`, using the conventions the bank had
+already settled on (1 whole onion = 0.17 of a 3 lb bag; 2 cups dry rice = 0.17
+of an 80 oz bag). Those rows were missing from the cost projection, the
+shopping list *and* the book's price at once — `weekPackages` needs both halves
+and drops a row missing either. One row is deliberately still null: the
+smoothie's frozen berries, unit "fill cup", which needs a person.
+
 Tables: `household` (singleton row — budget, `board_settings`),
 `profiles`, `events`, `chores`, `list_items` (shopping/todo, though todo
 isn't currently surfaced in the UI — see below), `recipes`,
@@ -496,22 +504,35 @@ a range, and the larger end is the flattering number; this figure is read at
 the moment someone decides whether they can afford to cook something, so it
 errs dear.
 
-**The three states matter more than the number does.** The bank prices
-completely for 13 recipes, partly for 2, and not at all for 4:
+**The three states matter more than the number does.** After `015` the bank
+prices completely for 14 recipes ($1.80–$3.24 a serving), partly for 1, and not
+at all for 4:
 
 - Complete — `$2.34` `a serving`.
-- Partial — `$1.66+` `3 unpriced`, greyed figure, warning-coloured note. Rows
-  with a product but no `purchase_qty` land here (three of Stuffed peppers'
-  do), as do rows with neither.
-- Unknown — `—` `no prices yet`.
+- Partial — `$4.87+` `1 unpriced`, greyed figure, warning-coloured note. Rows
+  with a product but no `purchase_qty` land here, as do rows with neither. Only
+  the Udon stir-fry is left, on its "to taste" fresh ginger.
+- Unknown — `—` `no prices yet`. The Tortilla Soup, the smoothie, and the two
+  stubs.
 
 Sorting buckets before it compares, so **a partial price can never outrank a
-whole one**. This is the whole reason the states exist: Stuffed peppers sums to
-$1.66 a serving with three ingredients missing, and left to sort on the number
-it would sit at the top of a list whose entire job is finding the cheapest
-dinner, which is the opposite of true. `recipeCost` also requires `cents > 0`
-before it claims to know anything — otherwise the Protein Berry Smoothie, whose
-only priced row is water at 0, announces itself as a free meal.
+whole one**. Stuffed peppers is the case that shaped this: before `015` it
+summed to $1.66 a serving with three ingredients missing a `purchase_qty`, and
+left to sort on the number it would have sat at the top of a list whose entire
+job is finding the cheapest dinner, which is the opposite of true. It prices
+honestly at $1.82 now — keep the guard anyway, since the next unpriced
+ingredient anyone adds will need it. `recipeCost` also requires `cents > 0`
+before it claims to know anything, or the Protein Berry Smoothie, whose only
+priced row is water at 0, announces itself as a free meal.
+
+**The budget figure names its week.** `cost` derives from `mealPlan`, which is
+fetched for `anchor`'s week — so it follows the board, not the calendar. `Wall`
+passes `budgetWeekLabel` — null for the current week, `weekLabel(anchor)`
+otherwise — and the subtitle carries it as its own segment ("$23.40 left ·
+week of September 14 – 20 · cheapest first"), because "left this week" while the board shows next week is a small
+lie of exactly the kind this app tries not to tell. **`ShoppingPanel`'s cart
+footer still says "Left this week" unconditionally on the same anchored
+figure** — same bug, older, not yet fixed.
 
 Two things to know if this is ever extended:
 
@@ -519,6 +540,14 @@ Two things to know if this is ever extended:
   manual price in the bank today is 0 (soy sauce, spices, water — pantry rows
   Ed marked as free), so the discrepancy is invisible. The day someone types a
   real one, the recipe and the cart will disagree until that is reconciled.
+- **`price_source` cannot be tested with `not like '%receipt-confirmed%'`.**
+  The two values are `'…; receipt-confirmed'` and `'…; not receipt-confirmed'`,
+  so the negative contains the positive and that test matches both — every
+  screenshot-derived price then reads as receipt-confirmed. The first draft of
+  `015` did this and promoted Stuffed peppers to `cost_confidence = 'receipt'`
+  before it was caught. Match `'%not receipt-confirmed%'` instead. No recipe in
+  the bank is fully receipt-priced, so **any row reading `'receipt'` means this
+  has happened again** — 14 are `estimated`, 5 are `unknown`.
 - `RecipeDetail` does not show a price. The toggle lives in the shelf's own
   state, and the detail sheet is its sibling under `Wall`, not its child. Cost
   in the detail view wants the per-ingredient breakdown anyway, which is a

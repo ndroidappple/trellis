@@ -161,16 +161,19 @@ function writePriceMode(on) {
 /**
  * A price per serving, and how much of it to believe.
  *
- * Three states, because the bank genuinely has three. Twelve recipes price
- * completely; Stuffed peppers and the Udon stir-fry price partly, because
- * some rows carry a product but no `purchase_qty`; the Tortilla Soup, the
- * smoothie and the two stubs price not at all.
+ * Three states, because the bank genuinely has three. Fourteen recipes price
+ * completely, between $1.80 and $3.24 a serving; the Udon stir-fry prices
+ * partly, because its fresh ginger is "to taste" with no product behind it;
+ * the Tortilla Soup, the smoothie and the two stubs price not at all.
  *
- * The partial ones are the reason this is not just a number. Stuffed peppers
- * sums to $1.66 a serving with three ingredients missing, which would make it
+ * The partial state is the reason this is not just a number, and Stuffed
+ * peppers is the case that shaped it. Before 015 it summed to $1.66 a serving
+ * with three ingredients missing a `purchase_qty`, which would have made it
  * comfortably the cheapest thing in the book and completely wrong. The "+"
- * says the number is a floor, and `sortKey` keeps it below every recipe whose
- * price is whole.
+ * says the number is a floor, and `byPrice` keeps it below every recipe whose
+ * price is whole. 015 filled those three, so it now prices honestly at $1.82
+ * — but the guard is what made the wrong answer survivable in the meantime,
+ * and the next unpriced ingredient somebody adds will need it again.
  */
 function priceLabel(cost) {
   if (cost.perServingCents == null) {
@@ -294,6 +297,16 @@ export default function RecipeBook({
    * simply gets the prices without the frame around them.
    */
   budgetLeftCents,
+  /**
+   * The week that figure is about, when it is not the current one — null
+   * otherwise, which is the common case and reads as "left this week".
+   *
+   * Named rather than assumed, because the projection follows the week on the
+   * board and not the calendar. Page the board forward and "left this week"
+   * is describing a week that has not started yet; the caller knows which week
+   * it meant, so it says so.
+   */
+  budgetWeekLabel = null,
   onOpen,
   onClose,
 }) {
@@ -399,7 +412,10 @@ export default function RecipeBook({
             ? null
             : budgetLeftCents < 0
               ? `${formatCents(-budgetLeftCents)} over budget`
-              : `${formatCents(budgetLeftCents)} left this week`,
+              : `${formatCents(budgetLeftCents)} left${budgetWeekLabel ? '' : ' this week'}`,
+          // Its own segment rather than a clause, because "left week of
+          // September 14 – 20" is not a sentence.
+          budgetWeekLabel && `week of ${budgetWeekLabel}`,
           'cheapest first',
         ]
           .filter(Boolean)

@@ -856,6 +856,19 @@ export default function Wall({ profile, people }) {
 
   const cost = useMemo(() => weekCost(mealPlan, staples), [mealPlan, staples])
 
+  /*
+   * Which week the budget figure is about.
+   *
+   * `mealPlan` is fetched for `anchor`'s week, so `cost` — and everything
+   * derived from it — follows whatever week is on the board, not the calendar
+   * week. Left unsaid that becomes a small lie: page forward one week, open
+   * the recipe book, and a subtitle reading "left this week" is describing a
+   * week that has not started. Naming the week costs four words and is never
+   * wrong.
+   */
+  const isCurrentWeek = isSameDay(startOfWeek(anchor), startOfWeek(today))
+  const budgetWeekLabel = isCurrentWeek ? null : weekLabel(anchor)
+
   // ------------------------------------------------- meal plan → shopping
   //
   // The chain recipe → ingredient → product → cost already existed; the last
@@ -1508,8 +1521,6 @@ export default function Wall({ profile, people }) {
     setDayViewing(dateIso)
   }
 
-  const isCurrentWeek = isSameDay(startOfWeek(anchor), startOfWeek(today))
-
   const dayEventsFor = (dateIso) =>
     events
       .filter((e) => isSameDay(new Date(e.starts_at), new Date(`${dateIso}T00:00`)))
@@ -1709,6 +1720,7 @@ export default function Wall({ profile, people }) {
           bookRecipes={bookRecipes}
           bookLoading={bookLoading}
           budgetLeftCents={budget - cost.totalCents}
+          budgetWeekLabel={budgetWeekLabel}
           onSlot={(slot) => setMealEditing({ date: mealEditing.date, slot })}
           onPick={(recipeId) => pickMeal(mealEditing.date, mealEditing.slot, recipeId)}
           onToggleLeftover={() => toggleMealLeftover(mealEntryAt(mealEditing.date, mealEditing.slot))}
@@ -1800,6 +1812,7 @@ export default function Wall({ profile, people }) {
           recipes={bookRecipes}
           loading={bookLoading}
           budgetLeftCents={budget - cost.totalCents}
+          budgetWeekLabel={budgetWeekLabel}
           onOpen={(r) => setRecipeOpen(r.id)}
           onClose={closeBook}
         />
@@ -2424,6 +2437,7 @@ function MealEditor({
   bookRecipes,
   bookLoading,
   budgetLeftCents,
+  budgetWeekLabel,
   onSlot,
   onPick,
   onToggleLeftover,
@@ -2487,6 +2501,7 @@ function MealEditor({
         /* The picker is where the budget question actually bites: this is the
            tap that spends the money, not the one that browses. */
         budgetLeftCents={budgetLeftCents}
+        budgetWeekLabel={budgetWeekLabel}
         onOpen={(r) => onPick(r.id)}
         onClose={entry?.recipe ? () => setPicking(false) : onClose}
       />

@@ -1621,128 +1621,114 @@ model, so every new room was filed wherever there was space.
 
 ---
 
-# Feature #11 — Send the shopping list to a phone
+# Feature #11 — Get the shopping list onto a phone
 
 **Priority:** Medium
 **Category:** Shopping / Household Logistics
-**Status:** Backlog
-**Depends On:** Nothing for the phone-side version. The wall-side version needs
-a server and a phone number per person.
-**Primary Goal:** Get the week's list off the wall and into the hand of
-whoever is actually standing in the shop — addressed to Nick or to Ed.
+**Status:** Backlog. **Direction settled 9 Sep 2026: QR handoff, not a text.**
+**Depends On:** Nothing. Tier 0 needs no backend, no vendor and no schema change.
+**Primary Goal:** Let whoever is standing in the shop read the list on their own
+phone, without anyone having to send anything.
 
-## 1. The thing to understand first
+## 1. The reframe — read this before designing anything
 
-**The surface decides the transport, and the two surfaces have opposite
-answers.**
+The obvious version of this feature is "text the list to Nick or Ed". That is
+the expensive version, and it is solving a problem the app does not have.
 
-Trellis runs in two places. On a *phone*, sharing is nearly free: the OS
-already has Messages, a contact list and a share sheet, and the browser can
-hand off to all three. On the *wall*, none of that is true in any useful way —
-a wall-mounted iPad has no way to reach Ed's phone by itself, and the person
-who wants the list is by definition not standing at the wall.
+**The list is already on both phones.** Trellis runs on them, `list_items` is
+synced over realtime, and anything ticked at the shop is already reflected on
+the wall within a second. There is nothing to transport.
 
-So this is not one feature. It is a cheap one and an expensive one that happen
-to share a button label.
+What is actually missing is *arrival*: no phone opens straight to the shopping
+list. The gap is navigation, not delivery — and a text would be strictly worse
+than fixing the navigation, because a text is a **snapshot that goes stale the
+moment the other person ticks something off**, while the app is live.
 
-## 2. What it would take
+## 2. Tier 0 — QR handoff (the recommendation)
 
-### Tier 1 — share from a phone (cheap, no infrastructure)
+Three small pieces, none of which needs a server:
 
-`navigator.share({ title, text })`. Roughly ten lines plus the text
-formatter. Requires HTTPS (already), a user gesture (a button), and WebKit
-support (present on iOS well before any iPad this would run on).
+1. **Hash routing.** The app is a single page with no routes. `…/#shopping`
+   should open the Shopping full page directly. This is the only piece that
+   touches the app's structure, and it is small — `Wall` already has
+   `sectionOpen` state; it needs to read and write `location.hash`.
+2. **A QR code on the wall's Shopping page**, encoding that URL. Scan it with a
+   phone camera and the app opens on the phone, showing the live list.
+3. **Add to Home Screen on the phone**, pointed at the same URL, for people who
+   want it permanently one tap away.
 
-It opens the native share sheet, so the recipient picker is the real Messages
-one — no phone numbers stored anywhere, nothing sent by us, no vendor. Falls
-back to `navigator.clipboard.writeText` where `share` is unavailable.
+**Why this works with no auth work at all:** sessions are per-origin, and both
+phones already have their own session on the Vercel origin. The QR carries a
+URL, not data — so it needs no token, grants no access that the scanner did not
+already have, and a photograph of the wall leaks nothing. Someone without a
+Trellis session who scans it lands on the sign-in screen, which is correct.
 
-Honest limits:
+**This pattern is already in the backlog.** Feature #7 uses a QR to hand a
+recipe from the wall to a phone. Doing the same for the shopping list is not a
+new idea in this product, and the two should share whatever QR rendering ends
+up being built — probably an inline SVG generator rather than a dependency, at
+this size.
 
-- **On the wall it is close to useless.** It opens the *iPad's* share sheet,
-  sending from the iPad's iMessage account, and needs someone standing there
-  to pick a recipient and press send. It cannot be scheduled and it cannot be
-  aimed at a person from across the room.
-- The clipboard fallback has the same problem, worse: the clipboard ends up on
-  the wrong device.
+Cost: a few hours, no vendor, no secret, no per-message charge, no phone
+numbers stored, nothing to rate limit.
 
-That still makes it worth doing first, because both people use Trellis on
-their phones, and "I'm at the shop, send me the list" is answered by the other
-person tapping share on *their* phone.
+## 3. Tier 1 — share sheet (cheap, and worth it on a phone)
 
-### Tier 2 — actually send a text (the one the wall needs)
+`navigator.share({ title, text })` — roughly ten lines plus a text formatter.
+Requires HTTPS (already), a user gesture, and WebKit support (long present).
 
-A Supabase Edge Function plus an SMS provider, with a "Send to Nick / Send to
-Ed" pair of buttons on the Shopping page.
+Genuinely useful **from a phone**: the recipient picker is the real Messages
+one, nothing is stored, nothing is sent by us. Falls back to
+`navigator.clipboard.writeText`.
 
-What it needs:
+Near useless **from the wall**: it opens the *iPad's* share sheet, sends from
+the iPad's iMessage account, needs someone standing there to complete it, and
+produces the same stale snapshot as any text. Tier 0 beats it on the wall in
+every respect.
 
-- **A phone number per person.** `profiles.phone`, a migration, and RLS that
-  keeps it readable only within the household.
-- **A provider.** Twilio is the default answer (~$0.0079 a message in the US,
-  plus ~$1.15/mo for a number).
-- **A secret held server-side.** This is the part that must not be got wrong:
-  `VITE_`-prefixed variables are **inlined into the client bundle at build
-  time and are public**. An SMS credential belongs in the Edge Function's
-  environment and nowhere else. The wall calls the function; the function
-  calls Twilio.
-- Rate limiting, because a button that costs money per press sits on a wall
-  that people tap in passing.
+## 4. Tier 2 — actually send an SMS (probably never)
 
-Once this exists, scheduled sends are nearly free — "the list, every Saturday
-at 9am" — which is plausibly the version that actually gets used.
+Kept for completeness, and deliberately demoted. A Supabase Edge Function plus
+an SMS provider, `profiles.phone`, RLS on it, and rate limiting because a
+button that costs money per press sits on a wall people tap in passing. Twilio
+at roughly $0.008 a message plus ~$1.15/month for a number.
 
-### The cheaper Tier 2: email instead
+**The one trap worth repeating:** the provider credential must live in the Edge
+Function's environment. `VITE_`-prefixed variables are **inlined into the
+client bundle at build time and are public**.
 
-The project already has working Gmail SMTP (App Password, `smtp.gmail.com:587`)
-configured for auth email. An Edge Function could reuse it: no new vendor, no
-per-message cost, no phone numbers, and both people already receive Trellis
-mail.
+The only thing this buys over Tier 0 is *unattended* sending — "the list, every
+Saturday at 9am" — which is a different feature wearing this one's clothes. If
+that is ever wanted, the existing Gmail SMTP (already configured for auth email)
+would do it for free, badly suited though email is to a supermarket.
 
-It is worse for the actual use case — nobody reads email in a supermarket the
-way they read a text — but it is a fraction of the work, and it would prove
-whether anyone uses the feature before Twilio is worth setting up.
-
-### Deliberately not: a public share link
-
-Publish the list at a URL and text the link. Attractive until you look at the
-security: RLS funnels every table through `current_household_id()` via the
-caller's `profiles` row, so an unauthenticated reader has no path in at all.
-Adding one means a `share_tokens` table, a signed unguessable URL, an
-expiry, and a public read policy — a genuine new attack surface for a
-household of two, to avoid formatting some text.
-
-## 3. What the text should say
+## 5. If a text is ever rendered, what it should say
 
 Not a dump of the table. `groupByAisle` already orders the list the way the
-shop is walked, and that ordering is most of the list's value — a text that
-loses it is worse than the app.
+shop is walked, and that ordering is most of the list's value.
 
 - Group by aisle, in walking order, same as the panel.
-- Include quantities (`qty` has been a real column since 013 — do **not**
-  reconstruct the old "×2" text suffix).
-- Skip ticked items, or put them under a "already got" heading.
-- **Decide about unpriced ingredients.** The Shopping page deliberately shows
-  them separately, under "Not on the list", because an ingredient with no
-  product is missing from the total *and* from the list. A text that silently
-  omits them sends someone to the shop with an incomplete list; one that mixes
-  them in loses the distinction. Suggest a short trailing section.
-- Handle the empty list honestly. `pendingGroceries` means the week's
-  ingredients may not have been added yet, so "nothing on the list" and "the
-  meal plan hasn't been pulled in yet" are different states and the button
-  should not send an empty text for the second one.
+- Quantities from `qty` — a real column since 013. Do **not** reconstruct the
+  old "×2" text suffix.
+- Skip ticked items, or put them under an "already got" heading.
+- **Decide about unpriced ingredients.** The Shopping page deliberately lists
+  them separately under "Not on the list", because an ingredient with no
+  product is missing from the total *and* from the list. Omitting them silently
+  sends someone shopping with an incomplete list; mixing them in loses the
+  distinction. A short trailing section is the suggestion.
+- Distinguish "nothing on the list" from "the week's groceries have not been
+  pulled in yet" — `pendingGroceries` makes those different states.
 
-## 4. Definition of Done
+## 6. Definition of Done (Tier 0)
 
-- [ ] A share control on the Shopping full page, not in the dock panel — the
-      dock is for capture and ticking.
-- [ ] The text preserves aisle grouping and walking order.
-- [ ] Quantities come from `qty`, not from the item label.
-- [ ] Unpriced ingredients are represented, not silently dropped.
-- [ ] An empty or not-yet-populated list says so instead of sending nothing.
-- [ ] If Tier 2 ships: the provider credential exists only in the Edge
-      Function's environment, never in a `VITE_` variable.
-- [ ] If Tier 2 ships: sending is rate limited.
+- [ ] `#shopping` opens the Shopping page directly, and the hash stays in step
+      when the page is opened or closed by hand.
+- [ ] A QR on the Shopping page encodes that URL.
+- [ ] The QR is on the *page*, not the dock panel, and not on the board's
+      default surface — it is furniture, and the board is a week.
+- [ ] Scanning with no session lands on sign-in rather than failing oddly.
+- [ ] The QR carries a URL only. No list contents, no token, no identifiers.
+- [ ] Whatever renders it is shared with Feature #7 rather than duplicated.
 
 ---
 
@@ -2066,6 +2052,15 @@ great place to *see* one, and because the household already has a Supabase
 connector on claude.ai — so a phone chat can genuinely write to the database
 without Trellis needing an editor, an API key, or an edge function.
 
+**Shares its QR rendering with #11.** That feature settled on the same
+wall-to-phone handoff for the shopping list, on the same reasoning: a QR
+carries a URL, the phone already has its own session on that origin, and no
+data, token or identifier ever leaves the screen. Whichever of the two is built
+first should put the renderer somewhere the other can use it — an inline SVG
+generator rather than a dependency, at this size. The difference between them
+is only where the URL points: #7 at a primed Claude chat, #11 at Trellis's own
+`#shopping` route.
+
 ## Design decisions already made
 
 **Keep the encoded prompt short — this is a hard constraint, not taste.** A QR
@@ -2339,7 +2334,7 @@ Ordered by what should be picked up next, not by feature number.
 | 1 | **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor |
 | 2 | **#6 Chores Scoreboard** | Medium-High | Settle who did what over a period — **unblocked by #9A** |
 | 3 | **#2 Tier 1 remainder** | High | Calendar unification, search/saved views, push reminders |
-| 4 | **#11 Send the shopping list to a phone** | Medium | Get the list to whoever is in the shop — Tier 1 is nearly free |
+| 4 | **#11 Get the shopping list onto a phone** | Medium | QR to the live list — no server, no vendor; shares #7's renderer |
 | 5 | **#12 Spending Insights** | Medium | Planned vs actual; Tier 0 needs no bank connection |
 | 6 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
 | 7 | **#3 Themes** | Low | Personalization and visual delight |

@@ -124,7 +124,35 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   cursor: pointer;
 }
 
-.card button:disabled { opacity: 0.5; }
+.card button:disabled { opacity: 0.5; box-shadow: none; }
+
+/* Phase 0, second surface: the dialog buttons. Same rule as the sheet
+   footer — filled action raised, ghosts one step below it, and the whole
+   physical read living in the press rather than in ornament at rest.
+   
+   `:not(.chip)` is load-bearing and was got wrong once already here. A chip is
+   a `<button>` inside `.card`, so the bare selector picked all of them up and
+   the settings dialog's Full/Compact/Off started reading as three raised keys
+   with one of them also filled. A chip is a *state*, and this codebase has
+   twice been bitten by a treatment meaning "pressable" colliding with one
+   meaning "recorded". Elevation may say pressable; it may not start saying
+   selected. */
+.card button:not(.chip) {
+  box-shadow: var(--edge-lit), var(--raise-2);
+}
+
+.card button.ghost {
+  box-shadow: var(--raise-1);
+}
+
+.card button:not(.chip):active:not(:disabled) {
+  transform: translateY(var(--travel-tap));
+  box-shadow: var(--press);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card button:active:not(:disabled) { transform: none; }
+}
 
 .card button.ghost {
   background: transparent;
@@ -739,7 +767,19 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
    deliberately not in the `.actions` footer next to Close — see the note in
    SettingsPanel. Full width so it does not read as one of a pair, and quiet,
    because it is a convenience rather than the reason the dialog is open. */
-.settings-sleep {
+/* `.card button.settings-sleep`, and every part of that is doing work.
+   
+   This is the third time the trap recorded above `.card .chip` has bitten in
+   this file. A bare `.settings-sleep` (0,1,0) loses to `.card button` (0,1,1)
+   and the button paints solid green — a quiet convenience rendering as the
+   loudest thing in the dialog. Adding `.card` to make it (0,2,0) is still not
+   enough, because the elevation rule is `.card button:not(.chip)` and the
+   argument to `:not()` counts toward specificity, putting it at (0,2,1).
+   Matching that means keeping the element selector too.
+   
+   It stays a ghost, takes --raise-1 with the other ghosts, and gets no
+   --edge-lit. */
+.card button.settings-sleep {
   width: 100%;
   background: transparent;
   border: 1px solid var(--rule);
@@ -749,14 +789,19 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   font-size: 18px;
   min-height: var(--tap-min);
   cursor: pointer;
+
+  /* Ghost elevation, and no --edge-lit. A lit top edge on a transparent
+     surface is a highlight on nothing — the fake that turns a button into a
+     sticker. Only filled things catch light. */
+  box-shadow: var(--raise-1);
 }
 
-.settings-sleep:active:not(:disabled) {
+.card button.settings-sleep:active:not(:disabled) {
   background: var(--chip-face);
   color: var(--ink);
 }
 
-.settings-sleep:disabled {
+.card button.settings-sleep:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -767,10 +812,17 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   color: var(--ink-faint);
 }
 
+/* One transition declaration for all three, and box-shadow belongs in it now
+   that buttons carry elevation. Declaring a second `transition` up beside the
+   box-shadow rule would have been silently overridden by this one — same
+   specificity, later in the file — and the press would have snapped instead of
+   settling. */
 .card button,
 .list-button,
 .chip {
-  transition: transform var(--dur-tap) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
+  transition: transform var(--dur-tap) var(--ease-standard),
+    box-shadow var(--dur-tap) var(--ease-standard),
+    background-color var(--dur-state) var(--ease-standard);
 }
 
 @media (prefers-reduced-motion: reduce) {

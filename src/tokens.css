@@ -55,6 +55,46 @@
    * wider ambient one — because a single hard shadow reads as a sticker. */
   --lift: 0 1px 2px rgba(46, 43, 35, 0.05), 0 6px 16px rgba(46, 43, 35, 0.045);
 
+  /* --- elevation ---
+   *
+   * Named for the *job*, the same way the motion durations are, so a new
+   * control picks the one matching what it is and inherits the rest. Before
+   * this there were eight box-shadows in the whole app and exactly one of them
+   * was real elevation — spent on the dock panels and the menu dialog, both
+   * things you do not press. Meanwhile --chip-face and --row-face tint *down*,
+   * so everything you *could* press read as a hole rather than a key.
+   *
+   * **Depth is spent on the moment of contact, not on the resting state.**
+   * This board is lit for weeks in a room people relax in: static
+   * high-contrast ornament is the image retention Feature #5 exists to
+   * mitigate, and gloss is just light by another name. So the resting
+   * elevations are deliberately restrained, and the physical read comes from
+   * the control actually moving and its shadow collapsing under the finger —
+   * which costs nothing while nobody is touching it, and reads far better at
+   * kitchen distance than a bevel too fine to resolve.
+   *
+   * Every layer is ink-tinted, never black: a neutral shadow on this warm
+   * ground goes grey and dirty. The tight `0 1px 0` in each is the contact
+   * edge that reads as thickness; the blurred layer is the ambient one.
+   */
+  --raise-1: 0 1px 0 rgba(46, 43, 35, 0.10), 0 2px 5px rgba(46, 43, 35, 0.10);
+  --raise-2: 0 1px 0 rgba(46, 43, 35, 0.14), 0 4px 12px rgba(46, 43, 35, 0.14);
+
+  /* Pressed: not flat, *collapsed*. A control that loses its shadow entirely
+   * reads as having been deleted rather than pushed. */
+  --press: 0 1px 0 rgba(46, 43, 35, 0.08), 0 1px 2px rgba(46, 43, 35, 0.08);
+
+  /* How far a control travels when pressed. 2px, not 1: at arm's length from
+   * a wall, 1px is the same as nothing — which is exactly what the old
+   * scale(0.99) press feedback was. */
+  --travel-tap: 2px;
+
+  /* A lit top edge, for filled surfaces only. Material, not gloss: one flat
+   * inner line, no gradient, no specular. Transparent controls get none of
+   * this — there is no material there to catch the light, and faking it is
+   * how a button starts looking like a sticker. */
+  --edge-lit: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
   /* --- ink --- */
   --ink: #2E2B23;
   --ink-soft: #55513F;     /* ~6:1 on --slat-face; safe for small text */

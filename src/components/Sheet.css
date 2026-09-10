@@ -139,6 +139,58 @@
   font-weight: 400;
 }
 
+/* --- Phase 0 of the depth pass: elevation, on the primary actions only ---
+ *
+ * A page's footer is the one place in this app where "which of these do I
+ * press" is the whole question, so it is where raising something earns its
+ * keep first. Everything else stays exactly as it was until this has been seen
+ * on the wall.
+ *
+ * The filled button gets --raise-2 and a lit top edge; the ghosts get
+ * --raise-1 and no inner highlight, because there is no material there to
+ * catch light and faking it is how a button starts looking like a sticker.
+ * The gap between the two elevations is doing the same job the fill already
+ * does, from the other direction. */
+.sheet__footer button {
+  box-shadow: var(--edge-lit), var(--raise-2);
+  transition: transform var(--dur-tap) var(--ease-standard),
+    box-shadow var(--dur-tap) var(--ease-standard);
+}
+
+.sheet__footer button.ghost {
+  box-shadow: var(--raise-1);
+}
+
+/* The physical read, and the only place depth is spent generously: the button
+   travels and its shadow collapses under the finger. Dropping --edge-lit at
+   the same time is what makes it look like the light has come off the top
+   edge rather than the button having simply changed colour. */
+.sheet__footer button:active:not(:disabled) {
+  transform: translateY(var(--travel-tap));
+  box-shadow: var(--press);
+}
+
+.sheet__footer button:disabled {
+  box-shadow: none;
+}
+
+/* The seven day chips are a picker, not a set of primary actions — they sit at
+   --raise-1 whatever the rule above says, so seven buttons never shout at
+   once. */
+.sheet__footer .plan-day {
+  box-shadow: var(--raise-1);
+}
+
+/* A transform with no duration still snaps, so zeroing the tokens is not
+   enough — this is the per-component suppression the motion system expects.
+   The shadow collapse stays: it is feedback, not travel, and removing it would
+   leave the press with no acknowledgement at all. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet__footer button:active:not(:disabled) {
+    transform: none;
+  }
+}
+
 /* --- content shared by the sheets --- */
 
 .sheet__section {

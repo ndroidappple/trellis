@@ -61,6 +61,17 @@ export function useIdle({ timeoutMs, enabled = true }) {
     setIdle(false)
   }, [])
 
+  /**
+   * Go to sleep now, without waiting out the timeout.
+   *
+   * Waking is deliberately *not* given a matching manual path: it stays "any
+   * touch", the same as a timed sleep, so there is only ever one thing to know
+   * about getting the board back. A button that put the wall to sleep and then
+   * needed a different gesture to undo would be two mechanisms where the
+   * feature already has one that works.
+   */
+  const sleep = useCallback(() => setIdle(true), [])
+
   useEffect(() => {
     if (!enabled || timeoutMs == null) {
       // Both the flag and the clock have to clear the state, not just stop
@@ -107,5 +118,5 @@ export function useIdle({ timeoutMs, enabled = true }) {
     }
   }, [enabled, timeoutMs, wake])
 
-  return { idle, wake }
+  return { idle, wake, sleep }
 }

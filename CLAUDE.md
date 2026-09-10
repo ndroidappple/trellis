@@ -133,8 +133,15 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   bank in one lazy query (`RECIPE_BOOK_QUERY`) the first time the book opens —
   18 recipes / 127 ingredients / 56 steps is small enough that this beats a
   round trip per recipe, and the detail view then opens with no spinner.
-  The meal picker inside `MealEditor` is deliberately untouched: tapping a
-  recipe there still lands the chip on the board in one tap.
+  **`MealEditor`'s picker is this same component**, passed `title`, `lead`
+  (the slot chips) and `highlightId`. It used to be a separate, much poorer
+  list — plain titles, title-only search, no artwork, no filters — which was
+  never a design decision. The picker was built first against the thin
+  boot-time `recipes` query and could not have rendered a filter row if it
+  wanted to, because it had never loaded the columns the filters read. Two
+  differences remain and both are real: retired recipes are excluded when
+  picking, and tapping plans in one tap rather than opening (see `pickMeal`).
+  Opening the editor now preloads the book — see the effect above `openBook`.
 - `src/components/MealsCard.jsx` — **unmounted, unused.** Pre-redesign
   meal-planning UI (whole-week panel + recipe picker). Kept as reference;
   `Wall.jsx`'s `MealEditor` is the current per-day equivalent.
@@ -204,7 +211,18 @@ reskin — `Wall.jsx` was rebuilt to feed real data into the new components.
   was built for per the original design comments). In landscape the dock
   panels will get tight or clipped. Not addressed yet.
 
-**Settings:** `Menu → Settings`, or long-press the board (~650ms). The
+**Settings:** `Menu → Settings`, or long-press the board (~650ms). Also holds
+**Sleep now**, which drops straight into the ambient scene without waiting out
+the timeout; waking stays "any touch", exactly as a timed sleep does, so there
+is only ever one thing to know about getting the board back.
+
+**Screen timeout is one row, not two.** `lib/screensaver.js` implements the
+household-default-plus-device-override model Feature #5 §8 asks for, and
+`timeoutMsFor` still honours a device pin — but only one control is surfaced,
+because a setting whose entire purpose is to describe a difference between
+devices should not appear before a second device does. Picking a value clears
+any device pin in the same action, so the visible control is always the one
+telling the truth. Split it back in two when the household has two screens. The
 long-press still works and is still undocumented in the UI; it stopped being
 the *only* way in when the menu arrived, which mattered because the dialog is
 where you undo switching a section off, and switching a section off used to
@@ -359,6 +377,61 @@ already right; three hardcoded call sites were not.**
 - **`RecipeDetail`'s "Plan a night" still means dinner specifically**, which
   suits a footer that asks "Which night?" and offers seven days. If slots turn
   out to get used, that footer is the next thing to revisit.
+
+## Who did the chore
+
+**The wall cannot tell who tapped, so every completion it records is an
+inference.** 012 solved this for episodic chores by asking outright — a button
+per person, attribution and completion in one tap — but a checkbox has no room
+to ask, so weekly and one-off chores went on crediting `profile.id`, the
+session owner. On a shared wall that is wrong roughly half the time *by
+construction*, and it was quietly poisoning the log that Feature #6 is built
+on.
+
+Two changes, and deliberately neither is "ask on every tick" — the tick is the
+fast path, and a wall people touch in passing should not interrogate them:
+
+- **A rotating chore credits whoever is up.** `toggleChore` uses the same
+  `nextTurn` the row already displays. Still an inference, but the household's
+  own alternation rather than an accident of which account is signed in.
+- **Any guess is one tap from correct.** `cycleChoreCredit` hands the credit to
+  the next person, reached by **tapping the badge on a completed row**.
+
+`ChecklistRow`'s root is therefore a `<div>`, not a `<button>`. It was a
+button with the badge rendered inside it, which made the badge un-tappable by
+construction — a button inside a button is invalid, and the click belonged to
+the row — so the one piece of information most likely to be wrong was the one
+piece you could not correct: tapping "N" to say it was actually Ed just
+un-ticked the chore. The toggle is now its own button filling everything up to
+the badge, so the big easy target is unchanged.
+
+The badge is only a control where there is a credit to correct; an unticked
+chore has nobody on it. Shopping passes no person and is unaffected.
+`cycleChoreCredit` upserts on `(chore_id, on_date)` — correcting a credit is an
+update to an existing completion, not a second one — and leaves `completed_at`
+alone, because somebody fixing the name an hour later did not do it an hour
+later.
+
+## The week reads as a gradient of relevance
+
+Today is warm, tall and dark-edged; **days that have already happened recede**
+(`day-row--past`, `--past-face`). Shrinking past rows was the other candidate
+and is the wrong tool: `min-height: 84px` exists because a short viewport
+*clips* rather than degrading, today's `flex: 2.4` is calibrated against
+`WEIGHTED_ROWS` in `useDetailLevel.ts`, and Monday still holds what happened on
+Monday. Dimming de-prioritises; shrinking removes. `isPast` comes off the same
+clock hook as `isToday`, so the week re-shades itself at midnight.
+
+## Tapping the food opens the food
+
+The board's meal chip opens the **recipe**. It used to open the meal *editor*,
+so tapping the words "Chicken Katsu Curry" produced a dialog offering to change
+it, mark it leftovers, or clear it — every one of those a thing you do to the
+plan, and none of them the thing the chip is showing you. Managing the plan
+moved one tap out, to the day view (tap the row, not the chip), which is the
+right way round: changing what is for dinner is a planning act and belongs with
+the day. The day view's meal rows follow the same rule — the title opens the
+recipe, and "Change or clear this meal" is its own row.
 
 ## Chores, which are also tasks
 

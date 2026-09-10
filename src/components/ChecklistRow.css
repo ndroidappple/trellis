@@ -1,8 +1,6 @@
 .checklist-row {
   font-family: var(--font-text);
   text-align: left;
-  cursor: pointer;
-  border: 0;
 
   display: flex;
   align-items: center;
@@ -17,9 +15,55 @@
   color: var(--ink);
 }
 
-.checklist-row:focus-visible {
+/* The tick target. Everything up to the badge, so the easy-to-hit row is
+   unchanged for the common case — the badge is the only thing carved out of
+   it, and only because it now does something of its own. */
+.checklist-row__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.checklist-row__toggle:focus-visible,
+.checklist-row__credit:focus-visible {
   outline: 3px solid var(--person-a);
   outline-offset: 2px;
+}
+
+/* Who got the credit, and the way to correct it.
+ *
+ * Padded out to a real target rather than left at the badge's own 30px: this
+ * is tapped from arm's length on a wall, and --tap-min is 52px for a reason.
+ * It stays visually a badge — no border, no fill of its own — because the
+ * badge is the fact and this is only permission to change it. Making it look
+ * like a button would put a second loud control on every completed row. */
+.checklist-row__credit {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  margin: -11px -10px -11px 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.checklist-row__credit:active {
+  background: var(--chip-face);
 }
 
 .checklist-row__box {
@@ -70,11 +114,14 @@
 
 .checklist-row--item .checklist-row__box { width: 26px; height: 26px; }
 
-/* Instant acknowledgement on tap — see the note in App.css. */
-.checklist-row { transition: transform var(--dur-tap) var(--ease-standard); }
-.checklist-row:active { transform: scale(0.99); }
+/* Instant acknowledgement on tap — see the note in App.css. Scoped to the
+   toggle now that the root is not the control; pressing the badge should
+   nudge the badge, not shrink the whole row as if the chore had been
+   ticked. */
+.checklist-row__toggle { transition: transform var(--dur-tap) var(--ease-standard); }
+.checklist-row__toggle:active { transform: scale(0.99); }
 
 @media (prefers-reduced-motion: reduce) {
-  .checklist-row { transition: none; }
-  .checklist-row:active { transform: none; }
+  .checklist-row__toggle { transition: none; }
+  .checklist-row__toggle:active { transform: none; }
 }

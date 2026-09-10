@@ -31,7 +31,9 @@ function ChoreRow({
   progress,
   isChild = false,
   draggingId,
+  creditLabel,
   onToggle,
+  onCycleCredit,
   onDragStart,
   onOpenSettings,
 }) {
@@ -62,6 +64,9 @@ function ChoreRow({
         </button>
       )}
 
+      {/* The badge is only a correction target when there is a credit to
+          correct — an unticked chore has nobody on it, and offering to change
+          who did a thing nobody has done yet is a control with no meaning. */}
       <ChecklistRow
         id={chore.id}
         label={chore.title}
@@ -69,6 +74,8 @@ function ChoreRow({
         person={creditedTo ?? undefined}
         initials={initials}
         onToggle={onToggle}
+        onCreditPress={creditedTo ? onCycleCredit : undefined}
+        creditLabel={creditLabel}
       />
 
       {/* Priority as weight, not as a colour scale. Two people sharing a wall
@@ -226,6 +233,8 @@ export default function ChoresPanel({
   people = [],
   onToggle,
   onLog,
+  onCycleCredit,
+  peopleById,
   onAdd,
   onOpenSettings,
   commonChores = [],
@@ -322,6 +331,19 @@ export default function ChoresPanel({
                   isDone && lastFor?.completed_by ? personFor(lastFor.completed_by) : null
                 const kids = chore.children ?? []
 
+                /* Spelled out for the screen reader and the long-press
+                   tooltip, because a single initial in a coloured circle says
+                   who but gives no hint that it is also a control. */
+                const creditNames = (peopleById ?? []).map((p) => p.display_name)
+                const creditedName = (peopleById ?? []).find(
+                  (p) => p.id === lastFor?.completed_by
+                )?.display_name
+                const otherName = creditNames.find((n) => n !== creditedName)
+                const creditLabel =
+                  credited && creditedName && otherName
+                    ? `Done by ${creditedName}. Tap to credit ${otherName} instead.`
+                    : 'Change who is credited'
+
                 return (
                   <ChoreRow
                     key={chore.id}
@@ -341,7 +363,9 @@ export default function ChoresPanel({
                         : null
                     }
                     draggingId={draggingId}
+                    creditLabel={creditLabel}
                     onToggle={() => onToggle(chore)}
+                    onCycleCredit={() => onCycleCredit?.(chore)}
                     onDragStart={onDragStart}
                     onOpenSettings={onOpenSettings}
                   />

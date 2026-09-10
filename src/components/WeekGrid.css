@@ -37,6 +37,45 @@
   padding-top: 14px;
 }
 
+/* A day that has already happened recedes. It does not shrink.
+ *
+ * Shrinking was the other candidate and it is the wrong tool three times
+ * over. Row heights here are load-bearing: `min-height: 84px` exists because
+ * a short viewport does not degrade gracefully, it *clips* — buttons and
+ * weekday labels sliced off by overflow:hidden with no sign anything is
+ * missing — and today's `flex: 2.4` is calibrated against WEIGHTED_ROWS in
+ * useDetailLevel.ts, which decides the density of the entire board. Making
+ * four of seven rows shorter would re-open a known bug class and recalibrate
+ * the grid to fix a contrast problem.
+ *
+ * And it would hide the wrong thing. Monday still holds what happened on
+ * Monday, and a task that was due then and was not done is exactly what you
+ * want to still be able to read. Dimming de-prioritises; shrinking removes.
+ *
+ * So the past loses contrast and keeps its space, which widens the gap
+ * between today and everything else from the other end — today could never
+ * win it alone, because a near-white row cannot out-lighten its neighbours
+ * and has only warmth and height to work with. */
+.day-row--past {
+  background: var(--past-face);
+  border-left-color: var(--past-rule);
+}
+
+.day-row--past .day-row__dom,
+.day-row--past .day-row__dow {
+  color: var(--ink-faint);
+}
+
+/* One opacity on the content rather than a past variant of every chip token.
+   The chips carry person colours, meal tints and a done state, and all of it
+   should step back by the same amount — restating each in a duller form is
+   four more places to keep in sync and one more chance for "filled means
+   recorded" to come apart. 0.72 is low enough to read as background and high
+   enough to stay legible across the room. */
+.day-row--past .day-row__events {
+  opacity: 0.72;
+}
+
 /* The whole row opens the day, so it needs to look like it will. */
 .day-row {
   cursor: pointer;

@@ -152,7 +152,41 @@ function FilterRow({ label, options, value, onChange }) {
 
 const NO_FILTERS = { protein: 'any', time: 'any', effort: 'any', show: 'all' }
 
-export default function RecipeBook({ recipes, loading, onOpen, onClose }) {
+/**
+ * The shelf, used for both jobs it has.
+ *
+ * It is the recipe book, and it is also the picker inside `MealEditor` —
+ * which until now was a separate, much poorer list: plain titles, one search
+ * box matching titles only, no artwork, no filters. Not a design decision so
+ * much as an accident of order. The picker was built first, against the thin
+ * boot-time `recipes` query (`id, title, servings, cook_minutes, effort,
+ * status`), and the book arrived later with its own lazy `RECIPE_BOOK_QUERY`
+ * carrying ingredients, tags, cuisine and times. The picker could not have
+ * shown a filter row if it wanted to — it had never loaded the columns the
+ * filters read.
+ *
+ * So the two differences that remain are the two that were ever real:
+ *
+ *   - **Retired recipes are excluded when picking.** You should not be
+ *     offered Tuesday's dinner from the retired pile; a recipe you have
+ *     stopped cooking is still a recipe you wrote down, which is why the book
+ *     keeps them.
+ *   - **Tapping plans instead of opening**, still in one tap. That was a
+ *     deliberate decision (see `pickMeal` in Wall.jsx) and it survives.
+ *
+ * Everything else — artwork, ingredient search, four filter rows — is now the
+ * same surface, because there was never a reason for it not to be.
+ */
+export default function RecipeBook({
+  recipes,
+  loading,
+  title = 'Recipe book',
+  lead,
+  /** Marked "on the plan now", so changing a meal isn't done blind. */
+  highlightId,
+  onOpen,
+  onClose,
+}) {
   const [q, setQ] = useState('')
   const [f, setF] = useState(NO_FILTERS)
   const [helpOpen, setHelpOpen] = useState(false)
@@ -217,7 +251,12 @@ export default function RecipeBook({ recipes, loading, onOpen, onClose }) {
       : `${shown.length} of ${recipes.length} recipes`
 
   return (
-    <Sheet title="Recipe book" subtitle={countLabel} onClose={onClose}>
+    <Sheet title={title} subtitle={countLabel} onClose={onClose}>
+      {/* Whatever the caller needs answered before the list is useful — the
+          meal editor puts its slot chips here, because which meal you are
+          planning is decided before which recipe fills it. */}
+      {lead}
+
       <div className="book__search-row">
         {/* Same reasoning as the meal picker: no autoFocus. The list is the
             interface until someone asks for the keyboard. */}
@@ -239,10 +278,18 @@ export default function RecipeBook({ recipes, loading, onOpen, onClose }) {
 
       <div className="book__grid">
         {shown.map((r) => (
-          <button key={r.id} className="book__card" onClick={() => onOpen(r)}>
+          <button
+            key={r.id}
+            className={r.id === highlightId ? 'book__card is-current' : 'book__card'}
+            onClick={() => onOpen(r)}
+          >
             <RecipeArt recipe={r} className="book__card-art" />
             <span className="book__card-title">{r.title}</span>
-            <span className="book__card-meta">{summaryOf(r) || 'No details yet'}</span>
+            <span className="book__card-meta">
+              {r.id === highlightId
+                ? 'On the plan now'
+                : summaryOf(r) || 'No details yet'}
+            </span>
           </button>
         ))}
       </div>

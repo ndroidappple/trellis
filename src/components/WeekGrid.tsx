@@ -13,6 +13,11 @@ export interface DayData {
   dayOfWeek: string;
   shortDayOfWeek: string;
   isToday: boolean;
+  /**
+   * Already happened. Drives the recession in WeekGrid.css — see the note
+   * there for why the past dims rather than shrinks.
+   */
+  isPast?: boolean;
   events: EventChipData[];
   /**
    * Whether this day still has a meal slot free. Computed by Wall, because
@@ -76,6 +81,7 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
       className={[
         'day-row',
         day.isToday ? 'day-row--today' : '',
+        day.isPast ? 'day-row--past' : '',
         dragging ? 'is-drop-target' : '',
         dragOver ? 'is-drop-over' : '',
       ].filter(Boolean).join(' ')}

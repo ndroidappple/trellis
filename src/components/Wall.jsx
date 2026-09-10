@@ -444,9 +444,31 @@ export default function Wall({ profile, people }) {
 
   /**
    * Ticking inserts an occurrence; unticking deletes it. completed_by is
-   * whoever tapped, deliberately not the chore's assignee — credit belongs
-   * to whoever actually did the thing, which is the entire reason the log
-   * exists.
+   * credit for having done the thing, deliberately not the chore's assignee —
+   * which is the entire reason the log exists.
+   *
+   * **The wall cannot tell who tapped, so this is a guess.** It used to guess
+   * `profile.id`, the session owner, which is right on a phone and wrong on
+   * the wall roughly half the time by construction: one signed-in account
+   * shared by two people standing in front of it. Episodic chores solved that
+   * in 012 by asking outright — a button per person — but a checkbox has no
+   * room to ask, and weekly and one-off chores were left crediting the same
+   * name forever, quietly poisoning the log and the scoreboard (#6) built on
+   * it.
+   *
+   * Two changes, and neither is "ask on every tick", because the tick is the
+   * fast path and a wall people touch in passing should not interrogate them:
+   *
+   *   1. **A rotating chore credits whoever is up**, via the same `nextTurn`
+   *      the row already displays. It is still an inference, but it is the
+   *      household's own alternation rather than an accident of which account
+   *      is signed in — right most of the time in a house that takes turns,
+   *      instead of wrong half the time by design.
+   *   2. **Any guess is one tap from correct**, by tapping the badge. See
+   *      `cycleChoreCredit`.
+   *
+   * The guess is never hidden: the badge showing who was credited appears on
+   * every completed row, which is what makes it correctable at all.
    */
   async function toggleChore(chore) {
     const on = occurrenceFor(chore) ?? toDateInputValue(today)
@@ -461,12 +483,56 @@ export default function Wall({ profile, people }) {
       return loadChoreLog()
     }
 
+    const turn = nextTurn(chore, lastDoneFor(chore.id), orderedPeople)
+
     const { error } = await supabase.from('chore_completions').insert({
       household_id: profile.household_id,
       chore_id: chore.id,
       on_date: on,
-      completed_by: profile.id,
+      completed_by: turn?.id ?? profile.id,
     })
+    if (error) setError(error.message)
+    loadChoreLog()
+  }
+
+  /**
+   * Hand the credit to the next person. The correction half of the above.
+   *
+   * A cycle rather than a swap, even though this household is two people by
+   * construction (see `handle_new_user`'s allowlist) — two is the case where
+   * a cycle and a toggle are the same thing, so writing the general form
+   * costs nothing and does not quietly become wrong if that ever changes.
+   *
+   * Upsert on `(chore_id, on_date)` for the same reason `logChore` does:
+   * correcting a credit is an update to an existing completion, not a second
+   * one, and the unique key would reject the insert anyway.
+   *
+   * `completed_at` is deliberately left alone. It records when the chore was
+   * done, and somebody fixing the name an hour later did not do it an hour
+   * later.
+   */
+  async function cycleChoreCredit(chore) {
+    if (orderedPeople.length < 2) return
+
+    const on = occurrenceFor(chore) ?? toDateInputValue(today)
+    const current = lastDoneFor(chore.id)?.completed_by
+    const at = orderedPeople.findIndex((p) => p.id === current)
+    // An unrecognised or missing credit lands on the first person rather than
+    // erroring — -1 + 1 is 0, which is the behaviour we want anyway.
+    const next = orderedPeople[(at + 1) % orderedPeople.length]
+
+    const { error } = await supabase
+      .from('chore_completions')
+      .upsert(
+        {
+          household_id: profile.household_id,
+          chore_id: chore.id,
+          on_date: on,
+          completed_by: next.id,
+        },
+        { onConflict: 'chore_id,on_date' }
+      )
+
     if (error) setError(error.message)
     loadChoreLog()
   }
@@ -922,6 +988,19 @@ export default function Wall({ profile, people }) {
     )
   }, [])
 
+  /**
+   * The meal picker reads the recipe book now, so opening the editor has to
+   * bring the book with it.
+   *
+   * Guarded on the bank being empty rather than firing every time `mealEditing`
+   * changes: picking a different slot re-sets that state, and a round trip per
+   * chip tap would be a tax on the one interaction this whole screen exists
+   * for. The bank is 18 recipes and it does not go stale within a sitting.
+   */
+  useEffect(() => {
+    if (mealEditing && bookRecipes.length === 0) loadBook()
+  }, [mealEditing, bookRecipes.length, loadBook])
+
   const openBook = useCallback(
     (recipeId = null) => {
       setRecipeOpen(recipeId)
@@ -1109,7 +1188,7 @@ export default function Wall({ profile, people }) {
    */
   const screensaverAllowed = !cooking && syncState === 'live' && !error
   const idleTimeoutMs = timeoutMsFor(settings.screensaverMin, deviceTimeout)
-  const { idle, wake } = useIdle({ timeoutMs: idleTimeoutMs, enabled: screensaverAllowed })
+  const { idle, wake, sleep } = useIdle({ timeoutMs: idleTimeoutMs, enabled: screensaverAllowed })
 
   /**
    * Night is a property of the hour, and `today` only moves at midnight — so
@@ -1291,6 +1370,9 @@ export default function Wall({ profile, people }) {
           // Against `today` from the clock hook, not a fresh `new Date()` —
           // that's what makes the highlight move at midnight.
           isToday: isSameDay(d, today),
+          // Off the same clock hook as isToday, so the week re-shades itself
+          // at midnight along with everything else date-shaped.
+          isPast: d.getTime() < today.getTime(),
           events: dayEvents,
           // The grid can no longer work this out from "is there a meal chip",
           // now that four of them can sit on one day.
@@ -1351,8 +1433,28 @@ export default function Wall({ profile, people }) {
     if (id.startsWith('meal:')) {
       const planId = id.slice('meal:'.length)
       const entry = mealPlan.find((p) => p.id === planId)
-      // The chip knows its own slot, so tapping breakfast opens breakfast.
-      if (entry) setMealEditing({ date: entry.on_date, slot: entry.slot })
+      if (!entry) return
+
+      /*
+       * Tapping the food opens the food.
+       *
+       * This chip used to open the meal *editor* — so tapping the words
+       * "Chicken Katsu Curry" produced a dialog whose options were change it,
+       * mark it leftovers, or clear it. Every one of those is a thing you do
+       * to the plan, and none of them is the thing the chip is showing you.
+       * The overwhelmingly common reason to touch a recipe title on a wall in
+       * a kitchen is to read the recipe.
+       *
+       * Managing the plan moves one tap out, to the day view — tap the row
+       * rather than the chip. That is the right way round: changing what is
+       * for dinner is a planning act and belongs with the day, while the chip
+       * is the dish itself.
+       */
+      if (entry.recipe?.id) return openBook(entry.recipe.id)
+
+      // A plan row with no recipe attached has nothing to read, so it falls
+      // back to the only thing it can usefully offer.
+      setMealEditing({ date: entry.on_date, slot: entry.slot })
       return
     }
     const ev = events.find((e) => e.id === id)
@@ -1444,6 +1546,8 @@ export default function Wall({ profile, people }) {
     people: orderedPeople,
     onToggle: toggleChore,
     onLog: logChore,
+    onCycleCredit: cycleChoreCredit,
+    peopleById: orderedPeople,
     onAdd: addChore,
     onOpenSettings: setReschedulingChore,
     commonChores,
@@ -1575,7 +1679,8 @@ export default function Wall({ profile, people }) {
           slot={mealEditing.slot}
           entry={mealEntryAt(mealEditing.date, mealEditing.slot)}
           takenSlots={mealsFor(mealEditing.date).map((m) => m.slot)}
-          recipes={recipes}
+          bookRecipes={bookRecipes}
+          bookLoading={bookLoading}
           onSlot={(slot) => setMealEditing({ date: mealEditing.date, slot })}
           onPick={(recipeId) => pickMeal(mealEditing.date, mealEditing.slot, recipeId)}
           onToggleLeftover={() => toggleMealLeftover(mealEntryAt(mealEditing.date, mealEditing.slot))}
@@ -1740,8 +1845,15 @@ export default function Wall({ profile, people }) {
         <SettingsPanel
           settings={settings}
           deviceTimeout={deviceTimeout}
+          canSleep={screensaverAllowed}
           onChange={updateSetting}
           onDeviceTimeout={setDeviceScreensaver}
+          onSleep={() => {
+            // Close first, so the scene is not laid over a dialog the person
+            // would find still open behind it when they woke the board.
+            setSettingsOpen(false)
+            sleep()
+          }}
           onToggleFlourish={toggleFlourish}
           onClose={() => setSettingsOpen(false)}
         />
@@ -1829,37 +1941,42 @@ function DayView({
           </button>
         )}
 
+        {/* Three rows a meal, each doing exactly one thing, in the order you
+            are likely to want them.
+
+            The title opens the recipe — the same as tapping the chip on the
+            board, and that consistency is the point. It used to open the meal
+            editor here while the chip opened the editor there too, so the
+            dish's own name was the one thing in the app that never showed you
+            the dish. Changing the plan is a real action and keeps a real row;
+            it just stops being what happens when you touch the food. */}
         {planned.map((meal) => (
           <Fragment key={meal.id}>
-            <button className="sheet-row" onClick={() => onEditMeal(meal.slot)}>
+            <button className="sheet-row" onClick={() => onViewRecipe(meal)}>
               <span>{meal.recipe.title}</span>
-              <span className="sheet-row__meta">{mealMeta(meal)}</span>
+              <span className="sheet-row__meta">
+                {mealMeta(meal)}
+                {meal.recipe.steps?.length > 0
+                  ? ` · ${meal.recipe.steps.length} steps`
+                  : ' · no method written down yet'}
+              </span>
             </button>
 
-            {/* The meal you're actually cooking is the likeliest reason to
-                want the method, so the shortest path to it starts here rather
-                than back at the board header. Leftovers get it too — reheating
-                instructions live in the same steps.
-
-                Cook mode is offered directly, and only when there is a method
-                to show: this row used to land on the recipe with a Cook button
-                below the fold on a long one, which is a screen and two taps
-                between standing at the hob and reading step one. */}
-            {meal.recipe.steps?.length > 0 ? (
+            {/* Straight to the hob, and only when there is a method to show.
+                Without this the shortest path to step one was the recipe page
+                plus a Cook button that sits below the fold on a long one —
+                a screen and two taps while holding a pan. */}
+            {meal.recipe.steps?.length > 0 && (
               <button className="sheet-row" onClick={() => onCook(meal)}>
                 <span>Cook it</span>
-                <span className="sheet-row__meta">
-                  {meal.recipe.steps.length} steps · or open the full recipe below
-                </span>
+                <span className="sheet-row__meta">Step by step, screen stays awake</span>
               </button>
-            ) : null}
+            )}
 
-            <button className="sheet-row" onClick={() => onViewRecipe(meal)}>
-              <span>Open the recipe</span>
+            <button className="sheet-row" onClick={() => onEditMeal(meal.slot)}>
+              <span>Change or clear this meal</span>
               <span className="sheet-row__meta">
-                {meal.recipe.steps?.length > 0
-                  ? 'Ingredients and method'
-                  : 'Ingredients — no method written down yet'}
+                {meal.is_leftover ? 'Currently leftovers' : 'Currently a cook night'}
               </span>
             </button>
           </Fragment>
@@ -2258,7 +2375,8 @@ function MealEditor({
   slot,
   entry,
   takenSlots,
-  recipes,
+  bookRecipes,
+  bookLoading,
   onSlot,
   onPick,
   onToggleLeftover,
@@ -2266,20 +2384,19 @@ function MealEditor({
   onClose,
 }) {
   const [picking, setPicking] = useState(!entry?.recipe)
-  const [q, setQ] = useState('')
 
   /**
    * Which meal of the day this is.
    *
-   * Above the search field rather than below it, because it is the question
-   * that comes first: you decide you are planning a lunch and then go looking
-   * for one. Underneath the list it would be a correction you make after
-   * realising the recipe you just picked landed on the wrong meal.
+   * Above the list rather than below it, because it is the question that comes
+   * first: you decide you are planning a lunch and then go looking for one.
+   * Underneath it would be a correction you make after noticing the recipe you
+   * just picked landed on the wrong meal.
    *
    * A slot already holding something stays pickable — switching to it is how
-   * you change that meal — but it says so, because `meal_plan` is unique on
-   * (household, date, slot) and picking a recipe there replaces what is on it.
-   * A control that silently overwrites is worse than one that refuses.
+   * you change that meal — but it says so with a dot, because `meal_plan` is
+   * unique on (household, date, slot) and picking a recipe there replaces what
+   * is on it. A control that silently overwrites is worse than one that warns.
    */
   const slotRow = (
     <div className="settings-row">
@@ -2304,45 +2421,25 @@ function MealEditor({
   )
 
   if (picking) {
-    const shown = recipes.filter((r) => r.title.toLowerCase().includes(q.trim().toLowerCase()))
+    /*
+     * The book's own shelf, not a stripped-down copy of it.
+     *
+     * Retired recipes are the one thing held back: a recipe you have stopped
+     * cooking is still a recipe you wrote down, so the book keeps it, but you
+     * should not be offered it for Tuesday.
+     */
+    const pickable = bookRecipes.filter((r) => r.status !== 'retired')
 
     return (
-      <Sheet
+      <RecipeBook
+        recipes={pickable}
+        loading={bookLoading}
         title={entry?.recipe ? 'Change meal' : `Pick a ${slotLabel(slot).toLowerCase()}`}
-        subtitle={dayLabel(date)}
+        lead={slotRow}
+        highlightId={entry?.recipe?.id}
+        onOpen={(r) => onPick(r.id)}
         onClose={entry?.recipe ? () => setPicking(false) : onClose}
-      >
-        {slotRow}
-        {/* No autoFocus. Picking a meal starts by *reading* the list, and an
-            unrequested keyboard covers half of it on an iPad. The field is
-            there when someone wants to narrow things down; until they tap
-            it, the list is the interface. */}
-        <input
-          className="sheet__search"
-          placeholder="Search recipes"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-
-        <div className="sheet__section">
-          {shown.map((r) => (
-            <button key={r.id} className="sheet-row" onClick={() => onPick(r.id)}>
-              <span>{r.title}</span>
-              <span className="sheet-row__meta">
-                {r.servings_min
-                  ? `${r.servings_min}${r.servings_max && r.servings_max !== r.servings_min ? `–${r.servings_max}` : ''} servings`
-                  : ''}
-                {r.cook_minutes ? ` · ${r.cook_minutes} min` : ''}
-                {r.status === 'conditional' ? ' · conditional' : ''}
-                {/* Changing a meal without being shown which one is
-                    currently on the plan means picking blind. */}
-                {r.id === entry?.recipe?.id ? ' · on the plan now' : ''}
-              </span>
-            </button>
-          ))}
-          {shown.length === 0 && <p className="sheet__empty">Nothing matches.</p>}
-        </div>
-      </Sheet>
+      />
     )
   }
 
@@ -2405,8 +2502,10 @@ const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping' }
 function SettingsPanel({
   settings,
   deviceTimeout,
+  canSleep,
   onChange,
   onDeviceTimeout,
+  onSleep,
   onToggleFlourish,
   onClose,
 }) {
@@ -2471,12 +2570,23 @@ function SettingsPanel({
         </p>
 
         {/*
-          Two rows, because this is the one setting where the wall and a phone
-          genuinely want different answers — the wall hangs in a room and wants
-          to fade out; a phone already has an idle behaviour and it is called
-          locking. Everything else here describes the board, so both agreeing
-          is the point; forcing agreement on this one means whichever surface
-          loses is wrong all the time.
+          One row, not two.
+          
+          There were two: a household default and a per-device override, which
+          is what Feature #5 §8 asks for and is genuinely the right shape
+          *eventually* — the wall hangs in a room and wants to fade out, while
+          a phone already has an idle behaviour and it is called locking.
+          
+          But "Screen timeout" above "This device" made you read both rows and
+          work out which one was winning before you could answer a question
+          with one obvious answer, and it did that to serve a household that
+          currently has one screen in it. A setting whose whole purpose is to
+          describe a difference should not appear before the difference does.
+          
+          `timeoutMsFor` still prefers a device override if one exists, and
+          `readDeviceTimeout` still reads it — the model is intact and tested,
+          it simply has no control until there is a second device to disagree
+          with. When there is, this row splits back into two.
         */}
         <div className="settings-row">
           <span className="settings-row__label">Screen timeout</span>
@@ -2484,36 +2594,16 @@ function SettingsPanel({
             {TIMEOUT_OPTIONS.map((o) => (
               <button
                 key={o.value}
-                className={householdMin === o.value ? 'chip on' : 'chip'}
-                aria-pressed={householdMin === o.value}
-                onClick={() => onChange('screensaverMin', o.value)}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="settings-row">
-          <span className="settings-row__label">This device</span>
-          <div className="chips">
-            {/* Null is "no opinion, follow the household", which is a
-                different thing from Never — a device that has chosen Never
-                must not start fading again because someone changed the
-                default from a phone. */}
-            <button
-              className={deviceTimeout == null ? 'chip on' : 'chip'}
-              aria-pressed={deviceTimeout == null}
-              onClick={() => onDeviceTimeout(null)}
-            >
-              Match
-            </button>
-            {TIMEOUT_OPTIONS.map((o) => (
-              <button
-                key={o.value}
-                className={deviceTimeout === o.value ? 'chip on' : 'chip'}
-                aria-pressed={deviceTimeout === o.value}
-                onClick={() => onDeviceTimeout(o.value)}
+                className={effectiveMin === o.value ? 'chip on' : 'chip'}
+                aria-pressed={effectiveMin === o.value}
+                onClick={() => {
+                  // Clear any device pin at the same time, so this one control
+                  // is always the one telling the truth. Without it a value
+                  // left over from the two-row version would silently outrank
+                  // whatever you picked here.
+                  onDeviceTimeout(null)
+                  onChange('screensaverMin', o.value)
+                }}
               >
                 {o.label}
               </button>
@@ -2523,16 +2613,40 @@ function SettingsPanel({
 
         <p className="settings-row__hint">
           {effectiveMin === 'never'
-            ? 'This screen never fades.'
-            : `This screen fades to the ambient scene after ${effectiveMin} minutes, and darkens after 10pm. Any touch brings the board back.`}
-          {deviceTimeout != null && ' Set here only — other devices follow the household setting.'}
+            ? 'The board stays on. "Sleep now" still works.'
+            : `The board fades to the ambient scene after ${effectiveMin} minutes, and darkens after 10pm. Any touch brings it back.`}
         </p>
 
+        {/*
+          Sleep on demand, for the times the room wants the screen off now
+          rather than in ten minutes — someone sitting down to watch
+          something, or going to bed early.
+
+          It only puts the board to sleep; waking stays "any touch", exactly
+          as a timed sleep does. A manual sleep that needed its own gesture to
+          undo would be a second mechanism for something the feature already
+          does one way.
+
+          Disabled rather than hidden when the scene cannot run, because the
+          reasons are worth reading: offline and errored boards must stay
+          visible, and a control that silently does nothing teaches people the
+          setting is broken.
+        */}
         <div className="actions">
+          <button className="ghost" onClick={onSleep} disabled={!canSleep}>
+            Sleep now
+          </button>
           <button className="ghost" onClick={onClose}>
             Close
           </button>
         </div>
+
+        {!canSleep && (
+          <p className="settings-row__hint">
+            Sleep is unavailable while the board is offline or showing an
+            error — those have to stay on screen.
+          </p>
+        )}
       </div>
     </div>
   )

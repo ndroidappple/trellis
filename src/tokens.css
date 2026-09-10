@@ -30,6 +30,14 @@
   --plaster: #E4E4DA;      /* the wall behind everything */
   --slat-face: #FCFCF8;    /* day rows, panels — paper */
   --today-face: #FAF3DF;   /* today's row only: warmer, not brighter */
+
+  /* A day that has already happened. Paper that has been put down: sits
+   * between the ground and a live row, so the week reads as a gradient of
+   * relevance rather than seven equal slats. It is deliberately much closer
+   * to --slat-face than to --plaster — a past day still holds what happened
+   * on it, and a row you cannot read is worse than one you can ignore. */
+  --past-face: #EFEFE6;
+  --past-rule: #E2E2D6;
   --rule: #D9D9CB;         /* hairlines, borders, unchecked boxes */
 
   /* Depth, spent once. Two very soft layers — a tight contact shadow and a

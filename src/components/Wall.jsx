@@ -1225,6 +1225,7 @@ export default function Wall({ profile, people }) {
     turnFor: (chore, last) => nextTurn(chore, last, orderedPeople),
     agoFor: (iso) => agoLabel(iso, today),
     today,
+    todayIso: toDateInputValue(today),
   }
 
   const shoppingPanelProps = {

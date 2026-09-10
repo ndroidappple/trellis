@@ -10,6 +10,14 @@ import {
 import './RecipeBook.css'
 
 /**
+ * How far a finger may travel and still count as a tap rather than a scroll.
+ * Matches LONG_PRESS_SLOP_PX in Wall.jsx, and for the same reason: a finger
+ * resting on glass emits a constant dribble of move events, so "did not move
+ * at all" is not a test any real touch passes.
+ */
+const TAP_SLOP_PX = 12
+
+/**
  * The recipe book: the reading surface for the recipe bank that until now
  * only existed as a one-line picker inside the meal editor.
  *
@@ -546,6 +554,42 @@ export function CookMode({ recipe, detail, onExit }) {
   const step = steps[index]
   const last = index === steps.length - 1
 
+  /*
+   * Tap the step to go to the next one.
+   *
+   * The Next button is 52px in a corner and your hands are covered in raw
+   * chicken. The step text is most of the screen, so it is the target you can
+   * actually hit without looking — and without wiping your hands first, which
+   * is the moment people put the iPad down and stop using cook mode at all.
+   *
+   * Two things stop it misfiring. The step text scrolls when it is long, so a
+   * drag that happens to end where it started is a scroll and not a tap —
+   * hence the same 12px slop the board's long-press uses (LONG_PRESS_SLOP_PX
+   * in Wall.jsx). And it never advances off the last step: "Finish" exits the
+   * mode entirely, which is not something a stray touch should be able to do
+   * halfway through a recipe.
+   */
+  const tapOrigin = useRef(null)
+
+  function beginTap(e) {
+    // Controls handle their own taps. Same guard as the board's long press.
+    if (e.target.closest?.('button, a, input, label')) return
+    tapOrigin.current = { x: e.clientX, y: e.clientY }
+  }
+
+  function endTap(e) {
+    const origin = tapOrigin.current
+    tapOrigin.current = null
+    if (!origin || last) return
+
+    const moved =
+      Math.abs(e.clientX - origin.x) > TAP_SLOP_PX ||
+      Math.abs(e.clientY - origin.y) > TAP_SLOP_PX
+    if (moved) return
+
+    setIndex((i) => Math.min(steps.length - 1, i + 1))
+  }
+
   return (
     <div className="cook" role="dialog" aria-modal="true" aria-label={`Cooking ${recipe.title}`}>
       <header className="cook__head">
@@ -553,6 +597,10 @@ export function CookMode({ recipe, detail, onExit }) {
           <p className="cook__recipe">{recipe.title}</p>
           <p className="cook__progress">
             Step {index + 1} of {steps.length}
+            {/* Says so, because a tap target with no edges is one nobody
+                finds. Drops away on the last step, where tapping does
+                nothing. */}
+            {!last && <span className="cook__hint"> · tap to continue</span>}
           </p>
         </div>
         <button className="sheet__close" onClick={onExit}>
@@ -560,7 +608,14 @@ export function CookMode({ recipe, detail, onExit }) {
         </button>
       </header>
 
-      <div className="cook__body">
+      <div
+        className={last ? 'cook__body' : 'cook__body is-tappable'}
+        onPointerDown={beginTap}
+        onPointerUp={endTap}
+        onPointerCancel={() => {
+          tapOrigin.current = null
+        }}
+      >
         <p className="cook__step">{step?.body}</p>
       </div>
 

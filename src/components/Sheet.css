@@ -7,7 +7,12 @@
   inset: 0;
   z-index: 15;
 
-  background: var(--plaster);
+  /* Paper, like the panels — not the wall behind them.
+     The rows inside a sheet are the same rows as in a dock panel, and
+     --row-face tints *down* now, so on the warm ground they read as grey bars
+     instead of recessed rows. A sheet is a page you are working on, so it
+     should be the surface those rows were drawn for. */
+  background: var(--slat-face);
   color: var(--ink);
   font-family: var(--font-text);
 
@@ -78,8 +83,10 @@
   cursor: pointer;
 }
 
+/* --slat-face is now the sheet's own ground, so pressing it would have shown
+   nothing. Tints against whatever it sits on instead. */
 .sheet__close:active {
-  background: var(--slat-face);
+  background: var(--chip-face);
 }
 
 .sheet__body {
@@ -198,7 +205,7 @@
    on the sheet body without a panel wrapper. */
 .sheet .chore-group__head,
 .sheet .shop-aisle__head {
-  background: var(--plaster);
+  background: var(--slat-face);
 }
 
 /* Rows get the page's extra width, so they stop truncating. */

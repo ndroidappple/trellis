@@ -535,6 +535,31 @@
   display: flex;
   align-items: center;
   overflow-y: auto;
+  border-radius: 12px;
+  /* The tap zone is the whole reading area, so the padding is what stops the
+     step text sitting flush against the edge of its own target. */
+  padding: 0 14px;
+  margin: 0 -14px;
+}
+
+/* Advancing by tapping the step, so it has to look touchable — but barely.
+   This is a 40px-type reading surface first and a control second, and a
+   button-shaped panel around the instruction would read as a dialog. */
+.cook__body.is-tappable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-state) var(--ease-standard);
+}
+
+/* The acknowledgement matters more here than almost anywhere else in the app:
+   you are looking at it from a step back with wet hands, and the only other
+   confirmation you get is the words changing. */
+.cook__body.is-tappable:active {
+  background: var(--chip-face);
+}
+
+.cook__hint {
+  color: var(--ink-faint);
 }
 
 /* The whole point of the mode. Big enough to read while standing back from

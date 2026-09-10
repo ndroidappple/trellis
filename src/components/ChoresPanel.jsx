@@ -104,6 +104,7 @@ function EpisodicRow({
   last,
   ago,
   turn,
+  todayIso,
   people,
   slotFor,
   initialsForPerson,
@@ -111,6 +112,23 @@ function EpisodicRow({
   onLog,
   onOpenSettings,
 }) {
+  /*
+   * Who is *selected* on this row, which is not the same as whose turn it is.
+   *
+   * Filled means "this is recorded" everywhere else in the app — it is the
+   * rule `.card .chip.on` exists to enforce, after unselected chips once
+   * rendered as the loud ones and inverted a whole control. This row broke it
+   * again in the other direction: the fill was on whoever was up *next*, so a
+   * row reading "Ed, yesterday · Nick's turn" put the solid badge on Nick, who
+   * by that row's own account had not done it.
+   *
+   * The genuinely selected state is today's completion. logChore upserts on
+   * (chore_id, on_date), so there is exactly one credited person per day and
+   * tapping the other corrects it — which is precisely what a selected control
+   * should look and behave like. Whose turn it is stays a hint, carried by the
+   * text and a quiet ring, because a hint is not a selection.
+   */
+  const creditedToday = last && last.on_date === todayIso ? last.completed_by : null
   // "Ed, yesterday" is the whole argument settled in three words. Without a
   // last completion there is nothing to report, and saying so beats an empty
   // gap that reads as a rendering failure.
@@ -152,15 +170,31 @@ function EpisodicRow({
       <div className="panel-row__whodunit">
         {people.map((p) => {
           const slot = slotFor(p)
-          const isTurn = turn?.id === p.id
+          const done = creditedToday === p.id
+          // A turn is only worth pointing at while the thing is still
+          // outstanding. Once today's run is recorded, the selected badge is
+          // the whole story and a second marker beside it is just noise.
+          const isTurn = !creditedToday && turn?.id === p.id
+
           return (
             <button
               key={p.id}
               type="button"
-              className={isTurn ? 'whodunit whodunit--turn' : 'whodunit'}
+              className={[
+                'whodunit',
+                done ? 'whodunit--on' : '',
+                isTurn ? 'whodunit--turn' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               data-person={slot}
+              aria-pressed={done}
               onClick={() => onLog?.(chore, p.id)}
-              aria-label={`${p.display_name} did ${chore.title}`}
+              aria-label={
+                done
+                  ? `${p.display_name} did ${chore.title} today`
+                  : `${p.display_name} did ${chore.title}`
+              }
             >
               {initialsForPerson(slot)}
             </button>
@@ -203,6 +237,7 @@ export default function ChoresPanel({
   turnFor,
   agoFor,
   today,
+  todayIso,
   pendingCount = 0,
   allDone = false,
 }) {
@@ -269,6 +304,7 @@ export default function ChoresPanel({
                     last={last}
                     ago={agoFor?.(last?.on_date) ?? null}
                     turn={turnFor?.(c, last) ?? null}
+                    todayIso={todayIso}
                     people={people}
                     slotFor={slotFor}
                     initialsForPerson={initialsForPerson}

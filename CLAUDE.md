@@ -79,7 +79,13 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   `RecipeBook` (the shelf: search over titles *and* ingredient names, four
   filters), `RecipeDetail` (one recipe, plus "plan a night" against the week
   currently on the board), and `CookMode` (one step at a time at 40px, holding
-  a screen wake lock). Reached from a `Recipes` button in the board header, or
+  a screen wake lock). **Tapping the step advances it** — the Next button is
+  52px in a corner and your hands are covered in raw chicken, so the reading
+  area is the target you can actually hit. It rejects a tap that travelled more
+  than `TAP_SLOP_PX` (the step text scrolls, and a scroll is not a tap), one
+  that started on a control, and any tap on the last step — "Finish" exits the
+  mode, which is not something a stray touch should do mid-recipe.
+  Reached from a `Recipes` button in the board header, or
   from a day view that already has a meal on it. `Wall.jsx` fetches the whole
   bank in one lazy query (`RECIPE_BOOK_QUERY`) the first time the book opens —
   18 recipes / 127 ingredients / 56 steps is small enough that this beats a
@@ -271,6 +277,36 @@ than either reading.
 No slash dates: `12/9` is September in one hemisphere and December in another,
 and this app renders dates through the device locale, so guessing wrong would
 stay invisible until something happened on the wrong day.
+
+## Surfaces
+
+**Paper on a board.** The ground (`--plaster`) is a warm light grey; panels
+and day rows (`--slat-face`) are near-white paper, with `--lift` giving the
+dock panels a soft two-layer shadow. These used to sit within 11 levels of
+each other, so nothing read as being *on* anything — the board was one olive
+field with faint rectangles drawn on it. Most of the depth comes from the
+contrast; the shadow only confirms it.
+
+The ground stays warm rather than going pure white deliberately: this screen
+is on a wall in a room people relax in, and a full-brightness white field is
+the light-pollution problem Feature #5 exists to solve.
+
+**`--chip-face` and `--row-face` tint down, not up.** Both were white at
+~50–60% alpha, which worked on an olive panel and became invisible the moment
+panels turned to paper. A row inside a white panel has to recess. If you add a
+new surface, check which ground it sits on before reaching for either.
+
+**Today's row is warmer, not brighter** (`--today-face`). It cannot out-lighten
+a near-white row, so it separates by warmth instead — helped by the 2.4× height
+and the 14px dark left edge it already had.
+
+**Filled means recorded.** `.card .chip.on`, the whodunit badges, the checklist
+tick: a solid fill is a fact, never a suggestion. This rule has now been broken
+twice in opposite directions — once by a specificity bug that made *unselected*
+chips the loud ones, and once by the episodic row filling the badge of whoever
+was up *next*, so a row reading "Ed, yesterday · Nick's turn" put the solid
+badge on Nick. Point at a person with `--person-a-tint` / `--person-b-tint` as
+a ring; reserve the fill for something that happened.
 
 ## Motion
 

@@ -12,11 +12,29 @@
  */
 
 :root {
-  /* --- surfaces --- */
-  --plaster: #DCDCCC;      /* the wall behind everything */
-  --slat-face: #E7E7D9;    /* day rows, panels */
-  --today-face: #F3F1E2;   /* today's row only */
-  --rule: #C4C4B0;         /* hairlines, borders, unchecked boxes */
+  /* --- surfaces ---
+   *
+   * Paper on a board, rather than one flat wash.
+   *
+   * These used to sit within 11 levels of each other (#DCDCCC ground, #E7E7D9
+   * panels), so nothing read as being *on* anything — the board was one olive
+   * field with faint rectangles drawn on it. Panels are now near-white paper
+   * against a warm ground, which is most of where the sense of depth comes
+   * from; the shadow below only confirms what the contrast already says.
+   *
+   * The ground stays warm rather than going pure white on purpose. This screen
+   * is on a wall in a room people relax in, and a full-brightness white field
+   * is the light-pollution problem the ambient-timeout work exists to solve —
+   * no sense creating it here and mitigating it there.
+   */
+  --plaster: #E4E4DA;      /* the wall behind everything */
+  --slat-face: #FCFCF8;    /* day rows, panels — paper */
+  --today-face: #FAF3DF;   /* today's row only: warmer, not brighter */
+  --rule: #D9D9CB;         /* hairlines, borders, unchecked boxes */
+
+  /* Depth, spent once. Two very soft layers — a tight contact shadow and a
+   * wider ambient one — because a single hard shadow reads as a sticker. */
+  --lift: 0 1px 2px rgba(46, 43, 35, 0.05), 0 6px 16px rgba(46, 43, 35, 0.045);
 
   /* --- ink --- */
   --ink: #2E2B23;
@@ -33,6 +51,11 @@
   --person-shared: #6B6450;
   --person-ink: #F6F5EC;   /* text on top of any person colour */
 
+  /* For pointing at a person without claiming anything — the "your turn" ring
+   * on an episodic chore. Filled is reserved for a recorded fact. */
+  --person-a-tint: rgba(63, 122, 94, 0.22);
+  --person-b-tint: rgba(156, 95, 62, 0.22);
+
   /* --- meals read as a material, not as a person --- */
   --meal-tint: rgba(63, 122, 94, 0.10);
   --meal-rule: rgba(63, 122, 94, 0.28);
@@ -40,8 +63,14 @@
   /* Not part of the board itself — used by sign-in and error states. */
   --error: #B5453A;
 
-  --chip-face: rgba(255, 255, 255, 0.62);
-  --row-face: rgba(255, 255, 255, 0.50);
+  /* Ink-tinted, not white-tinted.
+   *
+   * Both were white at ~50–60% alpha, which worked when they sat on an olive
+   * panel and became invisible the moment panels turned to paper. A row inside
+   * a white panel has to recess rather than lift, so these tint *down* now.
+   * Same job, opposite direction, because the surface under them changed. */
+  --chip-face: rgba(46, 43, 35, 0.055);
+  --row-face: rgba(46, 43, 35, 0.035);
 
   /* --- type --- */
   --font-display: 'Fraunces Variable', Fraunces, Georgia, serif;

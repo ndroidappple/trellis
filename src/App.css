@@ -445,23 +445,31 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 .whodunit[data-person='a'] { border-color: var(--person-a); color: var(--person-a); }
 .whodunit[data-person='b'] { border-color: var(--person-b); color: var(--person-b); }
 
-/* The one whose turn it is leads, filled in that same person's colour. The
-   fill used to be var(--person-a) whoever's turn it was, so Ed's turn lit up
-   in Nick's green. The other stays fully available and fully legible — doing
-   it out of turn is normal, and must not be the harder tap. */
-.whodunit--turn { color: var(--person-ink); }
-
-.whodunit--turn[data-person='a'] {
+/* Filled means recorded — today's completion, and nothing else.
+ *
+ * This is the same rule `.card .chip.on` enforces, and this row broke it: the
+ * fill sat on whoever was up *next*, so "Ed, yesterday · Nick's turn" put the
+ * solid badge on Nick, who had not done it. Filled now means the thing is
+ * logged to that person today, which is a real selected state — tapping the
+ * other one corrects it, because logChore upserts on (chore_id, on_date). */
+.whodunit--on[data-person='a'] {
   background: var(--person-a);
   border-color: var(--person-a);
   color: var(--person-ink);
 }
 
-.whodunit--turn[data-person='b'] {
+.whodunit--on[data-person='b'] {
   background: var(--person-b);
   border-color: var(--person-b);
   color: var(--person-ink);
 }
+
+/* Whose turn it is, as a hint rather than a selection: a soft ring outside the
+   border, in that person's own colour. It reads as "you're up" from across the
+   room without ever claiming the thing is done, and it disappears the moment
+   there is a real answer to show instead. */
+.whodunit--turn[data-person='a'] { box-shadow: 0 0 0 3px var(--person-a-tint); }
+.whodunit--turn[data-person='b'] { box-shadow: 0 0 0 3px var(--person-b-tint); }
 
 .whodunit:active {
   transform: scale(0.95);

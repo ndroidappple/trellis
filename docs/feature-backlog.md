@@ -1851,6 +1851,125 @@ compliance checkbox:
 
 ---
 
+# Feature #13 — AI control: planning a week by talking to Claude
+
+**Priority:** Medium
+**Category:** Agent Surface / Meal Planning
+**Status:** Partly working already, by accident of architecture rather than design.
+**Depends On:** Nothing to keep using what works. The gap below needs a Postgres
+function or an Edge Function.
+**Primary Goal:** "Help me plan my week" on a phone, and watch the wall fill in.
+
+## 1. What already works, verified against the live project
+
+The household's Supabase connector on claude.ai reaches the Trellis project
+directly. Checked 9 Sep 2026: it reads 2 profiles, 17 active recipes, 4 chores,
+9 `meal_plan` rows, 21 list items.
+
+So Claude can **already** read the recipe bank, propose dinners day by day,
+write `meal_plan` rows, schedule chores onto weekdays, and add shopping items —
+with no app changes at all. And because every table the board reads is on a
+realtime channel, the wall reflects it within about a second. No reload, no
+refresh. You talk on a phone and the board fills in.
+
+This was never built. It falls out of Supabase being the whole backend, which
+is also the premise Feature #7 depends on.
+
+## 2. The gap that stops it being a complete week — most plausible to fix
+
+**A Claude-planned week does not populate the shopping list.**
+
+`groceryLines` and `addWeekGroceries` live in `Wall.jsx`. The chain from meal
+plan → ingredients → products → `list_items` is **client-side application
+logic**, not a trigger and not a view. So writing `meal_plan` rows gives you
+dinners on the board and an entirely unchanged shopping list; somebody still has
+to stand at the wall and press "add the week's groceries".
+
+That is the single highest-value thing to build here, and it is not large:
+
+- Move the derivation into a Postgres function (`trellis_week_groceries(from,
+  to)`), or an Edge Function if it needs to stay in JS.
+- Have `Wall.jsx` call the same function rather than reimplementing it, so the
+  wall and the agent cannot drift about what a week costs or contains.
+- Keep the `source = 'meal_plan'` marker on generated rows — "clear what the
+  meal plan added" depends on knowing which rows it added.
+- Preserve the unpriced-ingredient reporting; it is the only honest signal that
+  a total is incomplete, and it must survive the move.
+
+Doing this makes "plan my week" produce dinners *and* a shopping list, which is
+the difference between a demo and the feature.
+
+## 3. Also plausible, in rough order
+
+- **A `household_id` default.** The connector runs as `postgres` (see §5), so
+  nothing fills this in and nothing catches it if it is wrong. A column default
+  resolving the singleton household would remove the most likely silent error.
+- **Provenance on agent writes.** Nothing distinguishes a row Claude wrote from
+  one a person tapped in. A nullable `created_by_agent` (or reusing the
+  `recipe_field_provenance` idea more broadly) would make an agent-planned week
+  reviewable, and undoable, rather than indistinguishable.
+- **A read-only "state of the week" view.** One call returning the week's
+  meals, chores, events and list, so a chat does not need six queries and a
+  schema tour before it can say anything useful.
+- **A Trellis MCP server** exposing intent-level operations — `plan_week`,
+  `schedule_chore`, `add_to_list` — instead of raw SQL. This is the real
+  version. It encodes the constraints once, in one place, so an agent cannot
+  bypass RLS or invent a `household_id`, and it is a far smaller surface to
+  reason about than "arbitrary SQL against production". Bigger job; the right
+  destination if this turns out to be used.
+
+## 4. Less plausible, and mostly for the right reasons
+
+- **Claude driving the actual UI.** There is no automation surface, and adding
+  one to a kiosk is a lot of machinery to accomplish what a database write
+  already accomplishes better. The app is the *view*; the database is the API.
+- **Claude ticking chores.** `chore_completions.completed_by` is the record
+  Feature #6's scoreboard is built on, and it is supposed to mean a person did
+  a thing. An agent marking chores done poisons exactly the data the scoreboard
+  exists to produce. Planning: yes. Completing: no.
+- **Voice on the wall.** No microphone story, and a shared living room is a bad
+  place for one. The phone is already the input device and already works.
+- **Autonomous planning with no confirmation.** The wall is shared. A week that
+  rearranges itself without either person having agreed is a wall people stop
+  trusting — which is the same failure mode recorded for the old `weekly` chore
+  that discarded most of what you told it.
+- **Letting an agent run migrations unattended.** `006_seed_meal_hq.sql` is
+  idempotent by *wiping first*, and its deletes are not scoped to
+  `source = 'meal_hq'`. One careless re-run destroys hand-added products and
+  resets the budget.
+
+## 5. Risks worth knowing before leaning on this
+
+- **The connector runs as `postgres`, so RLS is bypassed.** 15 policies exist on
+  `public` and not one of them applies. Everything else in Trellis is protected
+  by `current_household_id()` resolving through the caller's `profiles` row;
+  that safety net is simply absent here. This is a production database with no
+  branch in front of it.
+- **The constraints are the only guardrail left, and they are good ones.**
+  `chores_schedule_matches_recurrence` rejects the wrong scheduling column,
+  `meal_plan` is unique on `(household_id, on_date, slot)` so planning must
+  upsert rather than insert, `slot` is checked against four values, and an
+  active recipe cannot lose its last ingredient. They fail loudly, which is
+  what you want.
+- **Hand edits to recipes must claim `user_supplied` provenance** or the next
+  enrichment pass overwrites them.
+- **No audit trail.** Nothing records that an agent made a change, so a
+  surprising week has no explanation attached to it.
+
+## 6. Definition of Done
+
+- [ ] Grocery derivation lives server-side and `Wall.jsx` calls it rather than
+      duplicating it.
+- [ ] A week planned entirely through Claude produces both meals on the board
+      and a populated shopping list.
+- [ ] Generated grocery rows keep `source = 'meal_plan'`.
+- [ ] Unpriced ingredients are still reported after the move.
+- [ ] `household_id` cannot be silently wrong on an agent write.
+- [ ] Agent-written rows are distinguishable from hand-entered ones.
+- [ ] Chore *completion* remains a human-only action.
+
+---
+
 # Feature #6 — Chores Scoreboard
 
 **Priority:** Medium
@@ -2335,11 +2454,12 @@ Ordered by what should be picked up next, not by feature number.
 | 2 | **#6 Chores Scoreboard** | Medium-High | Settle who did what over a period — **unblocked by #9A** |
 | 3 | **#2 Tier 1 remainder** | High | Calendar unification, search/saved views, push reminders |
 | 4 | **#11 Get the shopping list onto a phone** | Medium | QR to the live list — no server, no vendor; shares #7's renderer |
-| 5 | **#12 Spending Insights** | Medium | Planned vs actual; Tier 0 needs no bank connection |
-| 6 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
-| 7 | **#3 Themes** | Low | Personalization and visual delight |
-| 8 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
-| 9 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
+| 5 | **#13 AI control — planning a week by talking to Claude** | Medium | Mostly works already; the shopping-list derivation is the gap |
+| 6 | **#12 Spending Insights** | Medium | Planned vs actual; Tier 0 needs no bank connection |
+| 7 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
+| 8 | **#3 Themes** | Low | Personalization and visual delight |
+| 9 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+| 10 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
 | — | **#5 Ambient Screen Timeout (first version)** | **Shipped** | Pure ambient, night variant, per-device timeout — wall soak still open |
 | — | **#10 Main menu, cook-mode tap zones, meal slots** | **Shipped** | One front door; left/right stepping; four meal slots per day |
 | — | **#9 Weekly To Do + full pages + shopping aisles** | **Shipped** | 9A/9B/9C, both full-page views, migration 013 |

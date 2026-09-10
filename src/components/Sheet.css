@@ -23,7 +23,7 @@
      including the space under the status bar. */
   padding: calc(20px + env(safe-area-inset-top, 0px))
            calc(24px + env(safe-area-inset-right, 0px))
-           calc(24px + env(safe-area-inset-bottom, 0px))
+           calc(14px + env(safe-area-inset-bottom, 0px))
            calc(24px + env(safe-area-inset-left, 0px));
   gap: 18px;
 
@@ -106,13 +106,26 @@
   gap: 12px;
 }
 
+/* The footer is a page's primary action, not a row of incidental controls, and
+   it was sized as though it were the latter.
+   
+   --tap-min (52px) is the *floor* for anything tappable — the smallest thing
+   that is not a mistake — and using it here left a strip of dead paper between
+   the buttons and the bottom of a 13" screen. Reading these from across a
+   kitchen, they should look like the bottom of the page rather than something
+   floating above it, so they take the height and the gap below shrinks to a
+   margin.
+   
+   The safe-area inset stays at full strength in that padding: the fixed part
+   is what came down, because that was the part that was decoration. The home
+   indicator still gets every pixel it asks for. */
 .sheet__footer button {
   flex: 1;
   font-family: var(--font-text);
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 600;
-  min-height: var(--tap-min);
-  border-radius: 10px;
+  min-height: 68px;
+  border-radius: 12px;
   border: none;
   background: var(--person-a);
   color: var(--person-ink);

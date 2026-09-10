@@ -2619,6 +2619,210 @@ Ordered by what should be picked up next, not by feature number.
 
 ---
 
+# Feature #15 — Prices you can trust
+
+**Priority:** Medium
+**Category:** Meal Planning / Money
+**Status:** Backlog. Raised by the price-per-serving toggle (shipped 10 Sep
+2026), which did not create either problem — it made both visible for the
+first time.
+**Depends On:** Nothing. Both tiers are data and UI work against the schema
+that already exists.
+**Primary Goal:** Make the money numbers in Trellis trustworthy — cover the
+recipes that have no prices at all, and stop rendering an estimate as though
+it were a measurement.
+
+## 1. Why this exists now
+
+The recipe book can now put a price per serving on every card, and the week's
+cart footer has projected a grocery total for some time. Both read as facts.
+Neither is quite one yet, for two independent reasons — coverage and
+provenance — and they want fixing in that order.
+
+## 2. Tier 0 — Chicken Tortilla Soup has no prices at all
+
+**The problem is not the "—" on the card. It is the week.**
+
+The soup has 15 ingredient rows and not one of them is matched to a product.
+`weekPackages` in `src/lib/cost.js` needs a product *and* a `purchase_qty` to
+price a row and drops anything missing either into `unmatched`, so plan the
+soup for a Tuesday and the week's projected grocery total does not move.
+The budget figure under-reports by the entire cost of that dinner, silently,
+and the shopping list never mentions a single one of its ingredients.
+
+The book showing "no prices yet" is the honest surface of this. The cart
+footer showing a total that quietly excludes a whole meal is not.
+
+It is the only recipe in the bank in this state — everything else came through
+the Meal HQ seed with products attached, and `015` closed the last four partial
+rows. So this is a bounded job: match 15 ingredients against the price book,
+add the products that do not exist yet, set `purchase_qty` on each, and let the
+existing `cost_confidence` derivation reclassify it.
+
+Worth doing as a migration rather than by hand in the dashboard, for the reason
+`015` gives: the quantities should follow the conventions the bank has already
+settled on (1 whole onion is 0.17 of a 3 lb bag; 2 cups dry rice is 0.17 of an
+80 oz bag), and those conventions only stay consistent if they are written
+down somewhere a person can read.
+
+**One row deliberately left open by 015:** the Protein Berry Smoothie's frozen
+berries, recorded as unit "fill cup" with no quantity. A cup of a 32 oz bag
+could be a fifth of it or a third depending on whose cup. That needs a sentence
+from Nick, not a guess.
+
+## 3. Tier 1 — say how much to trust a price
+
+Every price in Trellis renders identically, to the cent, whether it came from a
+receipt or from a screenshot of a website. The price book knows the difference
+and the UI does not show it:
+
+| `price_source` | Products | What it is |
+|---|---|---|
+| `ALDI Store #3, 4500 N Broadway Chicago; receipt-confirmed` | 29 | Someone stood at a till and this is what it cost |
+| `ALDI website/app screenshot; not receipt-confirmed` | 37 | What the app said the price was |
+
+Most of the price book — 37 of 66 products — is the weaker kind, and no recipe
+in the bank is fully receipt-priced. So `$2.34 a serving` is, for every recipe,
+an estimate wearing the typography of a measurement.
+
+**This is the same complaint Feature #1 closed with, about a different column.**
+011 filled prep times and three methods with model estimates at confidence
+0.60–0.75, and the note there reads: "the book still renders an estimate
+identically to a measurement — if that ever matters, the UI needs to show
+confidence, which it does not yet." It now matters in two places instead of
+one, which is the argument for solving it once, generally, rather than adding
+a second bespoke caveat next to the money.
+
+Two sub-problems, and only the first needs design:
+
+1. **Provenance.** `recipes.cost_confidence` already carries
+   `receipt` / `estimated` / `unknown` and is re-derived from the products a
+   recipe touches. Nothing reads it in the UI. The cheapest honest version is
+   probably a mark on an estimated price rather than a badge on every card —
+   the book already uses a "+" for a partial price and a warning colour for
+   the count, so there is an established vocabulary to extend.
+2. **Staleness.** `products.price_captured_on` is populated on every row
+   (24–29 Aug 2026 at time of writing) and nothing reads it either. A price
+   book that is six months old should say so somewhere; two weeks old is fine
+   and should stay quiet. This is a threshold and a line of text, not a
+   feature — but it needs the threshold decided, and "when does a grocery price
+   go stale" is Nick's call, not a default.
+
+### A trap, recorded because it has already been fallen into once
+
+The two `price_source` values are distinguished by the word "not", and **the
+negative contains the positive as a substring**. `price_source not like
+'%receipt-confirmed%'` matches nothing, so every screenshot-derived price reads
+as receipt-confirmed. The first draft of `015` did exactly that and promoted
+Stuffed peppers to `receipt` before it was caught and reverted. Test for
+`'%not receipt-confirmed%'` — the weaker claim — or give the column a real
+enum and stop matching strings.
+
+## 4. What this is not
+
+Not a repricing pipeline, not a receipt scanner, not an integration with ALDI.
+Both tiers are finishable in an afternoon each against the schema as it stands.
+Feature #12 (Spending Insights) is where "what did we actually spend" lives;
+this entry is only about making "what will this cost" say how much it knows.
+
+---
+
+# Feature #16 — Trellis on an iPhone
+
+**Priority:** Medium
+**Category:** Platform / Surfaces
+**Status:** Backlog
+**Depends On:** Nothing structural. Overlaps Feature #11, which should probably
+ship first or alongside — #11 gets you *to* a page on a phone, this makes the
+page worth arriving at.
+**Primary Goal:** Make Trellis usable on the phone in your pocket, not just on
+the iPad on the wall.
+
+## 1. The app already runs on a phone. It is just not designed for one.
+
+Worth being precise about the gap, because it is smaller than "build a mobile
+app" and larger than "add a media query".
+
+Feature #11 establishes the half that already works: sessions are per-origin,
+both phones already have a Trellis session on the Vercel origin, `list_items`
+syncs over realtime, and anything ticked at the shop shows on the wall within a
+second. **There is no data problem and no auth problem.** Open the URL on an
+iPhone today and you are signed in, looking at live household data.
+
+What you are looking at is the problem.
+
+## 2. What actually breaks, concretely
+
+- **There is not a single width-based media query in the codebase.** Every
+  `@media` rule in `src/` is `prefers-reduced-motion`. The layout has exactly
+  one target and it is a landscape iPad on a wall.
+- **The board cannot scroll.** `.board` is `height: 100dvh; overflow: hidden`
+  and the week area declares `min-height: calc(6 * 84px + 190px + 6 * 7px)` —
+  about 736px before the header. On an iPhone that does not fit, and because
+  the overflow is hidden with no scroll, **content is clipped with no visual
+  sign that anything is missing**. `Board.css` already warns about this failure
+  mode against the dock; a phone triggers it against the week.
+- **The type scale is calibrated for three metres, not thirty centimetres.**
+  `--size-dom-today: 62px`, `--size-row: 22px`, `--tap-min: 52px`. Those are
+  correct for a wall and enormous in a hand — the date numeral alone would be a
+  sixth of the screen width.
+- **The viewport meta is kiosk-correct and phone-hostile.**
+  `maximum-scale=1.0, user-scalable=no` is right for a wall panel nobody should
+  be able to pinch out of alignment, and on a phone it disables pinch-zoom,
+  which is an accessibility problem rather than a preference.
+- **Four filter rows and a seven-column week** both assume horizontal room the
+  phone does not have. The recipe book's card grid degrades cleanly on its own
+  (`repeat(auto-fill, minmax(220px, 1fr))` becomes one column); the filter rows
+  above it do not.
+
+## 3. The design question to settle first
+
+**Is the phone the same app at a different size, or a different app on the same
+data?** Everything else follows from the answer and it should not be decided
+by CSS.
+
+The case for *different*: the jobs genuinely differ. On the wall Trellis is
+ambient and read-mostly — it answers "what is happening today" to someone
+walking past. On a phone it is transactional and one-handed — tick the
+shopping list in an aisle, check a recipe at the shop, add an event on the
+train. The week grid is the wall's centrepiece and probably not the phone's
+home screen at all.
+
+The case for *same*: two layouts is two of everything to maintain, forever, by
+one person. The redesign that produced the Board system was already a full
+rewrite of the presentation layer; doing it twice more cheaply is not obviously
+cheaper.
+
+A likely middle: keep one component tree and one data layer, add a phone
+layout for the *shell* only — what the home surface is, how you navigate — and
+let the sheets, which are already full-screen scrolling surfaces with their own
+footers, carry over nearly unchanged. The sheets are the part of this app that
+is already closest to phone-native.
+
+## 4. Suggested slicing
+
+- **Tier 0 — stop it being broken.** A width breakpoint that lets the board
+  scroll instead of clipping, a phone type scale, and a viewport meta that
+  allows zoom below some width. Does not make it good; stops it hiding data.
+- **Tier 1 — a phone home surface.** Decide what replaces the week grid.
+  Today, probably: today's meals, today's chores, the shopping list. Reuses the
+  existing full-page section views.
+- **Tier 2 — phone-native affordances.** Safe-area insets, pull-to-refresh,
+  Add to Home Screen with its own icon and splash, `navigator.share` (already
+  scoped in Feature #11, Tier 1, and noted there as genuinely useful *from* a
+  phone and near useless from the wall).
+
+## 5. Open questions
+
+- Does the wall keep `user-scalable=no` while the phone gets zoom? Two viewport
+  metas means either a build-time split or a runtime rewrite of the tag.
+- Is the screensaver / ambient timeout (Feature #5) simply off on a phone? It
+  exists to solve image retention on an always-on panel, which a phone is not.
+- Does the phone need the settings dialog and the AI control surface at all, or
+  are those wall-only?
+
+---
+
 # Long-Term Trellis Direction
 
 The ultimate goal is not simply to have more modules.

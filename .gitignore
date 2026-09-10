@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code's git worktrees. Each is a full checkout of this repo on its own
+# branch, so committing them would commit the repo into itself — and a plain
+# `git add -A` at the root will try. Scoped to worktrees/ rather than all of
+# .claude/, because settings and skills that live alongside them are shared
+# project config and should be committed.
+.claude/worktrees/

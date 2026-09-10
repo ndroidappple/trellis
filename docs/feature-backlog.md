@@ -1970,6 +1970,140 @@ the difference between a demo and the feature.
 
 ---
 
+# Feature #14 — Depth: making the UI feel touchable without making it heavy
+
+**Priority:** Medium-Low
+**Category:** Design System / Wall Experience
+**Status:** Backlog. Direction settled 9 Sep 2026; nothing built.
+**Depends On:** Nothing. Phase 0 is a token file and two components.
+**Primary Goal:** Controls that look and feel pressable, on a display that is on
+for weeks in a room people relax in.
+
+## 1. Diagnosis, with the evidence
+
+The app reads flat, and the cause is precise: **depth is spent on containers,
+and controls are recessed.**
+
+- **Eight `box-shadow` declarations exist in the entire app.** Five are scrims,
+  toasts, the drag ghost, or focus rings. Exactly one is real elevation —
+  `--lift` — and it is used on the dock panels (`SectionPanel.css`) and the menu
+  dialog (`MainMenu.css`). Both are things you do not press.
+- **`--chip-face` and `--row-face` tint *down*.** That was a correct fix when
+  panels turned to paper (a row inside a white panel has to recess), but the
+  consequence is that every chip, row and checklist item reads as a hole rather
+  than a key.
+- **Press feedback is `transform: scale(0.99)`**, hand-written in 44 separate
+  `:active` rules. On a 300px footer button that is a 3px change, at a reading
+  distance of several feet.
+- **`--rule` (#D9D9CB) on `--slat-face` (#FCFCF8) is about 1.4:1.** Every
+  separator in the app sits near the threshold of visibility.
+
+Nothing you can touch looks touchable, and the one thing that moves when you
+touch it moves by one percent.
+
+## 2. Why literal 3D is the wrong answer here
+
+Bevels, gradients and gloss are the obvious response and would be a mistake on
+*this* device, for four reasons that do not apply to a normal app.
+
+- **Static high-contrast ornament is the burn-in risk Feature #5 exists to
+  mitigate.** The week grid, day rows and panel edges are already fixed geometry
+  displayed for weeks. Bevelling them would permanently worsen a hardware
+  problem in order to fix an aesthetic one.
+- **Gloss is light.** The ground is warm rather than white on purpose, because a
+  bright field on a living-room wall is a lamp nobody asked for. Specular
+  highlights are the same problem in miniature, repeated across every control.
+- **"Filled means recorded" is load-bearing**, and has already been broken twice
+  in opposite directions. If a raised, filled treatment starts to mean
+  "pressable", it collides directly with a fill meaning "this happened".
+- **Fine detail does not survive the reading distance.** The type floor is 17px
+  because this is read from across a kitchen. A 1px inner bevel is invisible
+  there — cost with no benefit.
+
+## 3. The principle
+
+**Spend depth on the moment of contact, not on the resting state.**
+
+- *At rest:* quiet, matte, low static contrast. Burn-in safe, room safe.
+- *Under the finger:* real travel, and a shadow that collapses as the control
+  goes down.
+
+At kitchen distance a control that genuinely *moves* reads as far more physical
+than any bevel, and it costs nothing while nobody is touching it. This inverts
+the current arrangement — containers raised, controls recessed — without adding
+a single pixel of always-on contrast.
+
+## 4. Sustainability: tokens, not per-component CSS
+
+This codebase has already learned this lesson once. The motion system replaced
+five hand-picked durations and a bare `ease` with tokens named for the *job*, so
+that "a new control picks the token that matches what it is doing and inherits
+the timing". Depth needs the same treatment:
+
+    --raise-1     a control at rest
+    --raise-2     a surface that floats: dialog, sheet, primary action
+    --press       the collapsed state
+    --edge-top    1px light top / darker bottom — material, not gloss
+    --travel-tap  how far a control actually moves when pressed
+
+Phase 1 should *reduce* the amount of CSS: 44 bespoke `:active` rules collapse
+into one shared pressable behaviour that a new control inherits by default
+rather than by remembering.
+
+## 5. Phases
+
+**Phase 0 — proof (about half a day).** The tokens, applied to `.sheet__footer
+button` and `.card button` only. One primary action per surface genuinely lifts
+and genuinely depresses. **Then look at it on the wall before going further** —
+this is the cheap step at which "too heavy" gets caught.
+
+**Phase 1 — the press system.** Roll the shared behaviour across every
+pressable, deleting the hand-written scale rules as it goes.
+
+**Phase 2 — surface elevation.** Dialogs and sheets read as being *above* the
+board rather than replacing it. `--lift` folds into the new scale.
+
+**Phase 3 — selective richness.** Recipe art plates, person badges and meal
+chips gain material. These are the places where richness is decorative in the
+good sense: they are inside sheets or small enough not to dominate.
+
+## 6. Out of scope, deliberately
+
+- **The week grid and day rows stay matte.** This is the always-on surface and
+  the whole burn-in argument. Non-negotiable.
+- **No `backdrop-filter` or glass.** Re-rasterised per frame on a device that
+  must stay cool across a multi-week uptime.
+- **Nothing animated at rest.** Already the rule; depth does not get an
+  exception.
+- **No large-area gradients.** Banding on subtle ramps is a real artifact, and
+  the largest areas here are exactly the ones that must stay quiet anyway.
+
+## 7. The cheap win that is not 3D at all
+
+`--rule` is at roughly 1.4:1 against the paper. Nudging it up would reduce the
+sense of flatness on its own, in one line, with no new system — worth trying
+first if only to see how much of the problem is separation rather than
+elevation.
+
+## 8. Definition of Done
+
+- [ ] One elevation scale lives in `tokens.css`; no component declares its own
+      `box-shadow` afterwards.
+- [ ] Press behaviour is shared rather than reimplemented, and the count of
+      hand-written `:active` scale rules goes down.
+- [ ] Nothing on the board's always-on surface gains static high-contrast
+      ornament.
+- [ ] `--dur-tap` and the reduced-motion block are honoured; a transform with
+      no duration still snaps, so per-component suppression is still required.
+- [ ] Any new edge colour is checked against the *warm* ground, not white —
+      the same trap that made `--chip-face` and `--row-face` invisible once.
+- [ ] "Filled means recorded" still holds: elevation may say "pressable", fill
+      may not.
+- [ ] Verified on the actual wall at reading distance after Phase 0, before
+      Phase 2 starts.
+
+---
+
 # Feature #6 — Chores Scoreboard
 
 **Priority:** Medium
@@ -2456,10 +2590,11 @@ Ordered by what should be picked up next, not by feature number.
 | 4 | **#11 Get the shopping list onto a phone** | Medium | QR to the live list — no server, no vendor; shares #7's renderer |
 | 5 | **#13 AI control — planning a week by talking to Claude** | Medium | Mostly works already; the shopping-list derivation is the gap |
 | 6 | **#12 Spending Insights** | Medium | Planned vs actual; Tier 0 needs no bank connection |
-| 7 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
-| 8 | **#3 Themes** | Low | Personalization and visual delight |
-| 9 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
-| 10 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
+| 7 | **#14 Depth — touchable UI without weight** | Medium-Low | Fix the flatness; Phase 0 is half a day and provable on the wall |
+| 8 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
+| 9 | **#3 Themes** | Low | Personalization and visual delight |
+| 10 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+| 11 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
 | — | **#5 Ambient Screen Timeout (first version)** | **Shipped** | Pure ambient, night variant, per-device timeout — wall soak still open |
 | — | **#10 Main menu, cook-mode tap zones, meal slots** | **Shipped** | One front door; left/right stepping; four meal slots per day |
 | — | **#9 Weekly To Do + full pages + shopping aisles** | **Shipped** | 9A/9B/9C, both full-page views, migration 013 |

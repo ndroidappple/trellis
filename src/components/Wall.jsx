@@ -201,7 +201,11 @@ const RECIPE_BOOK_QUERY = `
   prep_minutes, cook_minutes, total_minutes,
   cuisine, tags, meal_types, source_url, image_url, image_source,
   cost_confidence,
-  ingredients:recipe_ingredients ( id, name, normalized_name, qty, unit, preparation, notes, sort_order ),
+  ingredients:recipe_ingredients (
+    id, name, normalized_name, qty, unit, preparation, notes, sort_order,
+    purchase_qty, manual_cost_cents,
+    product:products ( id, name, pre_tax_cents, tax_rate_bps )
+  ),
   steps:recipe_steps ( id, step_number, body )
 `
 
@@ -1704,6 +1708,7 @@ export default function Wall({ profile, people }) {
           takenSlots={mealsFor(mealEditing.date).map((m) => m.slot)}
           bookRecipes={bookRecipes}
           bookLoading={bookLoading}
+          budgetLeftCents={budget - cost.totalCents}
           onSlot={(slot) => setMealEditing({ date: mealEditing.date, slot })}
           onPick={(recipeId) => pickMeal(mealEditing.date, mealEditing.slot, recipeId)}
           onToggleLeftover={() => toggleMealLeftover(mealEntryAt(mealEditing.date, mealEditing.slot))}
@@ -1794,6 +1799,7 @@ export default function Wall({ profile, people }) {
         <RecipeBook
           recipes={bookRecipes}
           loading={bookLoading}
+          budgetLeftCents={budget - cost.totalCents}
           onOpen={(r) => setRecipeOpen(r.id)}
           onClose={closeBook}
         />
@@ -2417,6 +2423,7 @@ function MealEditor({
   takenSlots,
   bookRecipes,
   bookLoading,
+  budgetLeftCents,
   onSlot,
   onPick,
   onToggleLeftover,
@@ -2477,6 +2484,9 @@ function MealEditor({
         title={entry?.recipe ? 'Change meal' : `Pick a ${slotLabel(slot).toLowerCase()}`}
         lead={slotRow}
         highlightId={entry?.recipe?.id}
+        /* The picker is where the budget question actually bites: this is the
+           tap that spends the money, not the one that browses. */
+        budgetLeftCents={budgetLeftCents}
         onOpen={(r) => onPick(r.id)}
         onClose={entry?.recipe ? () => setPicking(false) : onClose}
       />

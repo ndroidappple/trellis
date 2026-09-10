@@ -7,6 +7,7 @@ import {
   TIME_FILTERS,
   proteinsIn,
 } from '../lib/recipeFilters'
+import { formatCents, recipeCost } from '../lib/cost'
 import './RecipeBook.css'
 
 /**
@@ -126,6 +127,106 @@ function ingredientLine(ing) {
   return { amount, name }
 }
 
+/* ---------------------------------------------------------------- price */
+
+/**
+ * Whether the shelf is showing prices, remembered across a close.
+ *
+ * localStorage rather than the household row, for the same reason cook
+ * progress is per-device: this is a fact about how someone is reading the
+ * book right now, not a decision about the household. The wall being left in
+ * price mode should not put prices in front of somebody picking a recipe on
+ * their phone.
+ */
+const PRICE_KEY = 'trellis.book-prices'
+
+function readPriceMode() {
+  try {
+    return localStorage.getItem(PRICE_KEY) === 'on'
+  } catch {
+    // Private mode or a cleared quota. Off is the old behaviour, and the old
+    // behaviour worked.
+    return false
+  }
+}
+
+function writePriceMode(on) {
+  try {
+    localStorage.setItem(PRICE_KEY, on ? 'on' : 'off')
+  } catch {
+    /* see above */
+  }
+}
+
+/**
+ * A price per serving, and how much of it to believe.
+ *
+ * Three states, because the bank genuinely has three. Twelve recipes price
+ * completely; Stuffed peppers and the Udon stir-fry price partly, because
+ * some rows carry a product but no `purchase_qty`; the Tortilla Soup, the
+ * smoothie and the two stubs price not at all.
+ *
+ * The partial ones are the reason this is not just a number. Stuffed peppers
+ * sums to $1.66 a serving with three ingredients missing, which would make it
+ * comfortably the cheapest thing in the book and completely wrong. The "+"
+ * says the number is a floor, and `sortKey` keeps it below every recipe whose
+ * price is whole.
+ */
+function priceLabel(cost) {
+  if (cost.perServingCents == null) {
+    return { figure: '—', note: 'no prices yet', partial: false, known: false }
+  }
+  return {
+    figure: formatCents(cost.perServingCents) + (cost.complete ? '' : '+'),
+    note: cost.complete
+      ? 'a serving'
+      : `${cost.unpriced} unpriced`,
+    partial: !cost.complete,
+    known: true,
+  }
+}
+
+/**
+ * Cheapest first, with the unsure ones underneath.
+ *
+ * Bucket before figure: a recipe missing three prices has not earned a place
+ * above one that is fully costed, however small its partial sum happens to
+ * be. Within a bucket it is price then title, so the order is stable rather
+ * than dependent on however Postgres returned the rows.
+ */
+function byPrice(costOf) {
+  const UNKNOWN = { perServingCents: null, complete: false }
+
+  return (a, b) => {
+    const ca = costOf(a) ?? UNKNOWN
+    const cb = costOf(b) ?? UNKNOWN
+    const bucket = (c) => (c.perServingCents == null ? 2 : c.complete ? 0 : 1)
+
+    if (bucket(ca) !== bucket(cb)) return bucket(ca) - bucket(cb)
+    if (ca.perServingCents != null && ca.perServingCents !== cb.perServingCents) {
+      return ca.perServingCents - cb.perServingCents
+    }
+    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+  }
+}
+
+/** The toggle itself. A price is money, so the control is the currency sign. */
+function PriceButton({ on, onClick }) {
+  const label = on ? 'Hide prices per serving' : 'Show prices per serving'
+  return (
+    <button
+      type="button"
+      className={on ? 'price-button is-on' : 'price-button'}
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      $
+    </button>
+  )
+}
+
 /* ------------------------------------------------------------- the shelf */
 
 /** One labelled row of mutually exclusive chips. */
@@ -184,12 +285,22 @@ export default function RecipeBook({
   lead,
   /** Marked "on the plan now", so changing a meal isn't done blind. */
   highlightId,
+  /**
+   * What is left of the week's grocery budget, if the caller knows.
+   *
+   * Price mode exists for one moment — it is Thursday, the budget is nearly
+   * gone, and dinner still has to happen — so the shelf says how much is left
+   * while it is showing prices. Optional: a caller with no week in hand
+   * simply gets the prices without the frame around them.
+   */
+  budgetLeftCents,
   onOpen,
   onClose,
 }) {
   const [q, setQ] = useState('')
   const [f, setF] = useState(NO_FILTERS)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [prices, setPrices] = useState(readPriceMode)
 
   const set = (key) => (value) => setF((prev) => ({ ...prev, [key]: value }))
   const filtered = f.protein !== 'any' || f.time !== 'any' || f.effort !== 'any' || f.show !== 'all'
@@ -201,6 +312,16 @@ export default function RecipeBook({
     for (const r of recipes) map.set(r.id, proteinsIn(r))
     return map
   }, [recipes])
+
+  // Same bargain as the protein index: 127 ingredient rows priced once per
+  // load rather than on every keystroke and every toggle.
+  const costIndex = useMemo(() => {
+    const map = new Map()
+    for (const r of recipes) map.set(r.id, recipeCost(r))
+    return map
+  }, [recipes])
+
+  const costOf = (r) => costIndex.get(r.id) ?? recipeCost(r)
 
   /**
    * Only offer a protein the book actually contains, plus Meatless.
@@ -224,7 +345,7 @@ export default function RecipeBook({
     const effort = EFFORT_FILTERS.find((o) => o.id === f.effort)
     const show = SHOW_FILTERS.find((o) => o.id === f.show)
 
-    return recipes.filter((r) => {
+    const matches = recipes.filter((r) => {
       const proteins = proteinIndex.get(r.id) ?? []
       if (f.protein === 'none' && proteins.length > 0) return false
       if (f.protein !== 'any' && f.protein !== 'none' && !proteins.includes(f.protein)) return false
@@ -242,7 +363,16 @@ export default function RecipeBook({
         .toLowerCase()
       return haystack.includes(needle)
     })
-  }, [recipes, q, f, proteinIndex])
+
+    /*
+     * Price mode reorders as well as annotates, and that is the point of it.
+     * The question being asked is "what is the cheapest thing I could cook
+     * tonight", and answering it with nineteen prices in alphabetical order
+     * leaves the reader doing the sort by eye. Alphabetical returns the
+     * moment prices go away.
+     */
+    return prices ? [...matches].sort(byPrice((r) => costIndex.get(r.id))) : matches
+  }, [recipes, q, f, proteinIndex, prices, costIndex])
 
   const countLabel = loading
     ? 'Loading…'
@@ -250,8 +380,41 @@ export default function RecipeBook({
       ? `${recipes.length} recipes`
       : `${shown.length} of ${recipes.length} recipes`
 
+  /*
+   * In price mode the subtitle carries the budget instead of the count.
+   *
+   * Both would be a subtitle nobody reads. The count answers "did my filter
+   * do anything", which the grid underneath answers anyway; the money answers
+   * the question that made someone turn prices on, and it is the only place
+   * on this screen the week's budget appears at all.
+   *
+   * "Cheapest first" is there because the list just resorted itself under the
+   * reader's hands, and a surface that rearranges without saying so reads as
+   * a glitch.
+   */
+  const subtitle =
+    prices && !loading
+      ? [
+          budgetLeftCents == null
+            ? null
+            : budgetLeftCents < 0
+              ? `${formatCents(-budgetLeftCents)} over budget`
+              : `${formatCents(budgetLeftCents)} left this week`,
+          'cheapest first',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : countLabel
+
+  function togglePrices() {
+    setPrices((was) => {
+      writePriceMode(!was)
+      return !was
+    })
+  }
+
   return (
-    <Sheet title={title} subtitle={countLabel} onClose={onClose}>
+    <Sheet title={title} subtitle={subtitle} onClose={onClose}>
       {/* Whatever the caller needs answered before the list is useful — the
           meal editor puts its slot chips here, because which meal you are
           planning is decided before which recipe fills it. */}
@@ -266,6 +429,7 @@ export default function RecipeBook({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <PriceButton on={prices} onClick={togglePrices} />
         <HelpButton onClick={() => setHelpOpen(true)} label="How do I add or edit a recipe?" />
       </div>
 
@@ -277,21 +441,44 @@ export default function RecipeBook({
       </div>
 
       <div className="book__grid">
-        {shown.map((r) => (
-          <button
-            key={r.id}
-            className={r.id === highlightId ? 'book__card is-current' : 'book__card'}
-            onClick={() => onOpen(r)}
-          >
-            <RecipeArt recipe={r} className="book__card-art" />
-            <span className="book__card-title">{r.title}</span>
-            <span className="book__card-meta">
-              {r.id === highlightId
-                ? 'On the plan now'
-                : summaryOf(r) || 'No details yet'}
-            </span>
-          </button>
-        ))}
+        {shown.map((r) => {
+          const price = prices ? priceLabel(costOf(r)) : null
+          return (
+            <button
+              key={r.id}
+              className={r.id === highlightId ? 'book__card is-current' : 'book__card'}
+              onClick={() => onOpen(r)}
+            >
+              <RecipeArt recipe={r} className="book__card-art" />
+              <span className="book__card-title">{r.title}</span>
+
+              {/* Above the summary, not folded into it. The summary is a
+                  sentence of facts you read; this is a figure you compare
+                  against the card beside it, and comparing is a great deal
+                  harder when the number is the fourth clause of a line. */}
+              {price && (
+                <span
+                  className={
+                    price.known
+                      ? price.partial
+                        ? 'book__card-price is-partial'
+                        : 'book__card-price'
+                      : 'book__card-price is-unknown'
+                  }
+                >
+                  <span className="book__card-figure">{price.figure}</span>
+                  <span className="book__card-per">{price.note}</span>
+                </span>
+              )}
+
+              <span className="book__card-meta">
+                {r.id === highlightId
+                  ? 'On the plan now'
+                  : summaryOf(r) || 'No details yet'}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {!loading && shown.length === 0 && (

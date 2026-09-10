@@ -101,14 +101,16 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
 - `src/lib/week.js` — date helpers, Sunday-start week, no date library.
 - `src/lib/cost.js` — weekly grocery cost projection from the meal plan
   (leftover nights are free; shared ingredients across recipes are
-  deduped to whole packages before pricing).
+  deduped to whole packages before pricing), plus `recipeCost` for one
+  recipe on its own. See "Price per serving" below: the two answer
+  different questions and deliberately do not sum to each other.
 - `src/tokens.css` — design tokens (colors, type, sizing). Real Fraunces
   (display serif) + Figtree (text sans) fonts are installed via
   `@fontsource-variable/fraunces` / `@fontsource/figtree`, imported in
   `main.jsx`.
 - `src/components/RecipeBook.jsx` — the recipe book, in three layers:
   `RecipeBook` (the shelf: search over titles *and* ingredient names, four
-  filters), `RecipeDetail` (one recipe, plus "plan a night" against the week
+  filters, and the `$` price toggle), `RecipeDetail` (one recipe, plus "plan a night" against the week
   currently on the board), and `CookMode` (one step at a time at 40px, holding
   a screen wake lock). **Tapping the step moves through it — the left 30%
   (`BACK_ZONE`) goes back, the rest goes on.** The footer buttons are 52px in a
@@ -468,6 +470,59 @@ moved one tap out, to the day view (tap the row, not the chip), which is the
 right way round: changing what is for dinner is a planning act and belongs with
 the day. The day view's meal rows follow the same rule — the title opens the
 recipe, and "Change or clear this meal" is its own row.
+
+## Price per serving
+
+The shelf has a `$` toggle beside the help button. On, every card carries a
+price per serving, the list resorts cheapest first, and the subtitle swaps the
+recipe count for what is left of the week's grocery budget. Off — the default,
+remembered per device in `localStorage` under `trellis.book-prices` — the book
+is exactly what it was. The picker inside `MealEditor` is the same shelf, so it
+gets all of this too, which is the point: the tap that spends the money is the
+one in the picker, not the one in the book.
+
+**The figure is consumed cost, not checkout cost.** `recipeCost` sums
+`purchase_qty x` after-tax unit price with no rounding up to whole packages,
+where `weekCost` groups by product and rounds each up. Both are named in
+`005_price_book.sql` and they answer different questions: the week is a trip to
+the shop, so it pays for whole packets; one recipe is a portion of that trip,
+and "is this a cheaper dinner than that one" is about the food, not the
+packaging. **So these numbers are not additive with the cart total and seven of
+them will not reproduce it** — the same shared-ingredient effect `weekPackages`
+exists for, pointing the other way.
+
+Denominator is `servings_min`, not max and not the midpoint. Five recipes carry
+a range, and the larger end is the flattering number; this figure is read at
+the moment someone decides whether they can afford to cook something, so it
+errs dear.
+
+**The three states matter more than the number does.** The bank prices
+completely for 13 recipes, partly for 2, and not at all for 4:
+
+- Complete — `$2.34` `a serving`.
+- Partial — `$1.66+` `3 unpriced`, greyed figure, warning-coloured note. Rows
+  with a product but no `purchase_qty` land here (three of Stuffed peppers'
+  do), as do rows with neither.
+- Unknown — `—` `no prices yet`.
+
+Sorting buckets before it compares, so **a partial price can never outrank a
+whole one**. This is the whole reason the states exist: Stuffed peppers sums to
+$1.66 a serving with three ingredients missing, and left to sort on the number
+it would sit at the top of a list whose entire job is finding the cheapest
+dinner, which is the opposite of true. `recipeCost` also requires `cents > 0`
+before it claims to know anything — otherwise the Protein Berry Smoothie, whose
+only priced row is water at 0, announces itself as a free meal.
+
+Two things to know if this is ever extended:
+
+- `manual_cost_cents` counts here and does **not** count in `weekCost`. Every
+  manual price in the bank today is 0 (soy sauce, spices, water — pantry rows
+  Ed marked as free), so the discrepancy is invisible. The day someone types a
+  real one, the recipe and the cart will disagree until that is reconciled.
+- `RecipeDetail` does not show a price. The toggle lives in the shelf's own
+  state, and the detail sheet is its sibling under `Wall`, not its child. Cost
+  in the detail view wants the per-ingredient breakdown anyway, which is a
+  different piece of work.
 
 ## Chores, which are also tasks
 

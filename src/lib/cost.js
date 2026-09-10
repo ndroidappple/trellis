@@ -165,3 +165,83 @@ export function groceryLines(planEntries, staples) {
 
   return { lines, unmatched }
 }
+
+/**
+ * What one recipe costs, and what one serving of it costs.
+ *
+ * The basis is *consumed* cost, not checkout cost — `purchase_qty` x unit
+ * price, summed, with no rounding up to whole packages. 005 names both, and
+ * the choice matters here:
+ *
+ *   Rounding a single recipe up to whole packages would price the half-pack
+ *   of turkey it uses as a full one, and every recipe in the book would read
+ *   dearer than the week that contains it. The week rounds because the week
+ *   is a trip to the shop; one recipe is a portion of that trip, and the
+ *   question this figure answers — "is this a cheaper dinner than that one"
+ *   — is about the food, not the packaging.
+ *
+ * So these numbers are deliberately not additive with the cart total, and
+ * summing seven of them will not reproduce it. That is the same
+ * shared-ingredient effect `weekPackages` exists for, pointing the other way.
+ *
+ * Unpriced ingredients are counted rather than treated as free. A recipe
+ * with three ingredients nobody has priced is not a cheap recipe, and the
+ * shelf marks it as a floor ("$1.66+") rather than a price.
+ *
+ * `manual_cost_cents` is counted here. Every manual price in the bank today
+ * is 0 — soy sauce, spices, water: pantry rows Ed marked as costing nothing
+ * — so this changes no number now, but it means a real one typed later lands
+ * somewhere. Worth knowing that `weekCost` above does *not* count them, so
+ * the day someone types a non-zero manual price the two figures will
+ * disagree until that is reconciled.
+ */
+export function recipeCost(recipe) {
+  const ingredients = recipe?.ingredients ?? []
+
+  let cents = 0
+  let unpriced = 0
+
+  for (const ing of ingredients) {
+    // Both halves are needed to price a row: a product says what it costs,
+    // purchase_qty says how much of it this recipe takes. Three of Stuffed
+    // peppers' rows have the first and not the second, which is why "has a
+    // product" is not the test.
+    if (ing.product && ing.purchase_qty != null) {
+      cents +=
+        Number(ing.purchase_qty) *
+        afterTaxCents(ing.product.pre_tax_cents, ing.product.tax_rate_bps)
+    } else if (ing.manual_cost_cents != null) {
+      cents += ing.manual_cost_cents
+    } else {
+      unpriced += 1
+    }
+  }
+
+  /*
+   * servings_min, not max, and not the midpoint.
+   *
+   * Five of the recipes carry a range. Dividing by the larger end would
+   * quietly produce the flattering number, and this figure exists to be
+   * trusted at the moment somebody is deciding whether they can afford to
+   * cook something — the direction to err is dearer.
+   */
+  const servings = recipe?.servings_min ?? null
+
+  /*
+   * `cents > 0` is what keeps the Protein Berry Smoothie honest. Four of its
+   * five rows are unpriced and the fifth is water at 0, so it would otherwise
+   * announce itself as $0.00 a serving and sort to the top of a list whose
+   * whole job is finding the cheapest dinner. Nothing priced above zero means
+   * nothing known, and it says so instead.
+   */
+  const known = cents > 0 && servings > 0
+
+  return {
+    cents: Math.round(cents),
+    servings,
+    perServingCents: known ? Math.round(cents / servings) : null,
+    unpriced,
+    /** Priced, and nothing missing — the only kind that sorts as a real price. */
+    complete: known && unpriced === 0,
+  }
+}

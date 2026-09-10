@@ -204,8 +204,8 @@ export function recipeCost(recipe) {
   for (const ing of ingredients) {
     // Both halves are needed to price a row: a product says what it costs,
     // purchase_qty says how much of it this recipe takes. Three of Stuffed
-    // peppers' rows have the first and not the second, which is why "has a
-    // product" is not the test.
+    // peppers' rows had the first and not the second until 015 filled them,
+    // which is why "has a product" is not the test.
     if (ing.product && ing.purchase_qty != null) {
       cents +=
         Number(ing.purchase_qty) *

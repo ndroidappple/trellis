@@ -244,6 +244,16 @@ export default function Wall({ profile, people }) {
    * mean back.
    */
   const [bookEntry, setBookEntry] = useState('shelf')
+  /**
+   * The planned meal the book was opened from, if any — `{ date, slot }`.
+   *
+   * Tapping the chip opens the recipe rather than the editor, which is right,
+   * but it also means arriving at a recipe you are looking at *because it is
+   * on Tuesday*. Changing your mind about Tuesday is the second most likely
+   * thing you want there, and without this the way back to it is close the
+   * recipe, tap the day, find the meal, tap change.
+   */
+  const [bookFromMeal, setBookFromMeal] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [cookProgress, setCookProgress] = useState(null)
   const [deviceTimeout, setDeviceTimeout] = useState(readDeviceTimeout)
@@ -1002,9 +1012,10 @@ export default function Wall({ profile, people }) {
   }, [mealEditing, bookRecipes.length, loadBook])
 
   const openBook = useCallback(
-    (recipeId = null) => {
+    (recipeId = null, fromMeal = null) => {
       setRecipeOpen(recipeId)
       setBookEntry(recipeId ? 'recipe' : 'shelf')
+      setBookFromMeal(fromMeal)
       setBookOpen(true)
       loadBook()
     },
@@ -1036,6 +1047,7 @@ export default function Wall({ profile, people }) {
   function closeBook() {
     setBookOpen(false)
     setRecipeOpen(null)
+    setBookFromMeal(null)
     setCooking(false)
   }
 
@@ -1178,15 +1190,23 @@ export default function Wall({ profile, people }) {
    * stay lit while nobody is touching the iPad. An ambient scene over it would
    * defeat the feature it was layered on top of.
    *
-   * **Anything but a live connection.** A beautiful animation over a board
-   * that stopped updating four hours ago is precisely the "green dot over a
-   * stale week" failure in a prettier costume. Offline has to stay visible,
-   * so the scene stands down and lets the header say so.
+   * **A disconnected board.** A beautiful animation over a board that stopped
+   * updating four hours ago is precisely the "green dot over a stale week"
+   * failure in a prettier costume. Offline has to stay visible.
    *
    * **An error on screen.** Same argument, louder: the board is the only
    * debugger this device has.
+   *
+   * Note the test is `!== 'offline'`, not `=== 'live'`. It was `=== 'live'`,
+   * and that was a bug rather than caution: `combineStatus` only says "live"
+   * when **all six** realtime channels are up, and returns "connecting" if a
+   * single one is mid-handshake — a routine, transient state on a device that
+   * sleeps. So one flaky channel meant the wall would never fade at all, and
+   * the failure was silent, because nothing on screen connects "the dot is
+   * grey" to "the screensaver is disabled". Connecting is not disconnected;
+   * only offline is, and only offline has to stay on screen.
    */
-  const screensaverAllowed = !cooking && syncState === 'live' && !error
+  const screensaverAllowed = !cooking && syncState !== 'offline' && !error
   const idleTimeoutMs = timeoutMsFor(settings.screensaverMin, deviceTimeout)
   const { idle, wake, sleep } = useIdle({ timeoutMs: idleTimeoutMs, enabled: screensaverAllowed })
 
@@ -1450,7 +1470,9 @@ export default function Wall({ profile, people }) {
        * for dinner is a planning act and belongs with the day, while the chip
        * is the dish itself.
        */
-      if (entry.recipe?.id) return openBook(entry.recipe.id)
+      if (entry.recipe?.id) {
+        return openBook(entry.recipe.id, { date: entry.on_date, slot: entry.slot })
+      }
 
       // A plan row with no recipe attached has nothing to read, so it falls
       // back to the only thing it can usefully offer.
@@ -1616,6 +1638,7 @@ export default function Wall({ profile, people }) {
         dragging={drag != null}
         dragOverDate={drag?.over?.kind === 'day' ? drag.over.date : null}
         onOpenDay={handleOpenDay}
+        onOpenBook={() => openBook()}
         onOpenMenu={openMenu}
         onOpenChores={() => setSectionOpen('chores')}
         onOpenShopping={() => setSectionOpen('shopping')}
@@ -1714,7 +1737,10 @@ export default function Wall({ profile, people }) {
           }}
           onViewRecipe={(entry) => {
             setDayViewing(null)
-            openBook(entry?.recipe?.id ?? null)
+            openBook(
+              entry?.recipe?.id ?? null,
+              entry ? { date: entry.on_date, slot: entry.slot } : null
+            )
           }}
           onCook={(entry) => {
             setDayViewing(null)
@@ -1789,6 +1815,20 @@ export default function Wall({ profile, people }) {
             closeBook()
           }}
           onCook={() => setCooking(true)}
+          // Only when you got here from a meal on the board. Opening the same
+          // recipe from the shelf has no night attached to change.
+          changeMealLabel={
+            bookFromMeal ? `Change ${slotLabel(bookFromMeal.slot).toLowerCase()}` : null
+          }
+          onChangeMeal={
+            bookFromMeal
+              ? () => {
+                  const meal = bookFromMeal
+                  closeBook()
+                  setMealEditing(meal)
+                }
+              : undefined
+          }
           onClose={closeRecipe}
         />
       )}
@@ -2613,40 +2653,42 @@ function SettingsPanel({
 
         <p className="settings-row__hint">
           {effectiveMin === 'never'
-            ? 'The board stays on. "Sleep now" still works.'
+            ? 'The board stays on until you send it to sleep.'
             : `The board fades to the ambient scene after ${effectiveMin} minutes, and darkens after 10pm. Any touch brings it back.`}
         </p>
 
         {/*
-          Sleep on demand, for the times the room wants the screen off now
-          rather than in ten minutes — someone sitting down to watch
-          something, or going to bed early.
+          Sleep on demand, for when the room wants the screen off now rather
+          than in ten minutes.
 
-          It only puts the board to sleep; waking stays "any touch", exactly
-          as a timed sleep does. A manual sleep that needed its own gesture to
-          undo would be a second mechanism for something the feature already
-          does one way.
+          It sits with the timeout it short-circuits, not in the footer beside
+          Close. Those were two equal-weight ghost buttons in a `.actions` row,
+          where each one is `flex: 1` — so the control that blanks the board
+          and the control that dismisses the dialog were the same size, the
+          same colour and touching. On a wall you reach for from arm's length
+          that is a mis-tap waiting to happen, and the two do entirely
+          different things.
 
           Disabled rather than hidden when the scene cannot run, because the
-          reasons are worth reading: offline and errored boards must stay
-          visible, and a control that silently does nothing teaches people the
-          setting is broken.
+          reason is worth reading: a control that silently does nothing teaches
+          people the setting is broken.
         */}
+        <button className="settings-sleep" onClick={onSleep} disabled={!canSleep}>
+          Sleep now
+        </button>
+
+        {!canSleep && (
+          <p className="settings-row__hint">
+            Unavailable while the board is offline or showing an error — those
+            have to stay on screen.
+          </p>
+        )}
+
         <div className="actions">
-          <button className="ghost" onClick={onSleep} disabled={!canSleep}>
-            Sleep now
-          </button>
           <button className="ghost" onClick={onClose}>
             Close
           </button>
         </div>
-
-        {!canSleep && (
-          <p className="settings-row__hint">
-            Sleep is unavailable while the board is offline or showing an
-            error — those have to stay on screen.
-          </p>
-        )}
       </div>
     </div>
   )

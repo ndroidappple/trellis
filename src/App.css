@@ -648,6 +648,57 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 .panel-add input { width: 100%; min-height: var(--tap-min); font-size: 17px; }
 .panel-add button { min-height: var(--tap-min); font-size: 18px; }
 
+/* Folded away until wanted.
+ *
+ * A text input standing open at the foot of a dock panel is a hard rectangle
+ * across the base of a surface otherwise made of paper rows and hairlines —
+ * furniture that competes with the list above it for the many hours a day
+ * nobody is capturing anything. Closed, it reads as one more quiet row.
+ *
+ * It keeps the field's own footprint (--tap-min, full width, same margin) so
+ * opening and closing does not reflow the panel underneath — the list should
+ * not jump because someone tapped Add. */
+.panel-add--closed { display: block; }
+
+.panel-add__open {
+  width: 100%;
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  background: transparent;
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  padding: 0 14px;
+
+  font-family: var(--font-text);
+  font-size: 18px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+/* Dashed, and only here. Everywhere else in this app a dashed outline means
+   "a place something could go" — the day row's + buttons use the same
+   language — and that is exactly what this is. */
+.panel-add__open:active {
+  background: var(--chip-face);
+  color: var(--ink);
+  border-style: solid;
+}
+
+.panel-add__plus {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink-faint);
+}
+
+/* Narrow: it is the way out, not an equal third action beside Add. */
+.panel-add__close {
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+
 /* What the capture field understood, shown before anything is written.
    Appears only when there is something to say, so the field has no permanent
    furniture under it — and it is the reason the parser is trustworthy rather
@@ -682,6 +733,32 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
 
 .chip:disabled:active {
   transform: none;
+}
+
+/* Sleep now. Sits inside the dialog body with the timeout it short-circuits,
+   deliberately not in the `.actions` footer next to Close — see the note in
+   SettingsPanel. Full width so it does not read as one of a pair, and quiet,
+   because it is a convenience rather than the reason the dialog is open. */
+.settings-sleep {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.settings-sleep:active:not(:disabled) {
+  background: var(--chip-face);
+  color: var(--ink);
+}
+
+.settings-sleep:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .settings-row__hint {

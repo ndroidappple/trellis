@@ -1,18 +1,16 @@
 /*
- * The ambient scene. Classic theme: the board's own palette, at rest.
+ * The trellis scene.
  *
- * Every duration in here is in *minutes*, which is the point. This is the one
- * surface in Trellis that motion tokens do not govern — `--dur-move` and
+ * Every duration here is in *minutes*, which is the point. This is the one
+ * surface in Trellis that the motion tokens do not govern — `--dur-move` and
  * friends exist to explain that something happened, and nothing is happening
- * here. The test for this scene is that a guest should not be able to tell
- * whether it is a screensaver or a piece of wall art, and anything you can
- * catch moving fails it.
+ * here. The test is that a guest should not be able to tell whether it is a
+ * screensaver or a piece of wall art, and anything you can catch moving fails.
  *
- * The periods are mutually prime on purpose (137 / 181 / 223 / 269 / 307
- * seconds). Four layers on round durations resynchronise every couple of
- * minutes into a figure the eye learns and then starts anticipating; on primes
- * the combined pattern does not repeat for over eleven days, which is longer
- * than the wall usually goes between deploys.
+ * --cycle is the whole life of a growth: lattice up, vines climb, leaves open,
+ * everything recedes, begin again. --drift is share-prime with it so the
+ * composition is never in the same place on two successive cycles, which is
+ * what keeps a drawing made of straight lines off the same pixels.
  */
 
 .saver {
@@ -20,210 +18,190 @@
   inset: 0;
 
   /* Above the sheets (15) and the dialog scrim (10). Someone can walk away
-     from an open recipe or a half-finished settings dialog just as easily as
-     from the board, and a scene that only covers three quarters of the screen
-     protects three quarters of the panel. */
+     from an open recipe or a half-finished dialog just as easily as from the
+     board, and a scene covering three quarters of the screen protects three
+     quarters of the panel. */
   z-index: 40;
+
+  --cycle: 247s;
+  --drift: 331s;
+  --ground: #DCDCD0;
+  --line: rgba(46, 43, 35, 0.20);
+  --stem: rgba(63, 122, 94, 0.62);
+  --foliage: rgba(63, 122, 94, 0.44);
 
   overflow: hidden;
   cursor: none;
 
-  /* No text, no controls, nothing to select or drag out of. */
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   touch-action: none;
 
-  background: radial-gradient(120% 90% at 50% 15%, #E9E9DE 0%, #DADACE 45%, #C9C9BC 100%);
+  background: var(--ground);
 
   /* Slow. An abrupt cut reads as a fault — as the screen having broken rather
      than the board having gone to sleep. */
   animation: saver-in 2400ms var(--ease-enter) both;
 }
 
-.saver:focus-visible {
-  outline: none;
-}
+.saver:focus-visible { outline: none; }
 
 @keyframes saver-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-/* The wash: one very large, very soft field that never leaves the screen and
-   never sits still. It is what stops the *background itself* being static
-   geometry, which the panel edges and week rules underneath it very much
-   are. */
-.saver__wash {
+/* The canvas behind the home indicator.
+ *
+ * Outside the initial containing block, so `inset: 0` above never reaches it —
+ * only a background on the root propagates there. Without this the board faded
+ * to the scene and left a band of iOS wallpaper along the bottom edge of the
+ * Home Screen web app. index.css holds the board's own default. */
+html[data-saver='day']   { background: #DCDCD0; }
+html[data-saver='night'] { background: #0B0C08; }
+
+.saver__scene {
   position: absolute;
-  inset: -35%;
-  background: radial-gradient(
-    closest-side circle at 50% 50%,
-    rgba(63, 122, 94, 0.20) 0%,
-    rgba(63, 122, 94, 0.09) 45%,
-    rgba(63, 122, 94, 0) 72%
-  );
-  animation: saver-wash 307s linear infinite;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-@keyframes saver-wash {
-  0%   { transform: translate3d(-6%, -4%, 0) scale(1.06); }
-  25%  { transform: translate3d(5%, 3%, 0) scale(1.15); }
-  50%  { transform: translate3d(4%, -5%, 0) scale(1.02); }
-  75%  { transform: translate3d(-5%, 5%, 0) scale(1.12); }
-  100% { transform: translate3d(-6%, -4%, 0) scale(1.06); }
+/* The composition breathes and wanders. Small numbers — this is not meant to
+   be seen as movement, only to stop any line living at one address. */
+.saver__grow {
+  animation: saver-drift var(--drift) ease-in-out infinite;
+  transform-origin: 50% 60%;
 }
 
-/* The drifting points of light. Soft-edged radial gradients rather than
-   blurred shapes: a `filter: blur()` on a layer this size is re-rasterised on
-   a device that has to stay cool for weeks, whereas a gradient is painted once
-   and only ever transformed after that — which the compositor does for free. */
-.saver__drift {
-  position: absolute;
-  width: 62vmin;
-  height: 62vmin;
-  border-radius: 50%;
-  will-change: transform;
+@keyframes saver-drift {
+  0%   { transform: translate(-1.5%, 1%) scale(1.01); }
+  33%  { transform: translate(1.5%, -1.5%) scale(1.05); }
+  66%  { transform: translate(1%, 1.5%) scale(1.00); }
+  100% { transform: translate(-1.5%, 1%) scale(1.01); }
 }
 
-.saver__drift--a {
-  top: -14%;
-  left: -8%;
-  background: radial-gradient(closest-side circle, rgba(250, 243, 223, 0.85), rgba(250, 243, 223, 0) 70%);
-  animation: saver-drift-a 137s ease-in-out infinite;
+/* --- the lattice ------------------------------------------------------- */
+
+.saver__lattice path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.7;
+  stroke-dasharray: 900;
+  stroke-dashoffset: 900;
+  animation: saver-draw var(--cycle) ease-in-out infinite;
+  /* Staggered so the frame assembles rather than snapping into being. */
+  animation-delay: calc(var(--i) * -1.7s);
 }
 
-.saver__drift--b {
-  bottom: -18%;
-  right: -10%;
-  background: radial-gradient(closest-side circle, rgba(156, 95, 62, 0.30), rgba(156, 95, 62, 0) 70%);
-  animation: saver-drift-b 181s ease-in-out infinite;
+/* --- the vines --------------------------------------------------------- */
+
+/* One property does all the work: the dash gap is the length of the path, so
+   winding the offset from `len` to 0 walks a growing tip up the curve. The
+   browser composites it, so a four-minute climb costs nothing per frame. */
+.saver__vine {
+  fill: none;
+  stroke: var(--stem);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-dasharray: var(--len);
+  stroke-dashoffset: var(--len);
+  animation: saver-climb var(--cycle) cubic-bezier(0.35, 0, 0.45, 1) infinite;
+  animation-delay: calc(var(--i) * -9s);
 }
 
-.saver__drift--c {
-  top: 30%;
-  right: -20%;
-  background: radial-gradient(closest-side circle, rgba(63, 122, 94, 0.26), rgba(63, 122, 94, 0) 70%);
-  animation: saver-drift-c 223s ease-in-out infinite;
+@keyframes saver-climb {
+  0%   { stroke-dashoffset: var(--len); opacity: 0; }
+  6%   { opacity: 1; }
+  /* Grown by ~72% of the cycle, then a long hold and a long retreat. The
+     retreat matters as much as the growth: nothing may still be lit when the
+     next cycle starts drawing over it. */
+  72%  { stroke-dashoffset: 0; opacity: 1; }
+  86%  { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
 }
 
-.saver__drift--d {
-  bottom: 8%;
-  left: -16%;
-  background: radial-gradient(closest-side circle, rgba(252, 252, 248, 0.70), rgba(252, 252, 248, 0) 70%);
-  animation: saver-drift-d 269s ease-in-out infinite;
+@keyframes saver-draw {
+  0%   { stroke-dashoffset: 900; opacity: 0; }
+  8%   { opacity: 1; }
+  60%  { stroke-dashoffset: 0; opacity: 1; }
+  86%  { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
 }
 
-/* Each path crosses most of the screen over its period. A layer that only
-   wobbles within a small neighbourhood protects the pixels it wobbles over and
-   nothing else, which is a screensaver that looks like one without being one. */
-@keyframes saver-drift-a {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  33%  { transform: translate3d(64vw, 18vh, 0) scale(1.22); }
-  66%  { transform: translate3d(22vw, 58vh, 0) scale(0.92); }
-  100% { transform: translate3d(0, 0, 0) scale(1); }
+/* --- the leaves -------------------------------------------------------- */
+
+/* Each opens just behind where its vine's tip will be, which is what --at
+   encodes: the fraction of the cycle by which the stem has passed it. */
+.saver__leaf {
+  fill: var(--foliage);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: saver-leaf var(--cycle) ease-out infinite;
+  animation-delay: calc(var(--i) * -0.001s + var(--at) * var(--cycle));
 }
 
-@keyframes saver-drift-b {
-  0%   { transform: translate3d(0, 0, 0) scale(1.08); }
-  40%  { transform: translate3d(-58vw, -22vh, 0) scale(0.9); }
-  70%  { transform: translate3d(-18vw, -62vh, 0) scale(1.18); }
-  100% { transform: translate3d(0, 0, 0) scale(1.08); }
+@keyframes saver-leaf {
+  0%   { opacity: 0; }
+  4%   { opacity: 1; }
+  40%  { opacity: 1; }
+  55%  { opacity: 0; }
+  100% { opacity: 0; }
 }
 
-@keyframes saver-drift-c {
-  0%   { transform: translate3d(0, 0, 0) scale(0.95); }
-  50%  { transform: translate3d(-72vw, 26vh, 0) scale(1.25); }
-  100% { transform: translate3d(0, 0, 0) scale(0.95); }
-}
-
-@keyframes saver-drift-d {
-  0%   { transform: translate3d(0, 0, 0) scale(1.12); }
-  45%  { transform: translate3d(46vw, -40vh, 0) scale(0.88); }
-  80%  { transform: translate3d(70vw, 10vh, 0) scale(1.05); }
-  100% { transform: translate3d(0, 0, 0) scale(1.12); }
-}
-
-/* ---------------------------------------------------------------- night ---
+/* --- night ------------------------------------------------------------- *
  *
  * The light-pollution half of the feature. After 22:00 this is a lamp in a
- * room people are trying to relax in, so the whole scene drops to something
- * closer to off than to on — and slows down further, because the only thing
- * worse than a lit screen at midnight is a lit screen at midnight with
- * something moving on it fast enough to catch your eye.
- */
+ * room people are trying to relax in, so the scene drops to closer to off than
+ * on — and slows further, because the only thing worse than a lit screen at
+ * midnight is a lit screen at midnight with something on it moving fast enough
+ * to catch your eye. */
 .saver[data-night='true'] {
-  background: radial-gradient(130% 100% at 50% 20%, #16170F 0%, #0F0F0A 55%, #080806 100%);
+  --cycle: 494s;
+  --drift: 662s;
+  --ground: #0B0C08;
+  --line: rgba(230, 236, 220, 0.07);
+  --stem: rgba(126, 176, 148, 0.26);
+  --foliage: rgba(126, 176, 148, 0.16);
 }
 
-.saver[data-night='true'] .saver__wash {
-  background: radial-gradient(
-    closest-side circle at 50% 50%,
-    rgba(63, 122, 94, 0.14) 0%,
-    rgba(63, 122, 94, 0.05) 50%,
-    rgba(63, 122, 94, 0) 75%
-  );
-  animation-duration: 614s;
-}
-
-.saver[data-night='true'] .saver__drift--a {
-  background: radial-gradient(closest-side circle, rgba(250, 243, 223, 0.10), rgba(250, 243, 223, 0) 70%);
-  animation-duration: 274s;
-}
-
-.saver[data-night='true'] .saver__drift--b {
-  background: radial-gradient(closest-side circle, rgba(156, 95, 62, 0.10), rgba(156, 95, 62, 0) 70%);
-  animation-duration: 362s;
-}
-
-.saver[data-night='true'] .saver__drift--c {
-  background: radial-gradient(closest-side circle, rgba(63, 122, 94, 0.12), rgba(63, 122, 94, 0) 70%);
-  animation-duration: 446s;
-}
-
-.saver[data-night='true'] .saver__drift--d {
-  background: radial-gradient(closest-side circle, rgba(252, 252, 248, 0.07), rgba(252, 252, 248, 0) 70%);
-  animation-duration: 538s;
-}
-
-/* --------------------------------------------------------------- paused ---
+/* --- paused ------------------------------------------------------------ *
  *
  * Hidden means the iPad is asleep or the app is backgrounded. Browsers throttle
  * offscreen animation but do not reliably stop it, and this runs for hours a
  * day on a device that must stay cool across a multi-week uptime. Pausing also
  * makes the return seamless: the timeline resumes where it stopped rather than
- * snapping to wherever it would have got to, so waking never shows a jump.
- */
-.saver[data-paused='true'] .saver__wash,
-.saver[data-paused='true'] .saver__drift {
+ * snapping to wherever it would have got to. */
+.saver[data-paused='true'] .saver__grow,
+.saver[data-paused='true'] .saver__lattice path,
+.saver[data-paused='true'] .saver__vine,
+.saver[data-paused='true'] .saver__leaf {
   animation-play-state: paused;
 }
 
-/* ------------------------------------------------------- reduced motion ---
+/* --- reduced motion ---------------------------------------------------- *
  *
- * There is no honest way to keep both promises here: the drifting light exists
- * *because* it moves, and someone who has asked for no motion cannot be given
- * a slower version of the thing they turned off. So the bright shapes go
- * altogether rather than freezing in place — a still highlight parked on the
- * same pixels for hours is the burn-in this feature was built to prevent,
- * wearing the costume of a fix.
+ * There is no honest way to keep both promises. A trellis is the *growing*
+ * that makes it a trellis, and someone who asked for no motion cannot be given
+ * a slower version of the thing they turned off. Worse, a finished static
+ * lattice is exactly the fixed geometry this feature exists to prevent — the
+ * burn-in bug wearing the costume of an accessibility fix.
  *
- * What remains is a flat, very dark field: nothing moves, and nothing is
- * bright enough to leave a mark. The arrival keeps a short fade, since an
- * opacity change is not travel and a hard cut still reads as a fault.
- */
+ * So the drawing goes altogether rather than freezing, leaving a flat, very
+ * dark field: nothing moves, and nothing is bright enough to leave a mark. The
+ * arrival keeps a short fade, since an opacity change is not travel and a hard
+ * cut still reads as a fault. */
 @media (prefers-reduced-motion: reduce) {
   .saver {
     background: #14150F;
     animation-duration: 600ms;
   }
 
-  .saver[data-night='true'] {
-    background: #080806;
-  }
+  .saver[data-night='true'] { background: #080906; }
+  html[data-saver='day']    { background: #14150F; }
+  html[data-saver='night']  { background: #080906; }
 
-  .saver__wash,
-  .saver__drift {
-    display: none;
-  }
+  .saver__scene { display: none; }
 }

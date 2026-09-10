@@ -401,7 +401,14 @@ export default function ChoresPanel({
           palette — so adding a chore to a full list meant scrolling to the
           bottom of it first. Pinned, it costs one row of list height and is
           always exactly where it was last time. */}
-      <AddRow placeholder="Add a task — try “bins out every tuesday”" onAdd={onAdd} parse today={today} />
+      <AddRow
+        placeholder="Add a task — try “bins out every tuesday”"
+        onAdd={onAdd}
+        parse
+        today={today}
+        collapsible
+        openLabel="Add a task"
+      />
 
       {pendingCount === 0 && choreCount > 0 && (
         <p className="panel-rows__footnote">Nothing left this week.</p>

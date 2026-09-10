@@ -48,7 +48,9 @@ interface Props {
   dragging?: boolean;
   dragOverDate?: string | null;
   onOpenDay?: (date: string) => void;
-  /** Opens the main menu. The board's only permanent door out of the week. */
+  /** Straight to the recipe book — the one room that earns its own button. */
+  onOpenBook?: () => void;
+  /** Everything else that is not this week. */
   onOpenMenu?: () => void;
   /** Open each dock section as a full page. */
   onOpenChores?: () => void;
@@ -98,27 +100,36 @@ export function Board(props: Props) {
           )}
         </div>
         <div className="board__header-right">
-          {/* Spelled out rather than a glyph, and still the same argument: a
-              recipe book that nobody can find is just a database. It said
-              "Recipes" until the app had more than one room behind it — the
-              To-Do and Shopping pages, and the settings that had never been
-              advertised anywhere at all — at which point a header that grew a
-              button per room would have buried the week under its own index.
+          {/* Two doors, and the split is by how often each is walked through.
 
-              One door, named for what it is. What was behind that button is
-              now the first thing inside this one, so the book costs a tap it
-              did not cost before; three other places that previously cost a
-              gesture you had to be told about now cost the same tap.
+              This was one "Recipes" button; then it became one "Menu" button,
+              on the reasoning that a header growing a button per room would
+              bury the week under its own index. That reasoning holds for
+              To-Do, Shopping and Settings — and was wrong about the recipe
+              book, which is not one room among four. It is the room this
+              household opens daily, and putting it a tap further away to tidy
+              the header traded a real cost for a tidiness nobody asked for.
 
-              First in the cluster and fenced off by a rule, because it is
-              the only control here that leaves the week. Sitting it between
-              "Today" and the arrows filed a doorway to another room among
-              the controls for moving around this one. */}
-          {props.onOpenMenu && (
+              So the book keeps its own button and everything else lives behind
+              Menu. Spelled out rather than glyphs, for the same reason as
+              always: a recipe book nobody can find is just a database.
+
+              Both come first and are fenced off by the rule, because they are
+              the only controls here that leave the week. Sitting either
+              between "Today" and the arrows would file a doorway to another
+              room among the controls for moving around this one. */}
+          {(props.onOpenBook || props.onOpenMenu) && (
             <>
-              <button className="board__menu" onClick={props.onOpenMenu} aria-haspopup="dialog">
-                Menu
-              </button>
+              {props.onOpenBook && (
+                <button className="board__menu" onClick={props.onOpenBook}>
+                  Recipes
+                </button>
+              )}
+              {props.onOpenMenu && (
+                <button className="board__menu" onClick={props.onOpenMenu} aria-haspopup="dialog">
+                  Menu
+                </button>
+              )}
               <span className="board__header-rule" aria-hidden="true" />
             </>
           )}

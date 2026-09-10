@@ -14,6 +14,26 @@ html, body, #root {
 }
 
 /*
+ * Paint the canvas, not just the app.
+ *
+ * Neither of these had a background, so the strip behind the home indicator —
+ * outside the initial containing block, and reached because the viewport meta
+ * says `viewport-fit=cover` — was painted by the browser rather than by us. On
+ * a Home Screen web app running `black-translucent`, that showed through to
+ * the iOS wallpaper: the board would fade to the ambient scene and leave a
+ * band of home screen along the bottom edge.
+ *
+ * A background on the root propagates to the canvas, which is the only thing
+ * that reliably covers that band — a `position: fixed; inset: 0` overlay does
+ * not, because it is sized to the containing block and the band is outside it.
+ * Screensaver.css overrides this while the scene is up, via a data attribute
+ * on the root, so the band follows the scene into night too.
+ */
+html, body {
+  background: var(--plaster);
+}
+
+/*
  * The window itself never scrolls. This is a kiosk, not a document: the board
  * is designed to be exactly one screen, and anything that makes the whole
  * frame scroll is a layout bug showing itself rather than a feature. Regions

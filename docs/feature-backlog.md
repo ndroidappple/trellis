@@ -1746,6 +1746,125 @@ loses it is worse than the app.
 
 ---
 
+# Feature #12 — Spending Insights
+
+**Priority:** Medium
+**Category:** Household Intelligence / Money
+**Status:** Backlog
+**Depends On:** Tier 0 depends on nothing. Everything past it depends on a
+backend that can hold a secret, which Trellis does not currently have.
+**Primary Goal:** Show what the household is actually spending, how this week
+is pacing against the budget, and how the last four weeks compare.
+
+## 1. What already exists, and what is missing
+
+Trellis already knows what a week *should* cost. `src/lib/cost.js` walks the
+meal plan → ingredients → products and projects a weekly grocery figure;
+`household.weekly_budget_cents` holds the budget (seeded at 12000); the
+shopping cart footer already shows one against the other.
+
+What it has never known is what was actually spent. Every number in the app is
+a *projection from a plan*, and the gap between those two is the entire feature.
+
+That matters for sequencing, because it means a genuinely useful slice exists
+with no bank connection at all.
+
+## 2. On Rocket Money — worth settling early
+
+**Rocket Money is not a data source.** It is a consumer app with no public API
+for third-party developers; there is no supported way to read a user's
+transactions out of it. It cannot be the integration, and any plan that starts
+there stalls at the first step.
+
+The category it belongs to — an aggregator that normalises bank data — has real
+options: **Plaid** (the default, best docs, `/transactions/sync` is exactly the
+shape this needs), **Teller** (cheaper, US, developer-friendly), **MX** and
+**Finicity**. Plaid is the recommendation unless cost bites.
+
+## 3. Tiers
+
+### Tier 0 — pacing, with no bank at all (cheap, do first)
+
+The budget and the projection both already exist. What is missing is *time*:
+right now the cart footer says "this week's plan costs £X of £Y" with no sense
+of how far through the week you are.
+
+- Pace the projection against the day of the week — four days in with 80% of
+  the budget already committed is the insight, and it needs no new data.
+- Trend the last four weeks of *planned* cost. `meal_plan` rows are already
+  dated and already historical; nothing new is stored.
+- Surface the unpriced-ingredient count as a confidence caveat on every figure,
+  because an ingredient with no product is missing from the total and silently
+  makes every number optimistic.
+
+This is a day of work and answers "are we on track this week" honestly, as long
+as it never claims to be actual spend.
+
+### Tier 1 — real transactions
+
+- **Plaid Link** to connect an account, and `/transactions/sync` on a cron.
+- **A backend.** Plaid's `client_secret` and every `access_token` must live
+  server-side. A Supabase Edge Function plus a table; **never** a `VITE_`
+  variable, which is inlined into the public bundle at build time.
+- **New tables** — `bank_items` (institution, cursor, encrypted token
+  reference) and `transactions` — with RLS funnelled through
+  `current_household_id()` like every other table here.
+- **Cost.** Plaid production bills per connected item per month plus per
+  product; budget a few dollars a month for two people. Worth checking the
+  current pricing page rather than trusting this line.
+- **Category mapping.** Plaid's categories are not this household's. Groceries
+  is the only one that matters at first, and it has to reconcile against the
+  aisles in `src/lib/shopping.js` if planned-vs-actual is ever to be per-aisle.
+
+### Tier 2 — the actual insight
+
+Planned versus actual, per week. "You planned £96 of groceries and spent £134"
+is the sentence this whole feature exists to produce, and it is only possible
+once both halves exist.
+
+## 4. The thing that makes this different from a normal finance app
+
+**This screen hangs on a wall in a room people walk into.**
+
+Every other feature in Trellis is fine for a guest to read. Bank balances,
+merchant names and transaction histories are not, and an always-on display
+cannot be assumed to be private. This is a genuine product constraint, not a
+compliance checkbox:
+
+- Nothing financial should be on the board's default surface. A room-readable
+  "£96 of £120 this week" is fine; a merchant list is not.
+- Detail belongs behind the menu, on a page — the same way To-Do and Shopping
+  detail already do.
+- Consider whether the ambient screensaver must actively suppress it (it
+  currently covers everything, which happens to be the right behaviour here).
+- Never render an account number, even masked, on the wall.
+
+## 5. Also worth knowing before starting
+
+- **Charts are static geometry**, which is the burn-in problem the ambient
+  timeout exists to mitigate. A four-week trend chart living permanently on the
+  board is exactly the wrong place for it. On a page, opened when wanted, it is
+  fine.
+- **The type floor is 17px** (`--size-min`) and these are read at kitchen
+  distance. A dense financial table does not survive that; a small number of
+  large figures does.
+- `formatCents` and `afterTaxCents` in `src/lib/cost.js` already exist and
+  should be reused rather than re-derived.
+
+## 6. Definition of Done
+
+- [ ] Tier 0: weekly pacing that accounts for how far through the week it is.
+- [ ] Tier 0: four-week trend of planned cost.
+- [ ] Tier 0: unpriced ingredients declared as a caveat wherever a total shows.
+- [ ] A projection is never labelled as actual spend.
+- [ ] If Tier 1 ships: no credential or access token in the client bundle.
+- [ ] If Tier 1 ships: RLS on the new tables goes through
+      `current_household_id()`, verified by a test with no profile row.
+- [ ] Nothing merchant-level or account-level renders on the board's default
+      surface.
+
+---
+
 # Feature #6 — Chores Scoreboard
 
 **Priority:** Medium
@@ -2221,10 +2340,11 @@ Ordered by what should be picked up next, not by feature number.
 | 2 | **#6 Chores Scoreboard** | Medium-High | Settle who did what over a period — **unblocked by #9A** |
 | 3 | **#2 Tier 1 remainder** | High | Calendar unification, search/saved views, push reminders |
 | 4 | **#11 Send the shopping list to a phone** | Medium | Get the list to whoever is in the shop — Tier 1 is nearly free |
-| 5 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
-| 6 | **#3 Themes** | Low | Personalization and visual delight |
-| 7 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
-| 8 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
+| 5 | **#12 Spending Insights** | Medium | Planned vs actual; Tier 0 needs no bank connection |
+| 6 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
+| 7 | **#3 Themes** | Low | Personalization and visual delight |
+| 8 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+| 9 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
 | — | **#5 Ambient Screen Timeout (first version)** | **Shipped** | Pure ambient, night variant, per-device timeout — wall soak still open |
 | — | **#10 Main menu, cook-mode tap zones, meal slots** | **Shipped** | One front door; left/right stepping; four meal slots per day |
 | — | **#9 Weekly To Do + full pages + shopping aisles** | **Shipped** | 9A/9B/9C, both full-page views, migration 013 |

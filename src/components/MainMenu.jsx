@@ -79,6 +79,10 @@ export default function MainMenu({
         <div className="menu__group">
           <span className="menu__heading">Rooms</span>
 
+          {/* Also on the header as its own button — the book is opened often
+              enough to earn both. It stays listed here so the menu is a
+              complete index of where you can go, rather than a list of the
+              places that did not get a shortcut. */}
           <button className="menu__row" onClick={onRecipes}>
             <span className="menu__row-label">Recipe book</span>
             <span className="menu__row-meta">Search, filter, plan a night, cook</span>

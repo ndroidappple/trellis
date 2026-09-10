@@ -183,7 +183,12 @@ export default function ShoppingPanel({
         <ShoppingAisles items={items} onToggle={onToggle} dense />
       </div>
 
-      <AddRow placeholder="Add to shopping list" onAdd={onAdd} />
+      <AddRow
+        placeholder="Add to shopping list"
+        onAdd={onAdd}
+        collapsible
+        openLabel="Add an item"
+      />
 
       <button
         className="panel-cart"

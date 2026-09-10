@@ -50,6 +50,15 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   component takes a `mode: 'full' | 'compact'` prop; `Wall.jsx` renders
   both variants since `Board` needs them simultaneously.
 
+  **The capture field folds away behind a button in the dock** (`AddRow`'s
+  `collapsible`). Its *placement* is unchanged and still deliberate — outside
+  the scrolling list, so capture never means scrolling to the bottom of a full
+  panel — but standing permanently open it drew a hard input rectangle across
+  the base of a surface otherwise made of paper rows and hairlines. It costs
+  one tap before typing, paid back by staying open after a submit, so it is one
+  tap per visit rather than per item. The full pages pass `collapsible={false}`:
+  a page has the room, and going to one is already a statement of intent.
+
   Both panels group their contents rather than presenting a flat list —
   chores by Today / This week / As needed (`groupChores`), shopping by aisle
   (`groupByAisle`). The add row sits *outside* the scrolling list in both, so
@@ -310,6 +319,13 @@ the much darker, slower night variant (22:00–06:00, `NIGHT_FROM_HOUR` /
 - **The board stays mounted.** The scene is a sibling overlay at `z-index: 40`,
   rendered last in `Wall`. Unmounting the board would tear down five realtime
   channels and the clock hook, and the wall would return showing a stale week.
+- **The gate is `syncState !== 'offline'`, not `=== 'live'`.** It was the
+  latter, and that was a bug rather than caution: `combineStatus` only says
+  "live" when **all six** realtime channels are up and returns "connecting" if
+  one is mid-handshake — routine on a device that sleeps. So a single flaky
+  channel meant the wall never faded at all, and it failed silently, because
+  nothing on screen connects "the dot is grey" to "the screensaver is off".
+  Connecting is not disconnected; only offline is.
 - **Three things suspend it entirely** (`screensaverAllowed`): cook mode, which
   holds a wake lock and exists to keep showing you a step while your hands are
   full; anything but a live connection; and an error on screen. The last two
@@ -335,13 +351,33 @@ the much darker, slower night variant (22:00–06:00, `NIGHT_FROM_HOUR` /
   for hours is the image retention this feature exists to prevent. What remains
   is a flat, very dark field. The arrival keeps a short fade; an opacity change
   is not travel, and a hard cut still reads as a fault.
-- **Periods are mutually prime** (137 / 181 / 223 / 269 / 307s). On round
+- **The scene is a trellis, growing.** A lattice fades up, six vines climb it
+  over ~4 minutes, leaves open behind each growing tip, then everything recedes
+  and begins again slightly elsewhere. The first version was four drifting
+  fields of coloured light — calm, and anonymous enough to belong to any app.
+  **The geometry is generated, not hand-listed**, so a leaf and the path point
+  it sits on come from the same function and cannot drift apart.
+- **A trellis is the harder shape to do safely**, and that governs it: straight
+  lines in fixed positions are exactly what burns a panel. Three things pay for
+  it — growth means most pixels are dark most of the cycle, nothing survives a
+  cycle (everything fades out and redraws), and the composition drifts on a
+  period share-prime with the growth.
+- **Periods are mutually prime** (247s cycle / 331s drift). On round
   durations four layers resynchronise every couple of minutes into a figure the
   eye learns and anticipates; on primes the combination does not repeat for
   over eleven days.
 - **Paused when the document is hidden**, explicitly. Browsers throttle
   offscreen animation but do not reliably stop it, and pausing also makes the
   return seamless — the timeline resumes rather than snapping.
+
+**The canvas has to be painted, not just the overlay.** `viewport-fit=cover`
+lets the page reach the physical edges, but the strip behind the home indicator
+is *outside* the initial containing block, so a `position: fixed; inset: 0`
+overlay never covers it. Only a background on the root propagates there —
+without one the board faded to the scene and left a band of iOS wallpaper along
+the bottom of the Home Screen web app. `index.css` sets the board's default and
+`Screensaver` stamps `data-saver` on the root so the band follows the scene
+into night.
 
 **Not yet verified on the actual wall**, which is the only open item on the
 feature's Definition of Done and cannot be closed from a browser. It also

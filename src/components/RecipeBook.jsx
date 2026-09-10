@@ -322,6 +322,8 @@ export function RecipeDetail({
   plannedDate,
   onPlan,
   onCook,
+  onChangeMeal,
+  changeMealLabel,
   onClose,
 }) {
   const [planning, setPlanning] = useState(false)
@@ -359,6 +361,17 @@ export function RecipeDetail({
     </>
   ) : (
     <>
+      {/* Present only when you arrived here from a meal on the board, and
+          first because it is the reason you would change your mind while
+          reading. It is a different question from "Plan a night" beside it:
+          this one replaces the meal you came from, that one puts this recipe
+          on some other night as well. The label names the slot so the two
+          cannot be confused at a glance. */}
+      {onChangeMeal && (
+        <button className="ghost" onClick={onChangeMeal}>
+          {changeMealLabel ?? 'Change meal'}
+        </button>
+      )}
       <button className="ghost" onClick={() => setPlanning(true)}>
         Plan a night
       </button>

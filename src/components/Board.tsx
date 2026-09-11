@@ -43,6 +43,7 @@ interface Props {
   onPrevWeek?: () => void;
   onNextWeek?: () => void;
   onEventPress?: (id: string) => void;
+  onEventLongPress?: (id: string) => void;
   onAddDay?: (date: string) => void;
   onAddMeal?: (date: string) => void;
   dragging?: boolean;
@@ -158,6 +159,7 @@ export function Board(props: Props) {
           loading={props.loading}
           initialsFor={props.initialsFor}
           onEventPress={props.onEventPress}
+          onEventLongPress={props.onEventLongPress}
           onAddDay={props.onAddDay}
           onAddMeal={props.onAddMeal}
           dragging={props.dragging}

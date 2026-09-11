@@ -83,6 +83,15 @@
   border-color: var(--person-a);
 }
 
+/* Quieter than the meta above it: the meta is what the room currently
+   contains, this is a thing you could do to it. Same reason the book's filter
+   labels sit at --ink-faint — an instruction should not compete with the fact
+   it is attached to. */
+.menu__row-hint {
+  font-size: var(--size-min);
+  color: var(--ink-faint);
+}
+
 .menu__row-label {
   font-size: 21px;
   font-weight: 500;

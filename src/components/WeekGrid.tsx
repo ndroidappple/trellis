@@ -38,6 +38,7 @@ interface Props {
   loading?: boolean;
   initialsFor?: (person: Person) => string;
   onEventPress?: (id: string) => void;
+  onEventLongPress?: (id: string) => void;
   /** The design has no other way to create an event, so a day tap needs one. */
   onAddDay?: (date: string) => void;
   /** Shown only on days with no meal chip yet. */
@@ -51,12 +52,13 @@ interface Props {
   dragOverDate?: string | null;
 }
 
-function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOver }: {
+function DayRow({ day, level, loading, initialsFor, onEventPress, onEventLongPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOver }: {
   day: DayData;
   level: DetailLevel;
   loading?: boolean;
   initialsFor?: (person: Person) => string;
   onEventPress?: (id: string) => void;
+  onEventLongPress?: (id: string) => void;
   onAddDay?: (date: string) => void;
   onAddMeal?: (date: string) => void;
   onOpenDay?: (date: string) => void;
@@ -118,6 +120,7 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
             level={level}
             initialsFor={initialsFor}
             onPress={onEventPress}
+            onLongPress={onEventLongPress}
           />
         ))}
 
@@ -175,7 +178,7 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onAddDay, onAd
   );
 }
 
-export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOverDate }: Props) {
+export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onEventLongPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOverDate }: Props) {
   return (
     <div className="week-grid">
       {days.map((day) => (
@@ -186,6 +189,7 @@ export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onAd
           loading={loading}
           initialsFor={initialsFor}
           onEventPress={onEventPress}
+          onEventLongPress={onEventLongPress}
           onAddDay={onAddDay}
           onAddMeal={onAddMeal}
           onOpenDay={onOpenDay}

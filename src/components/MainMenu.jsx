@@ -1,3 +1,4 @@
+import { useLongPress } from '../hooks/useLongPress'
 import './MainMenu.css'
 
 /**
@@ -28,6 +29,39 @@ import './MainMenu.css'
  * sheet — it is six rows, and the board showing through behind them is the
  * point. You have not left yet.
  */
+/**
+ * A room you can also configure.
+ *
+ * Two of these rows lead somewhere that has a board-level setting behind it —
+ * whether the panel shows on the week at all — and the row already says so
+ * when it is off ("hidden on the board"). Saying that and then offering no way
+ * to change it is the menu pointing at a door it will not open, so holding the
+ * row goes to the setting.
+ *
+ * The hint is printed rather than left to be discovered. The whole reason this
+ * menu exists is that settings used to live behind an undocumented long-press
+ * on the background; hiding a second gesture in the fix would be funny rather
+ * than good.
+ */
+function MenuRow({ label, meta, hint, onClick, onHold, className = 'menu__row' }) {
+  const press = useLongPress(onHold)
+
+  return (
+    <button
+      className={className}
+      {...press.handlers}
+      onClick={() => {
+        if (press.consumeClick()) return
+        onClick()
+      }}
+    >
+      <span className="menu__row-label">{label}</span>
+      <span className="menu__row-meta">{meta}</span>
+      {hint && <span className="menu__row-hint">{hint}</span>}
+    </button>
+  )
+}
+
 export default function MainMenu({
   cook,
   choresCount,
@@ -93,21 +127,31 @@ export default function MainMenu({
               is sometimes the whole reason you were going. They also say
               plainly when a section is switched off, so the thing that
               stranded these pages before now announces itself here. */}
-          <button className="menu__row" onClick={onChores}>
-            <span className="menu__row-label">Weekly To Do</span>
-            <span className="menu__row-meta">
-              {choresCount ?? 'Loading…'}
-              {sections?.chores === 'off' && ' · hidden on the board'}
-            </span>
-          </button>
+          <MenuRow
+            label="Weekly To Do"
+            meta={
+              <>
+                {choresCount ?? 'Loading…'}
+                {sections?.chores === 'off' && ' · hidden on the board'}
+              </>
+            }
+            hint="Hold to change where it shows"
+            onClick={onChores}
+            onHold={onSettings}
+          />
 
-          <button className="menu__row" onClick={onShopping}>
-            <span className="menu__row-label">Shopping</span>
-            <span className="menu__row-meta">
-              {shoppingCount ?? 'Loading…'}
-              {sections?.shopping === 'off' && ' · hidden on the board'}
-            </span>
-          </button>
+          <MenuRow
+            label="Shopping"
+            meta={
+              <>
+                {shoppingCount ?? 'Loading…'}
+                {sections?.shopping === 'off' && ' · hidden on the board'}
+              </>
+            }
+            hint="Hold to change where it shows"
+            onClick={onShopping}
+            onHold={onSettings}
+          />
         </div>
 
         <div className="menu__group">

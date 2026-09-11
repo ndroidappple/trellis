@@ -1,5 +1,6 @@
 import { PersonBadge, type Person } from './PersonBadge';
 import type { DetailLevel } from '../hooks/useDetailLevel';
+import { useLongPress } from '../hooks/useLongPress';
 import './EventChip.css';
 
 export interface EventChipData {
@@ -22,12 +23,19 @@ interface Props {
   level: DetailLevel;
   initialsFor?: (person: Person) => string;
   onPress?: (id: string) => void;
+  /**
+   * Hold to manage. Tapping a chip does the obvious thing to it — opens the
+   * recipe, ticks the chore — and this is where everything else about it
+   * lives: change the meal, reschedule the chore, edit the event.
+   */
+  onLongPress?: (id: string) => void;
 }
 
 const DEFAULT_INITIALS: Record<Person, string> = { a: 'N', b: 'E', shared: 'NE' };
 
-export function EventChip({ event, level, initialsFor, onPress }: Props) {
+export function EventChip({ event, level, initialsFor, onPress, onLongPress }: Props) {
   const { id, title, meta, detail, person, kind = 'event', done } = event;
+  const press = useLongPress(onLongPress ? () => onLongPress(id) : undefined);
   const isMeal = kind === 'meal';
   const isChore = kind === 'chore';
   const initials = person
@@ -47,10 +55,14 @@ export function EventChip({ event, level, initialsFor, onPress }: Props) {
     <button
       type="button"
       className={classes}
+      {...press.handlers}
       // The row behind this opens the whole day; tapping a specific event
       // means that event, not the day it happens to sit in.
       onClick={(e) => {
         e.stopPropagation();
+        // A hold has already opened something. The click the browser fires on
+        // lift would otherwise open the tap action underneath it.
+        if (press.consumeClick()) return;
         onPress?.(id);
       }}
     >

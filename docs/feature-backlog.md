@@ -1244,11 +1244,12 @@ These are **future possibilities, not commitments**.
 
 **Priority:** Medium
 **Category:** Wall Experience / Hardware Care / Delight
-**Status:** **Shipped (first version), 9 Sep 2026** — pure ambient, one scene,
-household default plus a per-device override. Deeper versions (per-theme
-scenes, a drifting information layer, weather-reactive) remain backlog and are
-listed under "What shipped, and what did not" below.
-**Depends On:** Nothing to ship a first version. Deeper versions depend on the theme system (#3) and weather (#4).
+**Status:** **Shipped** — first version 9 Sep 2026, the drifting information
+layer (a centred, slowly-drifting clock) added 11 Sep 2026. Per-theme scenes
+and weather-reactive Sky remain backlog, both blocked on features that don't
+exist yet. See "What shipped, and what did not" below.
+**Depends On:** Nothing to ship what exists today. Per-theme scenes depend on
+the theme system (#3); weather-reactive Sky depends on weather (#4).
 **Primary Goal:** After a period of no interaction, replace the board with a slow, quiet animation — protecting the display, calming the room, and giving each Trellis theme a face it wears most of the day.
 
 ## 1. Feature Overview
@@ -1475,8 +1476,10 @@ leak memory over a multi-week uptime.
       drifting fields of light on mutually prime periods.
 - [x] A darker night variant follows real local time (22:00–06:00, and it
       slows down as well as darkening).
-- [x] No burn-in-prone static elements in the ambient scene. No text at all,
-      and every layer travels most of the screen over its period.
+- [x] No burn-in-prone static elements in the ambient scene. The one text
+      element — the clock — drifts ±1.7vmin over a 397s loop that measures
+      0.00px of average drift, share-prime with the growth/drift cycles; every
+      other layer travels most of the screen over its period.
 - [ ] **Verified running on the actual wall for several days, not just in a
       browser tab.** The only item still open, and it cannot be closed from
       here. Checked in a browser: the fade, the night variant, the swallowed
@@ -1489,14 +1492,15 @@ leak memory over a multi-week uptime.
 
 ## 12. What shipped, and what did not
 
-**Shipped.** Pure ambient, one scene, per the §6 recommendation.
+**Shipped.** Pure ambient scene per the §6 recommendation, plus — once the
+motion system was proven out — the drifting information layer itself: a
+centred clock, drifting so no glance resolves it as motion and no digit holds
+a pixel, dimming rather than freezing under `prefers-reduced-motion`. Full
+account, including the three placement bugs it took to get the geometry right,
+is in `CLAUDE.md`'s "Ambient screen timeout" section.
 
 **Deliberately not shipped, and still backlog:**
 
-- **The drifting information layer** (§6). The recommendation was to build
-  pure ambient first and add it once the motion system works. The motion
-  system now works, so this is the natural next slice — with the constraint
-  from §6 intact: any text must drift and never occupy fixed pixels.
 - **Per-theme scenes** (§7). Blocked on #3 existing at all.
 - **Weather-reactive Sky** (§7). Blocked on #4.
 - **A configurable night hour** (§8). Hardcoded 22:00–06:00. A fourth chip row
@@ -1974,8 +1978,15 @@ the difference between a demo and the feature.
 
 **Priority:** Medium-Low
 **Category:** Design System / Wall Experience
-**Status:** Backlog. Direction settled 9 Sep 2026; nothing built.
-**Depends On:** Nothing. Phase 0 is a token file and two components.
+**Status:** **Phase 0 shipped, 9 Sep 2026.** `--raise-1` / `--raise-2` /
+`--press` / `--travel-tap` live in `tokens.css` and are wired up on
+`.sheet__footer button` and `.card button` (`App.css`, `Sheet.css`); the
+hairline contrast fix from §7 shipped alongside it. Phases 1–3 (roll the
+shared press behaviour across the other ~48 hand-written `:active` rules;
+fold dialog/sheet elevation into the scale; selective richness on recipe art
+and badges) are still backlog.
+**Depends On:** Nothing further — Phase 0 is the proof-of-concept and it held
+up; Phase 1 is mechanical from here.
 **Primary Goal:** Controls that look and feel pressable, on a display that is on
 for weeks in a room people relax in.
 
@@ -2052,10 +2063,11 @@ rather than by remembering.
 
 ## 5. Phases
 
-**Phase 0 — proof (about half a day).** The tokens, applied to `.sheet__footer
-button` and `.card button` only. One primary action per surface genuinely lifts
-and genuinely depresses. **Then look at it on the wall before going further** —
-this is the cheap step at which "too heavy" gets caught.
+**Phase 0 — proof (about half a day). Shipped 9 Sep 2026.** The tokens,
+applied to `.sheet__footer button` and `.card button` only. One primary action
+per surface genuinely lifts and genuinely depresses. Verified in-browser; not
+separately confirmed on the wall at reading distance, which §8's DoD still
+asks for before Phase 2 starts.
 
 **Phase 1 — the press system.** Roll the shared behaviour across every
 pressable, deleting the hand-written scale rules as it goes.
@@ -2292,7 +2304,9 @@ Themes and other delight-oriented work should not displace improvements that mak
 
 **Priority:** High (next up)
 **Category:** Meal Planning / Capture
-**Status:** Designed, not built
+**Status:** Designed, not built — and the *ungoverned* version of this (an
+ad hoc chat plus the Supabase connector, no schema checklist enforced) is
+already happening and already caused a real incident. See §3.
 
 ## The idea
 
@@ -2337,6 +2351,59 @@ Something close to:
 
 That last clause matters: anything a person states outranks
 `ai_enrichment` and must survive the next enrichment pass.
+
+**The prompt is missing a step, and it is the step that just failed in
+production.** On 9 Sep 2026 this exact workflow — chat plus the Supabase
+connector, no QR involved — was used to add "Chicken Tortilla Soup." The
+recipe and its 8 steps came out fine. Every other part of what
+`recipe_field_provenance` and the price book exist for did not happen:
+
+- **0 of 15 ingredients were matched to a product**, and not because no match
+  existed — `products` already held near-exact rows for at least 10 of them
+  (Chicken broth, Black beans, Garlic, Cilantro, Corn tortillas, Limes,
+  Diced tomatoes, Chopped green chiles, Yellow onions, Sweet corn) at the time
+  of insert. No matching was attempted at all; `product_id` and
+  `purchase_qty` are null on every row.
+- **`recipe_field_provenance` got zero rows.** The prompt above says to
+  "record what I tell you as `user_supplied` provenance" and nothing did.
+- **`recipes.source` was written as `'meal_hq'`**, which is supposed to mean
+  "came from Ed's original spreadsheet." This recipe did not; a value that
+  claims otherwise breaks the one field that lets a future audit tell
+  original data from agent-added data.
+- Ingredient rows also carry `normalization_source = 'user_supplied'` with
+  `normalized_name` still null on all 15 — a source stamped on work that was
+  never done. Harmless today (010's enrichment gate keys off `normalized_name
+  is null`, not the source column, so a future pass still picks these up) but
+  the same shape of lie as the `source` field above, and worth not repeating.
+
+The result: this recipe sits in the live book right now under-reporting the
+week it's planned into, silently — the exact failure Feature #15 §2 describes
+for the Tortilla Soup already in the bank, just produced by this workflow
+instead of by seed-data gaps.
+
+**Add this to the prompt, not just to the person's intentions:**
+
+> For every ingredient, search `products` for a plausible match (name and
+> brand, case-insensitive) before you insert anything, and show me each
+> match — or its absence — rather than assuming. For a match, set
+> `product_id` and derive `purchase_qty` the way the price book already does
+> (one whole item is its share of the matched package: one onion is 0.17 of a
+> 3 lb bag; state the arithmetic so I can check it). For no match, say so by
+> name and ask whether to add a `products` row or leave it flagged — never
+> leave an ingredient unpriced without saying so out loud. Write one
+> `recipe_field_provenance` row per field you populated, `user_supplied` for
+> what I told you and `ai_enrichment` only for what you inferred yourself.
+> Never write `source = 'meal_hq'` for anything you add — use
+> `'claude_chat'` — that field is the only thing that will ever let anyone
+> tell the original spreadsheet import apart from what an agent added later.
+> Before you finish, state in plain language everything you did *not* price
+> or link, so the gap is visible the moment the recipe is added rather than
+> discovered later as a silently wrong budget.
+
+This is also the real-world confirmation of the risk Feature #13 §5 already
+named in the abstract — "no audit trail," "hand edits must claim
+`user_supplied` provenance or the next enrichment pass overwrites them" — this
+is that risk, landing.
 
 **Render the prompt as copyable text and a tappable link beside the QR.** Two
 reasons. A QR is useless when you are already holding the phone that is showing
@@ -2567,14 +2634,20 @@ scroll container, and let the palette scroll.
 
 ## 5. Definition of Done
 
-- [ ] Each person's button shows that person's own initial.
-- [ ] The turn indicator uses the colour of the person whose turn it is.
-- [ ] The header count can reach "all done", and agrees with compact mode.
-- [ ] Every recurrence the database supports can be created in the app.
-- [ ] The list is grouped, and each group has one interaction grammar.
-- [ ] It is unambiguous which week the panel is describing.
-- [ ] Adding a chore does not require scrolling the list.
-- [ ] Delete is no longer a permanent, full-time neighbour of the primary tap.
+- [x] Each person's button shows that person's own initial.
+- [x] The turn indicator uses the colour of the person whose turn it is.
+- [x] The header count can reach "all done", and agrees with compact mode.
+- [x] Every recurrence the database supports can be created in the app.
+      `ChoreSheet`'s recurrence chip row.
+- [x] The list is grouped, and each group has one interaction grammar.
+      `groupChores` — Overdue / Today / This week / Later / As needed.
+- [x] It is unambiguous which week the panel is describing. `groupChores`
+      labels the week group "That week" once `anchor` isn't the current one.
+- [x] Adding a chore does not require scrolling the list. `AddRow`'s
+      collapsible capture sits outside the scroll container.
+- [x] Delete is no longer a permanent, full-time neighbour of the primary tap.
+      Closed by `SwipeAway`, shipped 11 Sep 2026 — later than the rest of this
+      entry, which is why this checklist had gone stale.
 
 ---
 
@@ -2584,38 +2657,66 @@ Ordered by what should be picked up next, not by feature number.
 
 | # | Feature | Priority | Primary Purpose |
 |---|---|---|---|
-| 1 | **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor |
+| 1 | **#7 Add a recipe by QR handoff to Claude** | High | Capture recipes from a phone without building an editor — and now the fix for a bug that's already happened once |
 | 2 | **#6 Chores Scoreboard** | Medium-High | Settle who did what over a period — **unblocked by #9A** |
 | 3 | **#2 Tier 1 remainder** | High | Calendar unification, search/saved views, push reminders |
 | 4 | **#11 Get the shopping list onto a phone** | Medium | QR to the live list — no server, no vendor; shares #7's renderer |
-| 5 | **#13 AI control — planning a week by talking to Claude** | Medium | Mostly works already; the shopping-list derivation is the gap |
-| 6 | **#12 Spending Insights** | Medium | Planned vs actual; Tier 0 needs no bank connection |
-| 7 | **#14 Depth — touchable UI without weight** | Medium-Low | Fix the flatness; Phase 0 is half a day and provable on the wall |
-| 8 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
-| 9 | **#3 Themes** | Low | Personalization and visual delight |
-| 10 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
-| 11 | **#5B Ambient scene — drifting information layer** | Low | The wall stays useful from across the room; §6's second half |
-| — | **#5 Ambient Screen Timeout (first version)** | **Shipped** | Pure ambient, night variant, per-device timeout — wall soak still open |
+| 5 | **#14 Depth, Phase 1** | Medium-Low, bumped | Phase 0 shipped and held up — rolling the proven press system across the other ~48 `:active` rules is now mechanical, not risky |
+| 6 | **#13 AI control — planning a week by talking to Claude** | Medium | Mostly works already; the shopping-list derivation is the gap |
+| 7 | **#16 Trellis on an iPhone, Tier 0** | Medium, new | Stop the board clipping content with no visual sign anything's missing on any phone that opens it today; overlaps and should follow #11 |
+| 8 | **#12 Spending Insights** | Medium | Planned vs actual; Tier 0 needs no bank connection |
+| 9 | **#15 Tier 1 — price provenance and staleness marks** | Medium | Same "estimate rendered as measurement" problem #1 already named once, now showing up in the money too |
+| 10 | **#4 Weather Integration** | Medium-Low | Add weather as household context |
+| 11 | **#3 Themes** | Low | Personalization and visual delight |
+| 12 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
+| — | **#15 Tier 0 — Tortilla Soup pricing** | **Nearly done** | 11 of 15 ingredients priced by hand 11 Sep; 4 pantry/spice rows still want `manual_cost_cents` — a five-minute cleanup, not worth a ranked slot |
+| — | **#5 Ambient Screen Timeout** | **Shipped** | Pure ambient + drifting clock, night variant, per-device timeout — wall soak still open |
+| — | **#14 Depth, Phase 0** | **Shipped** | Elevation tokens proven on primary actions — see #14, Phase 1 above for what's left |
 | — | **#10 Main menu, cook-mode tap zones, meal slots** | **Shipped** | One front door; left/right stepping; four meal slots per day |
-| — | **#9 Weekly To Do + full pages + shopping aisles** | **Shipped** | 9A/9B/9C, both full-page views, migration 013 |
+| — | **#9 Weekly To Do + full pages + shopping aisles** | **Shipped** | 9A/9B/9C, both full-page views, migration 013, swipe-to-delete |
 | — | **#1 Meal Planner Data Enrichment — Phase 1** | **Shipped** | Recipe/meal data foundation — complete in 008/010/011 |
 
-## What changed in this review
+## What changed in this review (11 Sep 2026, updated)
 
-- **#1 was done and still listed as High.** 010 and 011 ran against the live
-  project; the remaining threads are two recipes needing a person and a UI
-  question about showing confidence, neither of which is Phase 1.
-- **#9 was raised, built and shipped in the same session.** It was not a
-  missing feature — it was a shipped feature reporting the wrong person's
-  name.
-- **#6 is unblocked and moved up.** Its whole premise is a trustworthy record
-  of who did what, and until 9A both buttons on every episodic row were
-  labelled identically, so the log was being aimed blind. It now is not, and
-  the scoreboard has a record worth aggregating.
-- **#2 stays High but is not next.** It is a programme, not a task. 9B/9C were
-  its first concrete slices, and the full-page views are the surface a real
-  task system would grow into.
-- **#3, #4, #5, #7, #8 are unchanged.**
+- **#15 Tier 0 dropped out of the ranked list.** Nick matched 11 of the 15
+  ingredients directly against the price book right after the previous review
+  flagged it. Four pantry/spice rows (olive oil, jalapeño, ground cumin, chili
+  powder) still need `manual_cost_cents`, same as other spices in the bank —
+  small enough now that it doesn't earn a numbered slot. Full account moved
+  into #15 §2 and #7 §3 (the incident that caused the gap in the first place).
+- **#7 moves from "next up" to clearly next.** It was already the top pick;
+  the incident that just got hand-patched is a concrete demonstration of why —
+  every recipe added through the ungoverned version of this workflow risks the
+  same silent gap, and #7's whole design (schema-checklist prompt, QR or not)
+  is the fix.
+
+- **This table hadn't been updated since #15 and #16 were written.** Both
+  existed as full entries lower in this document but never made it into the
+  ranked list — the two newest features in the backlog were invisible to
+  "what's next." Both are folded in now.
+- **#5's second half shipped since the last review and the entry still called
+  it backlog.** The drifting clock (§6 of #5) landed 11 Sep — centred, 397s
+  drift loop, 0.00px average offset — but #5's status line, DoD, and §12 all
+  still said "no text at all" / "still backlog." Corrected; see #5 above.
+- **#14's Phase 0 shipped 9 Sep and the entry still said "nothing built."**
+  `--raise-1/2`, `--press` and `--travel-tap` are live in `tokens.css` and
+  wired to the primary actions in `App.css`/`Sheet.css`. Corrected, and moved
+  up: Phase 0 succeeding is exactly the signal to keep going while the
+  pattern is fresh, rather than letting Phase 1 go cold.
+- **#9's Definition of Done was entirely unchecked despite the entry's own
+  status line reading "Shipped."** Verified each item against the current
+  code (grouping, recurrence control, capture placement, turn colour) and
+  checked them off; the swipe-to-delete item was genuinely the last to land,
+  11 Sep, which is presumably why the checklist was never closed out.
+- **#15 Tier 0 is promoted above its stated "Medium."** Coverage gaps read as
+  a feature-completeness problem; this one reads as a correctness bug once you
+  notice it's silent — the budget and the shopping list both under-report by
+  a whole dinner with no indication anything is missing, on the same feature
+  (price-per-serving) that just shipped and is now visible every time the book
+  opens. Small, bounded, and the kind of thing that erodes trust in every
+  other number on screen until it's fixed.
+- **#1, #6, #2's overall standing, #3, #4, #8, #10 are unchanged** from the
+  previous review's reasoning.
 
 ---
 
@@ -2641,29 +2742,43 @@ provenance — and they want fixing in that order.
 
 ## 2. Tier 0 — Chicken Tortilla Soup has no prices at all
 
-**The problem is not the "—" on the card. It is the week.**
+**Mostly fixed by hand, 11 Sep 2026 — small cleanup remains.**
 
-The soup has 15 ingredient rows and not one of them is matched to a product.
+**Correction to how this recipe got here.** This entry originally assumed the
+soup was a legacy gap from the Meal HQ seed, like the four rows `015` closed.
+It wasn't: the recipe's `created_at` is 9 Sep 2026, two days after the project
+was seeded, and it was written by a chat session using the Supabase connector
+directly (Feature #7's ungoverned precursor) — which is *why* it had no
+products attached. That session also left `recipe_field_provenance` empty and
+mislabeled `source` as `'meal_hq'`, which would have made this recipe
+indistinguishable from a real seed row in any future audit. Nick has since
+corrected `source` to `'chat_intake'` by hand. Feature #7 §3 has the full
+incident and the prompt fix meant to stop it recurring.
+
+**The problem was not the "—" on the card. It was the week.**
 `weekPackages` in `src/lib/cost.js` needs a product *and* a `purchase_qty` to
-price a row and drops anything missing either into `unmatched`, so plan the
-soup for a Tuesday and the week's projected grocery total does not move.
-The budget figure under-reports by the entire cost of that dinner, silently,
-and the shopping list never mentions a single one of its ingredients.
+price a row and drops anything missing either into `unmatched`, so planning
+the soup for a Tuesday didn't move the week's projected grocery total. The
+budget figure under-reported by the entire cost of that dinner, silently, and
+the shopping list never mentioned a single one of its ingredients.
 
-The book showing "no prices yet" is the honest surface of this. The cart
-footer showing a total that quietly excludes a whole meal is not.
+**Current state:** Nick matched 11 of the 15 ingredient rows directly against
+the price book (chicken breast, onion, garlic, fire-roasted tomatoes, green
+chiles, chicken broth, black beans, frozen corn → Sweet corn, corn tortillas,
+lime, cilantro), with `purchase_qty` following the bank's existing convention.
+Four rows remain unmatched and uncosted: **olive oil, jalapeño, ground cumin,
+chili powder** — no `product_id`, no `manual_cost_cents`. That keeps the
+recipe reading `unknown`/"Partial" (`recipeCost`'s `complete` requires zero
+unpriced rows), which is correct given the state, not a bug — every other
+recipe's pantry staples in this position (soy sauce, spices, water) carry
+`manual_cost_cents = 0` rather than a real product match. Closing this out is
+four rows, following that same convention, and it's the only thing left.
 
-It is the only recipe in the bank in this state — everything else came through
-the Meal HQ seed with products attached, and `015` closed the last four partial
-rows. So this is a bounded job: match 15 ingredients against the price book,
-add the products that do not exist yet, set `purchase_qty` on each, and let the
-existing `cost_confidence` derivation reclassify it.
-
-Worth doing as a migration rather than by hand in the dashboard, for the reason
-`015` gives: the quantities should follow the conventions the bank has already
-settled on (1 whole onion is 0.17 of a 3 lb bag; 2 cups dry rice is 0.17 of an
-80 oz bag), and those conventions only stay consistent if they are written
-down somewhere a person can read.
+Also worth knowing: this fix, like the original insert, was direct SQL against
+the live project rather than a migration — so, like the incident that caused
+it, it isn't reproducible from git. Not urgent to redo as a migration now that
+the data is right, but the next person who wants to know "what changed and
+why" for this recipe won't find it in `supabase/migrations/`.
 
 **One row deliberately left open by 015:** the Protein Berry Smoothie's frozen
 berries, recorded as unit "fill cup" with no quantity. A cup of a 32 oz bag

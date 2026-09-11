@@ -13,7 +13,7 @@ import {
 } from '../lib/week'
 import { daysInYear, daysLeftInYear, dayOfYear, fiscalWeek, yearProgress } from '../lib/year'
 import { groceryLines, weekCost } from '../lib/cost'
-import { parseCapture } from '../lib/capture'
+import { parseCapture, priorityLabel } from '../lib/capture'
 import {
   agoLabel,
   choreOccurrenceDate,
@@ -34,6 +34,7 @@ import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
 import Sheet from './Sheet'
 import AddRow from './AddRow'
+import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX } from '../hooks/useLongPress'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
@@ -62,7 +63,6 @@ const DEFAULT_SETTINGS = {
   // override it locally, which is the whole argument in lib/screensaver.js.
   screensaverMin: DEFAULT_TIMEOUT_MIN,
 }
-const LONG_PRESS_MS = 650
 
 /**
  * Long enough that someone can cross a kitchen to reach it. A phone's
@@ -156,15 +156,6 @@ function toFlourishIds(value) {
     .map((f) => f.id)
     .slice(0, MAX_FLOURISHES)
 }
-
-/**
- * How far a finger may drift before a long-press is treated as a drag.
- * A fingertip resting on glass emits a steady dribble of pointermove events;
- * cancelling on any movement at all made the settings dialog nearly
- * impossible to open on the actual iPad while working fine with a held-still
- * mouse.
- */
-const LONG_PRESS_SLOP_PX = 12
 
 const MEAL_PLAN_QUERY = `
   id, on_date, slot, is_leftover,
@@ -648,10 +639,26 @@ export default function Wall({ profile, people }) {
    * finish it. Anything it does not understand stays in the title, and the
    * defaults below are exactly what the field produced before.
    */
-  async function addChore(text, parentId = null) {
+  /**
+   * `whenUnspecified` is the schedule to use when the typed text names none.
+   *
+   * The To Do panel passes nothing, so capture there behaves as it always has:
+   * a weekly chore with no day unless you said otherwise. The day sheet passes
+   * that day, because the sheet is already the answer to "when" — you opened
+   * Thursday to write down a Thursday thing.
+   *
+   * It loses to the text rather than overriding it. Typing "bins out every
+   * tuesday" into Thursday's sheet gives you a Tuesday chore, and the capture
+   * field's own readback says "Tuesdays" before it is written, so the sheet
+   * never silently reinterprets what someone typed.
+   */
+  async function addChore(text, parentId = null, whenUnspecified = null) {
     const parsed = parseCapture(text, today)
     const clean = parsed.title.trim()
     if (!clean) return
+
+    const fallback =
+      whenUnspecified && !('recurrence' in parsed.patch) ? whenUnspecified : {}
 
     const { error } = await supabase.from('chores').insert({
       household_id: profile.household_id,
@@ -660,6 +667,7 @@ export default function Wall({ profile, people }) {
       sort_order: chores.length,
       parent_id: parentId,
       ...parsed.patch,
+      ...fallback,
     })
     if (error) return setError(error.message)
 
@@ -1500,6 +1508,54 @@ export default function Wall({ profile, people }) {
     if (ev) setEditing(ev)
   }
 
+  /**
+   * Hold a chip to manage what it stands for.
+   *
+   * The board's chips are all primary-action-first, which is right: tapping a
+   * meal opens the recipe, tapping a chore ticks it. The cost was that the
+   * *other* thing you might want — change tonight's dinner, reschedule the
+   * bins — had no route from the board at all. Changing a meal meant opening
+   * the day and finding "Change or clear this meal"; editing a scheduled chore
+   * meant leaving the week for the To Do panel entirely.
+   *
+   * So: one gesture, one meaning, on every chip. Hold it and you get the
+   * management view of that object. It is deliberately uniform even where the
+   * tap already edits — holding an event opens the same editor a tap does —
+   * because a gesture that works on two kinds of chip and silently does
+   * nothing on the third is a gesture nobody learns.
+   *
+   * Discoverable rather than secret: the day view's meal row and the To Do
+   * panel both name it, which is where you end up if you don't know it yet.
+   */
+  function handleEventLongPress(id) {
+    if (id.startsWith('chore:')) {
+      const chore = chores.find((c) => c.id === id.slice('chore:'.length))
+      // Everything a tick is not: which day, what kind, priority, subtasks,
+      // delete. Ticking stays on the tap because that is what the chip is for.
+      if (chore) setReschedulingChore(chore)
+      return
+    }
+
+    if (id.startsWith('meal:')) {
+      const entry = mealPlan.find((p) => p.id === id.slice('meal:'.length))
+      // Change it, mark it leftovers, clear it — the dialog the chip used to
+      // open on a tap, before "tapping the food opens the food". It was never
+      // the wrong dialog, only the wrong gesture.
+      if (entry) setMealEditing({ date: entry.on_date, slot: entry.slot })
+      return
+    }
+
+    const ev = events.find((e) => e.id === id)
+    if (ev) setEditing(ev)
+  }
+
+  /**
+   * The tasks that land on one day: the same test the week grid's chips use,
+   * so the day sheet and the board cannot disagree about what Thursday holds.
+   */
+  const tasksFor = (dateIso) =>
+    chores.filter((c) => isScheduled(c) && occurrenceFor(c) === dateIso)
+
   function handleAddDay(dateIso) {
     setEditing({ _day: new Date(`${dateIso}T00:00`), owner_id: profile.id })
   }
@@ -1648,6 +1704,7 @@ export default function Wall({ profile, people }) {
         onNextWeek={() => setAnchor(addDays(anchor, 7))}
         onToday={isCurrentWeek ? undefined : () => setAnchor(startOfWeek(today))}
         onEventPress={handleEventPress}
+        onEventLongPress={handleEventLongPress}
         onAddDay={handleAddDay}
         onAddMeal={handleAddMeal}
         dragging={drag != null}
@@ -1734,8 +1791,11 @@ export default function Wall({ profile, people }) {
           date={dayViewing}
           events={dayEventsFor(dayViewing)}
           meals={mealsFor(dayViewing)}
+          tasks={tasksFor(dayViewing)}
+          taskIsDone={choreIsDone}
           canAddMeal={nextFreeSlot(mealsFor(dayViewing)) != null}
           peopleById={orderedPeople}
+          today={today}
           onEventPress={(ev) => {
             setDayViewing(null)
             setEditing(ev)
@@ -1744,6 +1804,17 @@ export default function Wall({ profile, people }) {
             setDayViewing(null)
             handleAddDay(dayViewing)
           }}
+          /* Ticking keeps the sheet open — the reason to be here is often to
+             clear two or three, and closing after each would mean reopening
+             the day to reach the next one. */
+          onToggleTask={toggleChore}
+          onEditTask={(task) => {
+            setDayViewing(null)
+            setReschedulingChore(task)
+          }}
+          onAddTask={(text) =>
+            addChore(text, null, { recurrence: 'once', due_on: dayViewing, scheduled_day: null })
+          }
           onEditMeal={(slot) => {
             setDayViewing(null)
             setMealEditing({ date: dayViewing, slot })
@@ -1961,10 +2032,16 @@ function DayView({
   date,
   events,
   meals,
+  tasks,
+  taskIsDone,
   canAddMeal,
   peopleById,
+  today,
   onEventPress,
   onAddEvent,
+  onToggleTask,
+  onEditTask,
+  onAddTask,
   onEditMeal,
   onAddMeal,
   onViewRecipe,
@@ -2034,8 +2111,12 @@ function DayView({
 
             <button className="sheet-row" onClick={() => onEditMeal(meal.slot)}>
               <span>Change or clear this meal</span>
+              {/* Where the hold gesture gets taught. This is the row you find
+                  when you don't know about it, so it is the row that should
+                  say there is a faster way. */}
               <span className="sheet-row__meta">
                 {meal.is_leftover ? 'Currently leftovers' : 'Currently a cook night'}
+                {' · or hold its chip on the board'}
               </span>
             </button>
           </Fragment>
@@ -2065,6 +2146,61 @@ function DayView({
             </span>
           </button>
         ))}
+      </div>
+
+      {/*
+        Tasks, which the day view could show but never add.
+        
+        "Add event" has been the only thing in this footer since the sheet
+        existed, so a day was a place where things happen *to* you and not a
+        place where you decide to do something. The board has always been able
+        to land a task on a day — 009 gave chores a `due_on`, 012 the drag —
+        but only by dragging a row that already existed out of the To Do panel.
+        There was no way to have the thought "I should do that on Thursday"
+        and write it down on Thursday.
+        
+        It gets a capture field rather than a footer button, and that asymmetry
+        with events is deliberate: an event needs a time and an owner, which is
+        a form. A task is one line of text — and this field parses the rest off
+        the end of it, so "call the plumber !!" arrives with its priority
+        already set.
+      */}
+      <div className="sheet__section">
+        <span className="sheet__heading">
+          {tasks.length === 1 ? '1 task' : `${tasks.length} tasks`}
+        </span>
+
+        {tasks.length === 0 && <p className="sheet__empty">Nothing due.</p>}
+
+        {tasks.map((task) => {
+          const done = taskIsDone(task)
+          return (
+            <button
+              key={task.id}
+              className={done ? 'sheet-row is-done' : 'sheet-row'}
+              onClick={() => onToggleTask(task)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                onEditTask(task)
+              }}
+            >
+              <span>{task.title}</span>
+              <span className="sheet-row__meta">
+                {done ? 'Done' : 'Tap to tick off'}
+                {priorityLabel(task.priority) ? ` · ${priorityLabel(task.priority)}` : ''}
+              </span>
+            </button>
+          )
+        })}
+
+        <AddRow
+          placeholder={`Add a task for ${dayLabel(date)}`}
+          onAdd={onAddTask}
+          parse
+          today={today}
+          collapsible
+          openLabel="Add a task"
+        />
       </div>
     </Sheet>
   )

@@ -675,6 +675,18 @@ finally have the action without the neighbour. `removeButton` on
 row be deleted, versus does it carry a button saying so. The dock answers yes
 and no.
 
+**The reveal's width *is* the swipe, and that is not a detail.** It first
+spanned the row at `inset: 0` and relied on the row covering it until swiped.
+The row does not cover it — `.checklist-row` sits on `--row-face`, which is
+3.5% ink — so every row on the board wore a red tint with the word "Delete"
+showing through it, printed across the schedule label on its right, at rest,
+with nobody touching anything. It took a photograph of the actual wall to
+catch: the harness rows were opaque. A reveal that has to be *covered* to stay
+hidden is one repaint away from being visible; one with no width cannot be.
+The label fades in only once the panel is wide enough to hold it, since a
+right-anchored word in a narrow box clips its own left side and "Delete" spends
+the early swipe reading "ete".
+
 **`touch-action: pan-y` on the track is the load-bearing declaration**, the
 same trick `.panel-row__grip` uses in the other direction. It hands vertical
 panning to the browser and keeps horizontal, so a swipe and a list scroll
@@ -686,6 +698,9 @@ Three more things it has to get right, all verified in a harness:
 
 - **A swipe ends in a click.** Without the capture-phase swallow, swiping a
   chore away also ticks it on the way out.
+- **Delete happens on release, past 96px** — not on a revealed button. That
+  was tried and rejected: the reveal-then-press pattern is safer in theory and
+  Nick preferred the single gesture, which the undo below makes affordable.
 - **Nothing is irreversible.** Every caller already routes through
   `offerUndo`, so a swipe lands the same nine-second undo a sheet delete
   does. That is what makes the gesture affordable on a wall people brush past.

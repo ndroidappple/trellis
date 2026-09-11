@@ -1,20 +1,19 @@
 /*
  * Swipe a row left to delete it. See SwipeAway.jsx for the gesture.
  *
- * The wrapper is the clip; the track is the part that moves; the reveal sits
- * behind and is simply uncovered. Nothing animates in — the row moving is the
- * animation, which is why the reveal needs no transition of its own and never
- * appears on a list at rest.
- */
-/*
- * 4px to match `.checklist-row`, which is the card the reveal appears behind.
- * The wrapper has no size of its own — `.panel-row` and the sheet rows carry
- * their own padding — so this only rounds the clip.
+ * The wrapper is the clip, the track is what moves, and the reveal is a panel
+ * on the right whose width is the distance swiped. That last part is the one
+ * that matters: an earlier version spanned the whole row at `inset: 0` and
+ * relied on the row covering it, which it does not — `.checklist-row` sits on
+ * `--row-face` at 3.5% ink, so a full-width reveal shows through every row on
+ * the board at rest. Width-as-swipe means there is simply nothing there until
+ * somebody starts.
  */
 .swipe {
   position: relative;
-  overflow: hidden;
+  /* 4px to match `.checklist-row`, the card the reveal appears beside. */
   border-radius: 4px;
+  overflow: hidden;
 }
 
 /*
@@ -30,34 +29,58 @@
 
 /* Only while settling back. During the drag the row must track the finger
    exactly — a transition there feels like lag, not like smoothing. */
-.swipe__track:not(.is-moving) {
+.swipe__track:not(.is-dragging) {
   transition: transform var(--dur-state) var(--ease-standard);
 }
 
 .swipe__reveal {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* width is set inline, from the swipe itself */
+  overflow: hidden;
+
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-right: 20px;
 
   background: var(--urgent-tint);
+  transition: background var(--dur-state) var(--ease-standard);
+}
+
+.swipe__reveal:not(.is-armed) {
+  /* Matching the track, so the two move as one while settling back. */
+  transition: background var(--dur-state) var(--ease-standard),
+    width var(--dur-state) var(--ease-standard);
+}
+
+/*
+ * Fixed width inside an overflow-hidden panel, so the word slides into view
+ * rather than being squeezed out of shape as the panel grows. Right-padded to
+ * match the row's own right-hand gutter.
+ */
+.swipe__label {
+  flex: 0 0 auto;
+  padding: 0 16px;
+  /* Opacity is set inline from the swipe distance; this only smooths the
+     settle back to zero. */
+  transition: opacity var(--dur-state) var(--ease-standard);
   color: var(--urgent);
   font-family: var(--font-text);
   font-size: var(--size-min);
   font-weight: 500;
   letter-spacing: 0.02em;
-
-  transition: background var(--dur-state) var(--ease-standard),
-    color var(--dur-state) var(--ease-standard);
+  white-space: nowrap;
 }
 
-/* Past the commit distance. The colour arriving is the confirmation — it
-   happens under the finger, before the decision, which is the only moment it
-   is useful. */
+/* Past the commit distance. The colour arriving is the confirmation, and it
+   happens under the finger before the decision rather than after it. */
 .swipe__reveal.is-armed {
   background: var(--urgent);
+}
+
+.swipe__reveal.is-armed .swipe__label {
   color: var(--person-ink);
 }
 
@@ -68,12 +91,13 @@
 }
 
 .swipe.is-exiting {
-  transition: opacity var(--dur-move) var(--ease-exit);
   opacity: 0.35;
+  transition: opacity var(--dur-move) var(--ease-exit);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .swipe__track:not(.is-moving),
+  .swipe__track:not(.is-dragging),
+  .swipe__reveal:not(.is-armed),
   .swipe.is-exiting .swipe__track,
   .swipe.is-exiting {
     transition: none;

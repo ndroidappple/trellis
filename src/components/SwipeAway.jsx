@@ -185,13 +185,16 @@ export default function SwipeAway({ onDelete, label = 'Delete', disabled = false
           whole word plus its gutter, so the fade runs from just below that to
           just above it and the word is never both visible and cut.
         */}
+        {/* Confirms the release will commit before it happens, not after —
+            the width-reveal rewrite kept the colour flip on `is-armed` but
+            dropped this along the way without meaning to. */}
         <span
           className="swipe__label"
           style={{
             opacity: Math.min(1, Math.max(0, (revealed - LABEL_FITS_AT + 16) / 24)),
           }}
         >
-          {label}
+          {armed ? `Release to ${label.toLowerCase()}` : label}
         </span>
       </div>
 

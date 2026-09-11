@@ -157,10 +157,10 @@ export default function Screensaver({ night, onWake }) {
               className="saver__leaf"
               cx={l.x}
               cy={l.y}
-              rx="5.5"
+              rx={LEAF_RX}
               ry="2.6"
               transform={`rotate(${l.r} ${l.x} ${l.y})`}
-              style={{ '--i': i, '--at': l.at }}
+              style={{ '--vi': l.vi, '--at': l.at }}
             />
           ))}
         </g>
@@ -170,20 +170,16 @@ export default function Screensaver({ night, onWake }) {
         The time, which is most of what anyone wants from a screen across a
         room that is not currently showing them anything.
         
-        It wanders. A clock parked in the middle of a wall-mounted panel for
-        eight hours a day is the exact failure this whole scene is designed
-        around — worse than the lattice, because digits are high-contrast and
-        the colon never moves. So the position is derived from the minute
-        itself: it is stable while a given minute is on screen and somewhere
-        else on the next one, which over a day spreads the glyphs across a
-        wide band of the panel and never animates to get there.
-        
-        Deriving it from the clock rather than running a CSS drift is also
-        what makes it safe under `prefers-reduced-motion`, where the scene is
-        switched off entirely and a CSS-drifted clock would either stop —
-        parking it — or keep moving against the person's stated preference.
+        Centred, and it stays centred. The first version moved it to a new spot
+        each minute — a genuine attempt at the burn-in problem, and the wrong
+        shape for it: a discrete jump is the one kind of movement the eye
+        cannot miss, so the clock read as unplaced rather than as protected.
+        A slow continuous drift solves the same problem invisibly. It is a
+        couple of viewport units over six and a half minutes, which no glance
+        resolves as motion and no reference on screen can be measured against,
+        and it still means no pixel holds a digit for long.
       */}
-      <div className="saver__clock" style={wanderFor(now)} aria-hidden="true">
+      <div className="saver__clock" aria-hidden="true">
         {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
       </div>
     </div>
@@ -243,21 +239,6 @@ function useClockMinute() {
   return now
 }
 
-/**
- * Where the clock sits this minute, as a percentage offset from centre.
- *
- * Two incommensurate sines over the minute-of-day, so the path does not
- * repeat within a day and consecutive minutes land well apart rather than
- * creeping. The excursion is large enough to matter for retention and small
- * enough that the clock never looks misplaced or reaches an edge.
- */
-function wanderFor(date) {
-  const minutes = date.getHours() * 60 + date.getMinutes()
-  return {
-    '--wander-x': `${(Math.sin(minutes * 0.7) * 16).toFixed(2)}%`,
-    '--wander-y': `${(Math.cos(minutes * 1.3) * 12).toFixed(2)}%`,
-  }
-}
 
 /* ------------------------------------------------------------ the drawing */
 
@@ -282,6 +263,55 @@ function wanderFor(date) {
 
 const H = 600
 const W = 400
+
+/**
+ * The easing `saver-climb` grows with, solved forwards and backwards.
+ *
+ * This exists because a leaf has to know *when* its own stem tip will reach
+ * it, and the obvious answer — the fraction of the way up it sits, times the
+ * 0.72 of the cycle the climb takes — is only right if the climb is linear.
+ * It is not: the vines grow on `cubic-bezier(0.35, 0, 0.45, 1)`, which is slow
+ * off the mark and fast through the middle. Timing the leaves as though it
+ * were linear opened each one up to a tenth of a stem-length ahead of the tip
+ * that was supposed to have grown past it — a leaf hanging just above the end
+ * of its own branch, which is exactly the thing that reads as detached.
+ */
+function cubicBezierEase(x1, y1, x2, y2) {
+  const cx = 3 * x1
+  const bx = 3 * (x2 - x1) - cx
+  const ax = 1 - cx - bx
+  const cy = 3 * y1
+  const by = 3 * (y2 - y1) - cy
+  const ay = 1 - cy - by
+
+  const atX = (t) => ((ax * t + bx) * t + cx) * t
+  const atY = (t) => ((ay * t + by) * t + cy) * t
+
+  return (x) => {
+    let lo = 0
+    let hi = 1
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2
+      if (atX(mid) < x) lo = mid
+      else hi = mid
+    }
+    return atY((lo + hi) / 2)
+  }
+}
+
+const CLIMB_EASE = cubicBezierEase(0.35, 0, 0.45, 1)
+
+/** The inverse: how far into the climb the tip has covered `progress` of it. */
+function climbPhaseFor(progress) {
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2
+    if (CLIMB_EASE(mid) < progress) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
 
 /** A diamond lattice: diagonals both ways, evenly spaced, run well past the
  *  edges so the crop never reveals an end. */
@@ -331,37 +361,116 @@ function buildVines() {
     // Length, walked rather than trusted to a formula — the dash animation
     // needs a number at least as large as the real path or the line starts
     // partly drawn.
-    let len = 0
+    const cumulative = [0]
     for (let i = 1; i < pts.length; i++) {
-      len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      cumulative.push(
+        cumulative[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+      )
+    }
+    const len = cumulative[cumulative.length - 1]
+
+    /*
+     * How far along the *drawn line* a given `t` sits, which is not `t`.
+     * `stroke-dashoffset` counts path length, and a sine covers more path per
+     * unit of t where it leans than where it runs straight — so a leaf placed
+     * by parameter and timed by parameter disagree with the tip, which is
+     * placed by length.
+     */
+    const arcFrac = (t) => {
+      const i = Math.min(pts.length - 2, Math.max(0, Math.floor(t * (pts.length - 1))))
+      const span = 1 / (pts.length - 1)
+      const within = Math.min(1, Math.max(0, (t - i * span) / span))
+      return (cumulative[i] + (cumulative[i + 1] - cumulative[i]) * within) / len
     }
 
-    return { d, len: Math.ceil(len) + 10, f }
+    return { d, len: Math.ceil(len) + 10, f, arcFrac }
   })
 }
 
+/** Ellipse radii, shared with the CSS that draws them. */
+const LEAF_RX = 5.5
+
+/**
+ * How far a leaf's centre sits off the stem, and how far its long axis leans
+ * away from the direction of climb.
+ *
+ * These two are a pair and must be read together. The leaf reaches
+ * `LEAF_RX * cos(LEAN)` back towards the stem along its own axis, so as long
+ * as that exceeds `LEAF_OFFSET` the inner end of every leaf crosses the
+ * centreline of its vine and the two are visibly joined. At 5.5 × cos(48°) =
+ * 3.68 against an offset of 2.0, every leaf overlaps the stem by about 1.7
+ * units — a little over five pixels once the scene is scaled onto the wall,
+ * which is what makes it read as growing off the stem rather than floating
+ * beside it.
+ */
+const LEAF_OFFSET = 2.0
+const LEAN_DEG = 48
+
+/** How far behind the growing tip a leaf opens, in cycle fractions. */
+const LEAF_LAG = 0.02
+
+/**
+ * Leaves, attached to their stems by construction.
+ *
+ * The first version offset each leaf a flat 3.2 units in *x* and rotated it by
+ * a number derived from its index. Both were wrong in the same way: they
+ * ignored the stem. A vine is a sine, so it is near-vertical in places and
+ * leaning hard in others — and a horizontal offset against a leaning stem puts
+ * the leaf out in open space, while a rotation unrelated to the stem's
+ * direction points it wherever the arithmetic happened to land. On the parts
+ * of a vine that lean most, the two errors compound and the leaf detaches
+ * completely.
+ *
+ * So both now come from the curve itself. The tangent is taken by finite
+ * difference on the same `f` that draws the path, the leaf is offset along the
+ * perpendicular to it, and its long axis is the direction of climb rotated
+ * `LEAN_DEG` off the stem — so a leaf on a leaning stem leans with it.
+ */
 function buildLeaves(vines) {
   const out = []
+  const lean = (LEAN_DEG * Math.PI) / 180
+
   vines.forEach((v, vi) => {
-    // Seven a vine, starting a little above the root so none sits off-screen
-    // at the bottom, and stopping short of the tip so the growing end stays
-    // bare — a stem always slightly ahead of its own foliage.
+    // Ten a vine, starting a little above the root so none sits off-screen at
+    // the bottom, and stopping short of the tip so the growing end stays bare
+    // — a stem always slightly ahead of its own foliage.
     for (let k = 0; k < 10; k++) {
       const t = 0.06 + (k / 10) * 0.86
       const p = v.f(t)
-      // Alternate sides, and lean with the climb.
       const side = (vi + k) % 2 === 0 ? 1 : -1
+
+      // The stem's own direction here, pointing up the climb.
+      const back = v.f(Math.max(0, t - 0.004))
+      const fwd = v.f(Math.min(1, t + 0.004))
+      const len = Math.hypot(fwd.x - back.x, fwd.y - back.y) || 1
+      const ux = (fwd.x - back.x) / len
+      const uy = (fwd.y - back.y) / len
+
+      // Perpendicular to it, on this leaf's side.
+      const nx = -uy * side
+      const ny = ux * side
+
       out.push({
-        // Just enough to sit beside the stem rather than on it. Wider and
-        // the leaf reads as floating next to the vine instead of growing off
-        // it, which at wall distance is the difference between a plant and a
-        // scatter of dots.
-        x: +(p.x + side * 3.2).toFixed(1),
-        y: +p.y.toFixed(1),
-        r: side * (22 + ((k * 37) % 26)),
-        // The fraction of the cycle by which the tip will have passed here.
-        // 0.72 is where saver-climb finishes growing.
-        at: +(t * 0.72).toFixed(3),
+        x: +(p.x + nx * LEAF_OFFSET).toFixed(2),
+        y: +(p.y + ny * LEAF_OFFSET).toFixed(2),
+        r: +(((Math.atan2(uy, ux) + lean * side) * 180) / Math.PI).toFixed(1),
+        // Which vine this grew on. The stems are staggered against each other
+        // by -9s each, and a leaf that does not carry the same stagger opens
+        // at a moment its own stem has not reached — which is the other half
+        // of looking detached.
+        vi,
+        /*
+         * The fraction of the cycle by which the tip will have passed here.
+         * 0.72 is where saver-climb finishes growing; the phase inside that is
+         * solved through the easing rather than assumed linear, and measured
+         * along the path rather than in the curve's parameter — the tip is a
+         * dash offset, so both corrections are needed to meet it.
+         *
+         * LEAF_LAG puts the leaf a little behind the tip rather than exactly
+         * on it, which is both safer and truer: a stem is always slightly
+         * ahead of its own foliage.
+         */
+        at: +(climbPhaseFor(v.arcFrac(t)) * 0.72 + LEAF_LAG).toFixed(3),
       })
     }
   })

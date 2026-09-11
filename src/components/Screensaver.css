@@ -95,13 +95,22 @@ html[data-saver='night'] body { background: #0B0C08; }
   height: 100%;
 }
 
-/* Centred, then nudged by however far this minute's wander says.
+/* Centred, and drifting so slowly that it stays centred to look at.
  *
- * `translate(-50%, -50%)` does the centring and the custom properties add to
- * it, so the offsets stay readable as "how far from the middle" rather than
- * having to carry the centring inside them. No transition: the move happens
- * once a minute at the same moment the digits change, and a tweened slide
- * would turn a still surface into one with something crawling across it.
+ * The centring lives inside each keyframe rather than on the rule, because an
+ * animated `transform` replaces the declared one outright — a `translate(-50%,
+ * -50%)` here and a drift in the keyframes would simply lose the centring the
+ * moment the animation took over.
+ *
+ * 397s is share-prime with the scene's own 247s growth and 331s drift, so the
+ * clock never settles into a repeating relationship with the trellis behind
+ * it — which is the point of all three numbers being odd.
+ *
+ * The radial wash is the same colour as the ground, so it is invisible as a
+ * shape and does exactly one thing: thins the trellis out where the digits
+ * are. Vines climbing through the numerals made the time hard to read at a
+ * glance, which is the only job it has. It darkens rather than lightens, so
+ * it costs nothing in emitted light.
  *
  * Fraunces at a weight that stays legible at low contrast from across a room,
  * and tabular figures so the digits do not shuffle sideways as they change —
@@ -110,8 +119,15 @@ html[data-saver='night'] body { background: #0B0C08; }
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%)
-    translate(var(--wander-x, 0), var(--wander-y, 0));
+  animation: saver-clock 397s ease-in-out infinite;
+
+  padding: 0.55em 1.5em;
+  background: radial-gradient(
+    closest-side ellipse at 50% 50%,
+    var(--ground) 0%,
+    var(--ground) 38%,
+    transparent 100%
+  );
 
   font-family: var(--font-display);
   font-optical-sizing: auto;
@@ -124,6 +140,13 @@ html[data-saver='night'] body { background: #0B0C08; }
 
   pointer-events: none;
   white-space: nowrap;
+}
+
+@keyframes saver-clock {
+  0%   { transform: translate(-50%, -50%) translate(-1.7vmin, 1.2vmin); }
+  33%  { transform: translate(-50%, -50%) translate(1.8vmin, -1.5vmin); }
+  66%  { transform: translate(-50%, -50%) translate(1.2vmin, 1.7vmin); }
+  100% { transform: translate(-50%, -50%) translate(-1.7vmin, 1.2vmin); }
 }
 
 /* The composition breathes and wanders. Small numbers — this is not meant to
@@ -192,20 +215,51 @@ html[data-saver='night'] body { background: #0B0C08; }
 
 /* Each opens just behind where its vine's tip will be, which is what --at
    encodes: the fraction of the cycle by which the stem has passed it. */
+/*
+ * No `transform-box` / `transform-origin` here, and their absence is
+ * load-bearing.
+ *
+ * They used to be set to `fill-box` / `center`, which reads as harmless
+ * tidiness and was the reason the leaves never sat on the vines. The rotation
+ * is applied as `rotate(deg cx cy)` — the SVG form that carries its own centre
+ * — so a CSS transform-origin composes a *second* origin onto it: the element
+ * ends up rotated about (2cx, 2cy) instead of (cx, cy), which is not a
+ * rotation at all but a large translation. One leaf computed for (50, 591) was
+ * rendering at (-235, 693), most of a screen away from its stem.
+ *
+ * The pair was never needed: `saver-leaf` animates opacity and nothing else.
+ */
 .saver__leaf {
   fill: var(--foliage);
   opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
   animation: saver-leaf var(--cycle) ease-out infinite;
-  animation-delay: calc(var(--i) * -0.001s + var(--at) * var(--cycle));
+  /* `--vi`, not the leaf's own index. The stems are staggered against each
+     other by -9s apiece, and a leaf timed without that stagger opens at a
+     moment its own stem has not yet reached — for the last vine, 45 seconds
+     early. It looked exactly like what it was: foliage with no branch. */
+  animation-delay: calc(var(--vi) * -9s + var(--at) * var(--cycle));
 }
 
+/*
+ * Opens six points of the cycle after its stem passes, and — the part that
+ * matters — is gone again before the cycle wraps.
+ *
+ * The window used to run to 55%, and a leaf's clock is shifted forward by
+ * `--at`, which reaches 0.60 for the highest ones. 0.60 + 0.55 is past the
+ * end: those leaves were still fading out fifteen points into the *next*
+ * cycle, over a stem that had just reset to nothing and grown only a fifth of
+ * the way back up. Thirty-seven seconds of every cycle had leaves hanging in
+ * clear air near the top of the screen.
+ *
+ * 38% is the most that fits: the highest leaf opens at 0.60 and must be gone
+ * by 1.0. Leaves therefore come and go while the stem persists, which is also
+ * the better read — the lower ones recede as the plant climbs past them.
+ */
 @keyframes saver-leaf {
   0%   { opacity: 0; }
-  4%   { opacity: 1; }
-  40%  { opacity: 1; }
-  55%  { opacity: 0; }
+  6%   { opacity: 1; }
+  28%  { opacity: 1; }
+  38%  { opacity: 0; }
   100% { opacity: 0; }
 }
 
@@ -266,4 +320,14 @@ html[data-saver='night'] body { background: #0B0C08; }
   html[data-saver='night'] body  { background: #080906; }
 
   .saver__scene { display: none; }
+
+  /* Nothing to drift away from once the scene is gone, and a 6½-minute
+     crawl is still motion somebody asked not to be shown. Dimmer instead:
+     with no trellis behind it the clock is the only lit thing on the panel,
+     and it is now the only thing that could hold a pixel. */
+  .saver__clock {
+    animation: none;
+    transform: translate(-50%, -50%);
+    opacity: 0.7;
+  }
 }

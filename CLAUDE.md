@@ -360,10 +360,17 @@ variant (22:00–06:00, `NIGHT_FROM_HOUR` / `NIGHT_TO_HOUR`).
   unplaced rather than protected. Centred now, drifting ~1.8vmin over 397s,
   share-prime with the 247s growth and 331s drift: no glance resolves it as
   motion and no digit holds a pixel. Under `prefers-reduced-motion` the drift
-  stops and it dims instead, being then the only lit thing on the panel. A
-  radial wash in the ground colour sits behind it so vines thin out through
-  the numerals rather than climbing across them — invisible as a shape, and it
-  darkens rather than lightens, so it costs no emitted light. `useClockMinute`
+  stops and it dims instead, being then the only lit thing on the panel. Stacked
+  ground-coloured **text shadows** give each glyph a few pixels of clearance,
+  so a vine passes behind the time rather than through the numerals. This was
+  a radial wash on the element's box first, and at this font size that box is
+  about 1000×330 — "a soft gradient behind the time" was erasing a third of
+  the width of the wall, and against a sparse trellis the vine-free zone read
+  as a black rectangle parked in the middle of the screen. The halo does the
+  same job at a twentieth of the area, has no box edge because its shape is
+  the text, and leaves the centre lit like everywhere else — which matters for
+  the same reason the scene moves at all: a permanently unlit patch is its own
+  kind of static image, even when the thing causing it is invisible. `useClockMinute`
   re-reads on `visibilitychange`: an iPad back from suspend would otherwise
   light up showing a time from some minutes ago.
 - **"Sleep now" used to last about fifteen seconds.** The button is a tap,

@@ -106,11 +106,24 @@ html[data-saver='night'] body { background: #0B0C08; }
  * clock never settles into a repeating relationship with the trellis behind
  * it — which is the point of all three numbers being odd.
  *
- * The radial wash is the same colour as the ground, so it is invisible as a
- * shape and does exactly one thing: thins the trellis out where the digits
- * are. Vines climbing through the numerals made the time hard to read at a
- * glance, which is the only job it has. It darkens rather than lightens, so
- * it costs nothing in emitted light.
+ * The halo hugs the letterforms instead of clearing a patch of screen.
+ *
+ * It was a radial wash on the element's own box, and at this font size that
+ * box is about 1000×330 — so "a soft gradient behind the time" was in fact
+ * erasing a third of the width of the wall. With the trellis sparse to begin
+ * with, the vine-free zone read as a black rectangle parked in the middle of
+ * the screen, which is worse than the problem it was solving.
+ *
+ * Stacked ground-coloured text shadows do the same job at a twentieth of the
+ * area: each glyph carries its own few pixels of clearance, so a vine passes
+ * behind the time rather than through the numerals, and there is no box edge
+ * anywhere because the shape is the text. Repeated at the same radius because
+ * shadows composite — two passes at 10px is a denser halo than one at 20px,
+ * and denser is what separates 34% white from a 42% stem.
+ *
+ * It also leaves the centre of the screen lit like everywhere else, which
+ * matters for the reason the whole scene moves: a permanently unlit patch is
+ * its own kind of static image, even when the thing making it is invisible.
  *
  * Fraunces at a weight that stays legible at low contrast from across a room,
  * and tabular figures so the digits do not shuffle sideways as they change —
@@ -121,13 +134,11 @@ html[data-saver='night'] body { background: #0B0C08; }
   left: 50%;
   animation: saver-clock 397s ease-in-out infinite;
 
-  padding: 0.55em 1.5em;
-  background: radial-gradient(
-    closest-side ellipse at 50% 50%,
-    var(--ground) 0%,
-    var(--ground) 38%,
-    transparent 100%
-  );
+  text-shadow:
+    0 0 9px var(--ground),
+    0 0 9px var(--ground),
+    0 0 20px var(--ground),
+    0 0 20px var(--ground);
 
   font-family: var(--font-display);
   font-optical-sizing: auto;

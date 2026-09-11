@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import { useDetailLevel } from '../hooks/useDetailLevel';
+import { useDetailLevel, weightedRowsFor } from '../hooks/useDetailLevel';
 import { WeekGrid, type DayData } from './WeekGrid';
 import { SectionDock, SectionPanel, type SectionMode } from './SectionPanel';
 import type { Person } from './PersonBadge';
@@ -62,10 +62,24 @@ interface Props {
 }
 
 export function Board(props: Props) {
-  const [weekRef, level] = useDetailLevel();
+  const [weekRef, level] = useDetailLevel(weightedRowsFor(props.days));
 
   const flourishes = props.flourishes ?? [];
   const cycleable = (props.flourishCycleable ?? true) && !!props.onCycleFlourish;
+
+  /*
+   * How much of the week (excluding today, which is never "dead") is behind
+   * us. 0 on a Sunday-anchored week's first day, climbing toward 1 by
+   * Saturday — and it's this, not the day of the week itself, that the dock
+   * responds to, so a week fully in the past (paged back a week) reads the
+   * same as the tail end of the current one. Feeds `--past-share` on the
+   * dock in SectionPanel.css, which is the other half of giving the week
+   * grid's reclaimed space somewhere useful to go.
+   */
+  const notToday = props.days.filter((d) => !d.isToday);
+  const pastShare = notToday.length > 0
+    ? notToday.filter((d) => d.isPast).length / notToday.length
+    : 0;
 
   // Built once so the button and the plain-text variants cannot drift apart.
   const subLine = (
@@ -168,7 +182,7 @@ export function Board(props: Props) {
         />
       </div>
 
-      <SectionDock modes={[props.settings.chores, props.settings.shopping]}>
+      <SectionDock modes={[props.settings.chores, props.settings.shopping]} pastShare={pastShare}>
         <SectionPanel
           title="Weekly To Do"
           count={props.choresCount}

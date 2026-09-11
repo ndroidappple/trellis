@@ -25,8 +25,8 @@
 }
 
 /* Today takes a bit over twice an ordinary row's share, at every level.
-   Keep this in sync with WEIGHTED_ROWS in useDetailLevel.ts. 190px covers
-   the stacked date + weekday + "Today" badge in the rail even at the
+   Keep the 2.4 in sync with weightedRowsFor in useDetailLevel.ts. 190px
+   covers the stacked date + weekday + "Today" badge in the rail even at the
    'open' detail level, where the date numeral alone is 78px. */
 .day-row--today {
   flex: 2.4 1 0;
@@ -37,26 +37,31 @@
   padding-top: 14px;
 }
 
-/* A day that has already happened recedes. It does not shrink.
+/* A day that has already happened recedes in contrast — and now in its share
+ * of any *surplus* height too, though never below its floor.
  *
- * Shrinking was the other candidate and it is the wrong tool three times
- * over. Row heights here are load-bearing: `min-height: 84px` exists because
- * a short viewport does not degrade gracefully, it *clips* — buttons and
- * weekday labels sliced off by overflow:hidden with no sign anything is
- * missing — and today's `flex: 2.4` is calibrated against WEIGHTED_ROWS in
- * useDetailLevel.ts, which decides the density of the entire board. Making
- * four of seven rows shorter would re-open a known bug class and recalibrate
- * the grid to fix a contrast problem.
+ * The floor is untouched and non-negotiable: `min-height: 84px` still exists
+ * because a short viewport does not degrade gracefully, it *clips* — buttons
+ * and weekday labels sliced off by overflow:hidden with no sign anything is
+ * missing. Monday still holds what happened on Monday at exactly the height
+ * it always did, and a task that was due then and was not done is exactly as
+ * readable as it ever was. Dimming de-prioritises; the floor is what stops
+ * that from ever becoming hiding.
  *
- * And it would hide the wrong thing. Monday still holds what happened on
- * Monday, and a task that was due then and was not done is exactly what you
- * want to still be able to read. Dimming de-prioritises; shrinking removes.
+ * What changed is who wins the room *beyond* that floor. Every non-today row
+ * used to have equal flex-grow regardless of date, so by Friday five done
+ * rows inflated to match Saturday's still-relevant one, one to one — a wall
+ * of history stretched tall for no reason, while the dock below it stayed
+ * capped at its declared height no matter how much slack the week grid was
+ * sitting on. `flex-grow: 0.4` here means a past row keeps its floor but
+ * stops competing for that slack on equal terms with what's still ahead.
  *
- * So the past loses contrast and keeps its space, which widens the gap
- * between today and everything else from the other end — today could never
- * win it alone, because a near-white row cannot out-lighten its neighbours
- * and has only warmth and height to work with. */
+ * `PAST_ROW_WEIGHT` in useDetailLevel.ts must match the value below — that
+ * constant is how the board works out an *ordinary* row's real rendered
+ * height for the tight/mid/open decision, and letting the two drift apart
+ * would make the board misjudge its own density. */
 .day-row--past {
+  flex: 0.4 1 0;
   background: var(--past-face);
   border-left-color: var(--past-rule);
 }

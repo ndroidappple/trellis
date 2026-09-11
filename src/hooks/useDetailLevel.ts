@@ -13,10 +13,25 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 export type DetailLevel = 'tight' | 'mid' | 'open';
 
 /**
- * Today's row is flex: 2.4, the other six are flex: 1. So the week's height is
- * shared 8.4 ways, and dividing by that gives the height of one ordinary row.
+ * Today's row is flex: 2.4. A past row is PAST_ROW_WEIGHT (keep this in sync
+ * with `.day-row--past` in WeekGrid.css) — it still has the same 84px floor
+ * as any other row, it just no longer competes for growth beyond that floor
+ * on equal terms with today or what's still ahead. Everything else is 1.
+ *
+ * The total varies with how many days in view are past, which is why this is
+ * a function of the actual days rather than a constant: a week with nobody
+ * past yet (Sunday) and a week that's mostly gone (Saturday) distribute their
+ * real height differently, and dividing by a fixed 8.4 regardless would
+ * misjudge the height of an ordinary row in both directions.
  */
-const WEIGHTED_ROWS = 6 + 2.4;
+const PAST_ROW_WEIGHT = 0.4;
+
+export function weightedRowsFor(days: { isToday: boolean; isPast?: boolean }[]): number {
+  return days.reduce(
+    (sum, d) => sum + (d.isToday ? 2.4 : d.isPast ? PAST_ROW_WEIGHT : 1),
+    0
+  );
+}
 
 /**
  * Separate enter and exit thresholds. The gap between them is the hysteresis
@@ -45,8 +60,14 @@ function nextLevel(current: DetailLevel, rowHeight: number): DetailLevel {
 /**
  * Watches the week container and reports how much detail it can afford.
  * Attach the returned ref to the element that wraps the seven day rows.
+ *
+ * `weightedRows` (from `weightedRowsFor`) is a dependency, not just an input:
+ * the container's own height doesn't necessarily change when a day rolls from
+ * today to past at midnight, or when paging to a different week, but the real
+ * height of an *ordinary* row does — so the effect has to re-measure, not
+ * just recompute, whenever the weighting changes.
  */
-export function useDetailLevel(): [RefObject<HTMLDivElement | null>, DetailLevel] {
+export function useDetailLevel(weightedRows: number): [RefObject<HTMLDivElement | null>, DetailLevel] {
   const ref = useRef<HTMLDivElement>(null);
   const [level, setLevel] = useState<DetailLevel>('tight');
   const levelRef = useRef<DetailLevel>('tight');
@@ -56,7 +77,7 @@ export function useDetailLevel(): [RefObject<HTMLDivElement | null>, DetailLevel
     if (!el) return;
 
     const measure = (height: number) => {
-      const rowHeight = height / WEIGHTED_ROWS;
+      const rowHeight = height / weightedRows;
       const next = nextLevel(levelRef.current, rowHeight);
       if (next !== levelRef.current) {
         levelRef.current = next;
@@ -72,7 +93,7 @@ export function useDetailLevel(): [RefObject<HTMLDivElement | null>, DetailLevel
     measure(el.getBoundingClientRect().height);
 
     return () => observer.disconnect();
-  }, []);
+  }, [weightedRows]);
 
   return [ref, level];
 }

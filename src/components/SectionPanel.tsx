@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import './SectionPanel.css';
 
 export type SectionMode = 'full' | 'compact' | 'off';
@@ -55,9 +55,17 @@ export function SectionPanel({ title, count, mode, children, compact, onOpen }: 
  * strip — a 112px-tall half-width box is an awkward shape and reads as a
  * mistake.
  */
-export function SectionDock({ modes, children }: {
+export function SectionDock({ modes, children, pastShare = 0 }: {
   modes: SectionMode[];
   children: ReactNode;
+  /**
+   * 0–1: how much of this week is behind us. The week grid gives up its
+   * claim on surplus height as the week empties out (see WeekGrid.css's
+   * `.day-row--past`) — this is what lets that surplus land here instead of
+   * evaporating, by raising the clamp() ceilings in SectionPanel.css a
+   * proportional amount. 0 changes nothing.
+   */
+  pastShare?: number;
 }) {
   const on = modes.filter((m) => m !== 'off');
   if (on.length === 0) return null;
@@ -69,7 +77,12 @@ export function SectionDock({ modes, children }: {
     // one column ask for more height than the board has left once the week
     // grid takes its floor, so the CSS uses this to shorten a full panel in
     // that arrangement rather than let it be clipped.
-    <div className="section-dock" data-cols={cols} data-stack={on.length}>
+    <div
+      className="section-dock"
+      data-cols={cols}
+      data-stack={on.length}
+      style={{ '--past-share': pastShare } as CSSProperties}
+    >
       {children}
     </div>
   );

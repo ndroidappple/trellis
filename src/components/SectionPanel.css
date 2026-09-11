@@ -28,13 +28,29 @@
 }
 
 /* Declared heights on purpose — the week is the flexible element and the
-   panels take what they need, not the remainder. clamp() keeps the 448px /
-   112px figures as the ceiling (what they're tuned for: a 12.9" iPad in
-   portrait) but lets them shrink on a shorter screen — a laptop browser
-   window, or a phone checking settings — instead of starving the week grid
-   down to unreadable slivers. */
-.section-panel--full { height: clamp(220px, 36vh, 448px); }
-.section-panel--compact { height: clamp(84px, 9vh, 112px); padding: 14px 22px; }
+   panels take what they need, not the remainder they used to be entitled to
+   regardless of the day. clamp() keeps 220px/84px as an absolute floor and
+   lets the panel shrink on a shorter screen — a laptop browser window, or a
+   phone checking settings — instead of starving the week grid down to
+   unreadable slivers.
+
+   448px/112px are no longer the hard ceiling; they're the ceiling on a
+   Sunday, when `--past-share` (set on `.section-dock` by Board.tsx, from how
+   much of the week excluding today is already past) is 0. As the week empties
+   out and WeekGrid.css's `.day-row--past` stops asking for its old equal
+   share of growth, that slack has to land somewhere or it just evaporates
+   into taller grey rows nobody reads — this is where it lands. At
+   `--past-share: 1` (paged to an entirely past week, or Saturday with
+   everything but today behind it) a full panel can reach 588px, a compact one
+   152px. First-guess numbers — tune them once this is visible on the actual
+   wall. */
+.section-panel--full {
+  height: clamp(220px, calc(36vh + var(--past-share, 0) * 10vh), calc(448px + var(--past-share, 0) * 140px));
+}
+.section-panel--compact {
+  height: clamp(84px, calc(9vh + var(--past-share, 0) * 3.5vh), calc(112px + var(--past-share, 0) * 40px));
+  padding: 14px 22px;
+}
 
 /* One column with two panels in it — the full/compact mix. Flex rather than
    grid for this arrangement specifically, because it is the only one where
@@ -57,7 +73,7 @@
   flex: 1 1 auto;
   height: auto;
   min-height: 180px;
-  max-height: clamp(180px, 26vh, 340px);
+  max-height: clamp(180px, calc(26vh + var(--past-share, 0) * 7vh), calc(340px + var(--past-share, 0) * 100px));
 }
 
 .section-dock[data-cols='1'][data-stack='2'] .section-panel--compact {

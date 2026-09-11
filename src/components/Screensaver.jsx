@@ -36,6 +36,7 @@ import './Screensaver.css'
 export default function Screensaver({ night, onWake }) {
   const [paused, setPaused] = useState(() => document.visibilityState !== 'visible')
   const wokenRef = useRef(false)
+  const now = useClockMinute()
 
   /*
    * Stop animating entirely when nobody can see it.
@@ -164,8 +165,98 @@ export default function Screensaver({ night, onWake }) {
           ))}
         </g>
       </svg>
+
+      {/*
+        The time, which is most of what anyone wants from a screen across a
+        room that is not currently showing them anything.
+        
+        It wanders. A clock parked in the middle of a wall-mounted panel for
+        eight hours a day is the exact failure this whole scene is designed
+        around — worse than the lattice, because digits are high-contrast and
+        the colon never moves. So the position is derived from the minute
+        itself: it is stable while a given minute is on screen and somewhere
+        else on the next one, which over a day spreads the glyphs across a
+        wide band of the panel and never animates to get there.
+        
+        Deriving it from the clock rather than running a CSS drift is also
+        what makes it safe under `prefers-reduced-motion`, where the scene is
+        switched off entirely and a CSS-drifted clock would either stop —
+        parking it — or keep moving against the person's stated preference.
+      */}
+      <div className="saver__clock" style={wanderFor(now)} aria-hidden="true">
+        {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+      </div>
     </div>
   )
+}
+
+/* ----------------------------------------------------------------- clock */
+
+/**
+ * The current time, re-read on the minute rather than on an interval that
+ * happens to be sixty seconds long.
+ *
+ * Same reasoning as `useToday`'s midnight rollover: a naive
+ * `setInterval(60_000)` started at :30 shows every minute half a minute late
+ * for as long as the wall is up, and drifts further each time the iPad
+ * suspends. This schedules to the next minute boundary and re-schedules from
+ * whatever time it actually woke at, so a late tick corrects itself.
+ */
+function useClockMinute() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    let timer
+
+    function schedule() {
+      const next = 60_000 - (Date.now() % 60_000)
+      timer = setTimeout(() => {
+        setNow(new Date())
+        schedule()
+      }, next + 50)
+    }
+
+    /*
+     * An iPad that has been asleep comes back with its timers in whatever
+     * state the OS left them, and a background tab has them throttled to
+     * something far coarser than a minute. Both end the same way — the wall
+     * lights up showing a time from some minutes ago, which is worse than
+     * showing no time at all. So the clock is re-read on the way back, and
+     * the schedule restarted from the real moment rather than resumed.
+     */
+    function onVisible() {
+      if (document.visibilityState !== 'visible') return
+      setNow(new Date())
+      clearTimeout(timer)
+      schedule()
+    }
+
+    schedule()
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
+
+  return now
+}
+
+/**
+ * Where the clock sits this minute, as a percentage offset from centre.
+ *
+ * Two incommensurate sines over the minute-of-day, so the path does not
+ * repeat within a day and consecutive minutes land well apart rather than
+ * creeping. The excursion is large enough to matter for retention and small
+ * enough that the clock never looks misplaced or reaches an edge.
+ */
+function wanderFor(date) {
+  const minutes = date.getHours() * 60 + date.getMinutes()
+  return {
+    '--wander-x': `${(Math.sin(minutes * 0.7) * 16).toFixed(2)}%`,
+    '--wander-y': `${(Math.cos(minutes * 1.3) * 12).toFixed(2)}%`,
+  }
 }
 
 /* ------------------------------------------------------------ the drawing */

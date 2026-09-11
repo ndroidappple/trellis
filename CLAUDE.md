@@ -312,11 +312,38 @@ priority: the "idle" screen is really the primary visual surface.
 It is not decoration. **Slow movement is a functional requirement.** The week
 rules, panel edges and header are static geometry in fixed positions for weeks
 — the exact condition that burns a display — so every layer in the scene
-travels, and there is no text, because text is the one thing that would sit in
-fixed pixels and reintroduce the problem. The second job is light pollution: an
-always-lit screen in a room people relax in is a lamp nobody asked for, hence
-the much darker, slower night variant (22:00–06:00, `NIGHT_FROM_HOUR` /
-`NIGHT_TO_HOUR`).
+travels. The second job is light pollution: an always-lit screen in a room
+people relax in is a lamp nobody asked for, hence the much darker, slower night
+variant (22:00–06:00, `NIGHT_FROM_HOUR` / `NIGHT_TO_HOUR`).
+
+- **The day scene is dark, and used to be beige.** `--ground` was `#DCDCD0`,
+  a shade off the board's own paper. It photographed well and defeated the
+  point: a screensaver as bright as the screen it replaces saves no light at
+  all. Day is now `#14150F` with the trellis picked out on it — which is the
+  value the reduced-motion fallback had been using for the day scene all
+  along — and night drops to `#0B0C08`.
+- **The canvas band under the home indicator takes `body` as well as `html`.**
+  `index.css` sets `html, body { background: var(--plaster) }`, so the
+  screensaver naming only `html[data-saver=…]` left `body` painted
+  board-beige and a strip that did not match the scene above it. Both are set
+  now, so they cannot drift apart.
+- **There is text now: the time, and it wanders.** The original rule was no
+  text at all, because text sits in fixed pixels — correct, and the reason the
+  clock's position is derived from the minute itself rather than parked in the
+  middle. It is stable while a minute is on screen and somewhere else on the
+  next one, spreading the glyphs over a wide band across a day. Derived rather
+  than CSS-animated, so `prefers-reduced-motion` neither parks it nor animates
+  against the preference. `useClockMinute` also re-reads on
+  `visibilitychange`: an iPad back from suspend would otherwise light up
+  showing a time from some minutes ago, which is worse than showing none.
+- **"Sleep now" used to last about fifteen seconds.** The button is a tap,
+  the tap runs `markActive` on its way past, so `lastActivity` said somebody
+  was here — and the next tick dutifully answered "not idle" and switched the
+  scene off with nobody having touched anything. `useIdle` now carries a
+  `forced` flag that the tick respects and any real activity clears. A flag
+  rather than backdating `lastActivity` by the timeout, because that has no
+  answer for a household set to "Never" — where there is no timeout to
+  subtract and sending the wall to sleep by hand arguably matters most.
 
 - **The idle timer is never a long `setTimeout`.** Timers do not survive an
   iPad suspending — a ten-minute timer set at 21:50 on a device that sleeps at
@@ -525,6 +552,16 @@ ingredient anyone adds will need it. `recipeCost` also requires `cents > 0`
 before it claims to know anything, or the Protein Berry Smoothie, whose only
 priced row is water at 0, announces itself as a free meal.
 
+**The price control is a fifth filter row, not a button.** `PRICE_OPTIONS` in
+`lib/recipeFilters.js`: `Off` / `Per serving` / `Cheapest first`. It began as a
+"$" toggle beside the help "i" in the search row, which was wrong twice — filed
+next to a control about the book rather than with the four controls about the
+recipes in it, and conflating *seeing* a price with *sorting* by one, so there
+was no way to browse alphabetically while still seeing costs. Three named
+states fix both. Only `cheapest` reorders. The stored value migrates: the old
+button wrote `'on'`, which meant prices *and* the sort, so it reads back as
+`cheapest`.
+
 **The budget figure names its week.** `cost` derives from `mealPlan`, which is
 fetched for `anchor`'s week — so it follows the board, not the calendar. `Wall`
 passes `budgetWeekLabel` — null for the current week, `weekLabel(anchor)`
@@ -552,6 +589,68 @@ Two things to know if this is ever extended:
   state, and the detail sheet is its sibling under `Wall`, not its child. Cost
   in the detail view wants the per-ingredient breakdown anyway, which is a
   different piece of work.
+
+## Hold a thing to manage it
+
+`hooks/useLongPress.js`, used by `EventChip` and the two configurable rows of
+`MainMenu`. Tap does the obvious thing to an object; hold gives you the
+management view of the same object:
+
+| Chip | Tap | Hold |
+|---|---|---|
+| Meal | Opens the recipe | Change / leftovers / clear |
+| Chore | Ticks it | The chore sheet — day, kind, priority, delete |
+| Event | Opens the editor | The same editor |
+
+**Uniform even where it is redundant.** Holding an event opens what tapping it
+already opens, because a gesture that works on two kinds of chip and silently
+does nothing on the third is a gesture nobody learns. The board's own
+background long-press (settings) is unchanged and still bails on any
+`button, input, a, label`, so the two never compete for the same press.
+
+Two things the hook exists to get right, both of which bit this codebase
+before in other forms:
+
+- **A long press still ends in a click.** Without `consumeClick`, holding a
+  meal chip opens the meal editor *and* the recipe behind it. Read-and-clear,
+  because it must be true for exactly one click with no render in between.
+- **Cancel on scroll, not just on drag.** `pointercancel` covers the browser
+  taking the gesture; the 12px slop covers the part before it decides to.
+
+`LONG_PRESS_MS` (650) and `LONG_PRESS_SLOP_PX` (12) now live in the hook and
+are imported by `Wall`, which used to declare its own copies.
+
+**Discoverability is the hard part of a hold, and it is deliberate here.** The
+day view's "Change or clear this meal" row says "or hold its chip on the
+board", and the menu rows print "Hold to change where it shows" — the slow path
+teaches the fast one. This matters more than usual in this app: the `MainMenu`
+docstring exists because settings used to be reachable only by an undocumented
+long-press, so shipping a second secret gesture would be a poor joke.
+
+## Adding a task to a day
+
+The day view had "Add event" and nothing else, so a day was somewhere things
+happened *to* you. The board could already land a task on a date — 009 gave
+chores `due_on`, 012 the drag — but only by dragging a row that already existed
+out of the To Do panel; there was no way to have the thought "I should do that
+on Thursday" while looking at Thursday.
+
+`DayView` now has a Tasks section: what `tasksFor(date)` finds (the same
+`isScheduled` + `occurrenceFor` test the week grid's chips use, so the sheet and
+the board cannot disagree), tapping ticks, right-click/hold opens the chore
+sheet, and an `AddRow` captures new ones.
+
+**A capture field rather than a footer button, and the asymmetry with events is
+the point.** An event needs a time and an owner, which is a form. A task is one
+line of text, and the field parses the rest off the end of it.
+
+`addChore` takes a third argument, `whenUnspecified`, which is the schedule to
+use when the typed text names none. The To Do panel passes nothing and behaves
+as it always has. The day sheet passes `{ recurrence: 'once', due_on: <that
+day> }`. **It loses to the text rather than overriding it** — typing "bins out
+every tuesday" into Thursday's sheet gives a Tuesday chore, and the capture
+field's own readback says "Tuesdays" before the row is written, so the sheet
+never silently reinterprets what someone typed.
 
 ## Chores, which are also tasks
 

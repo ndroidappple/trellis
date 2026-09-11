@@ -25,10 +25,29 @@
 
   --cycle: 247s;
   --drift: 331s;
-  --ground: #DCDCD0;
-  --line: rgba(46, 43, 35, 0.20);
-  --stem: rgba(63, 122, 94, 0.62);
-  --foliage: rgba(63, 122, 94, 0.44);
+
+  /* Dim, not beige.
+   *
+   * The day scene used to be #DCDCD0 — paper, a shade off the board's own
+   * ground. It looked handsome in a screenshot and it was the wrong answer on
+   * a wall: a screensaver that is as bright as the screen it replaced saves
+   * nothing. The whole reason this feature exists is the light a lit panel
+   * throws into a room people relax in, and "reduce brightness" is not served
+   * by swapping one full-brightness field for another.
+   *
+   * So day is now a dark warm ground with the trellis picked out on it, and
+   * night drops further still. An LCD backlight does not actually dim, but
+   * the light leaving the panel is what anyone in the room experiences, and
+   * this is most of it.
+   *
+   * #14150F is the value the reduced-motion fallback below already used for
+   * the day scene, which is worth noticing: the version of this with no
+   * animation had been quietly dark all along. */
+  --ground: #14150F;
+  --line: rgba(230, 236, 220, 0.10);
+  --stem: rgba(126, 176, 148, 0.42);
+  --foliage: rgba(126, 176, 148, 0.28);
+  --clock: rgba(230, 236, 220, 0.34);
 
   overflow: hidden;
   cursor: none;
@@ -58,14 +77,53 @@
  * only a background on the root propagates there. Without this the board faded
  * to the scene and left a band of iOS wallpaper along the bottom edge of the
  * Home Screen web app. index.css holds the board's own default. */
-html[data-saver='day']   { background: #DCDCD0; }
-html[data-saver='night'] { background: #0B0C08; }
+/* `body` as well as `html`, and this is the bug the strip actually had.
+ * index.css sets `html, body { background: var(--plaster) }`, so naming only
+ * the root here left the body still painted board-beige underneath — and any
+ * part of the canvas taking its colour from the body rather than the root
+ * showed a band that did not match the scene above it. Setting both means
+ * they cannot drift apart again. */
+html[data-saver='day'],
+html[data-saver='day'] body   { background: #14150F; }
+html[data-saver='night'],
+html[data-saver='night'] body { background: #0B0C08; }
 
 .saver__scene {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+/* Centred, then nudged by however far this minute's wander says.
+ *
+ * `translate(-50%, -50%)` does the centring and the custom properties add to
+ * it, so the offsets stay readable as "how far from the middle" rather than
+ * having to carry the centring inside them. No transition: the move happens
+ * once a minute at the same moment the digits change, and a tweened slide
+ * would turn a still surface into one with something crawling across it.
+ *
+ * Fraunces at a weight that stays legible at low contrast from across a room,
+ * and tabular figures so the digits do not shuffle sideways as they change —
+ * a clock whose "1" is narrower than its "8" jitters on every tick. */
+.saver__clock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%)
+    translate(var(--wander-x, 0), var(--wander-y, 0));
+
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 300;
+  font-size: clamp(64px, 13vmin, 156px);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--clock);
+
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* The composition breathes and wanders. Small numbers — this is not meant to
@@ -165,6 +223,8 @@ html[data-saver='night'] { background: #0B0C08; }
   --line: rgba(230, 236, 220, 0.07);
   --stem: rgba(126, 176, 148, 0.26);
   --foliage: rgba(126, 176, 148, 0.16);
+  /* Readable from a bed at 3am without being the thing that woke you. */
+  --clock: rgba(230, 236, 220, 0.20);
 }
 
 /* --- paused ------------------------------------------------------------ *
@@ -200,8 +260,10 @@ html[data-saver='night'] { background: #0B0C08; }
   }
 
   .saver[data-night='true'] { background: #080906; }
-  html[data-saver='day']    { background: #14150F; }
-  html[data-saver='night']  { background: #080906; }
+  html[data-saver='day'],
+  html[data-saver='day'] body    { background: #14150F; }
+  html[data-saver='night'],
+  html[data-saver='night'] body  { background: #080906; }
 
   .saver__scene { display: none; }
 }

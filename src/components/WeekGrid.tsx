@@ -118,65 +118,80 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onEventLongPre
             statement of fact the board has no business making. */}
         {loading && <SkeletonChips count={day.isToday ? 2 : 1} />}
 
-        {!loading && shown.map((event) => (
-          <EventChip
-            key={event.id}
-            event={event}
-            level={level}
-            initialsFor={initialsFor}
-            onPress={onEventPress}
-            onLongPress={onEventLongPress}
-          />
-        ))}
+        {/* A collapsed row commits to one line, never the full list — see
+            .day-row--past in WeekGrid.css for why. Nothing to add here
+            either: "+ Meal" and "+" are offers to plan ahead, which a day
+            that already happened has no use for. Opening the day (the row's
+            own onClick, unchanged) is still how you see everything it held. */}
+        {!loading && day.isPast ? (
+          day.events.length > 0 && (
+            <span className="day-row__summary">
+              {day.events.length === 1 ? day.events[0].title : `${day.events.length} events`}
+            </span>
+          )
+        ) : (
+          <>
+            {!loading && shown.map((event) => (
+              <EventChip
+                key={event.id}
+                event={event}
+                level={level}
+                initialsFor={initialsFor}
+                onPress={onEventPress}
+                onLongPress={onEventLongPress}
+              />
+            ))}
 
-        {/* Was a plain span, which made everything it counted unreachable:
-            on a busy day at the tight level the collapsed events could not
-            be opened, seen, or even counted accurately by tapping. */}
-        {!loading && hidden > 0 && (
-          <button
-            type="button"
-            className="day-row__more"
-            aria-label={`Show ${hidden} more on ${day.dayOfWeek} ${day.dayOfMonth}`}
-            onClick={only(openDay)}
-          >
-            +{hidden} more
-          </button>
-        )}
+            {/* Was a plain span, which made everything it counted unreachable:
+                on a busy day at the tight level the collapsed events could not
+                be opened, seen, or even counted accurately by tapping. */}
+            {!loading && hidden > 0 && (
+              <button
+                type="button"
+                className="day-row__more"
+                aria-label={`Show ${hidden} more on ${day.dayOfWeek} ${day.dayOfMonth}`}
+                onClick={only(openDay)}
+              >
+                +{hidden} more
+              </button>
+            )}
 
-        {/* An empty evening is information, but only worth saying when
-            there's room to say it. */}
-        {!loading && level === 'open' && day.events.length <= 1 && (
-          <span className="day-row__invite">
-            {day.events.length === 0 ? 'Nothing planned' : 'Nothing else planned'}
-          </span>
-        )}
+            {/* An empty evening is information, but only worth saying when
+                there's room to say it. */}
+            {!loading && level === 'open' && day.events.length <= 1 && (
+              <span className="day-row__invite">
+                {day.events.length === 0 ? 'Nothing planned' : 'Nothing else planned'}
+              </span>
+            )}
 
-        {/* "Meal", not "Dinner". The button wrote a dinner and said so, which
-            was honest right up until the day could hold a breakfast, a lunch
-            and a snack as well — at which point the label would have been the
-            only thing still insisting there was one meal a night. Dinner is
-            still what it pre-selects; it just no longer claims to be all a day
-            can have. */}
-        {!loading && onAddMeal && day.canAddMeal !== false && (
-          <button
-            type="button"
-            className="day-row__add-meal"
-            aria-label={`Plan a meal on ${day.dayOfMonth}`}
-            onClick={only(() => onAddMeal(day.date))}
-          >
-            + Meal
-          </button>
-        )}
+            {/* "Meal", not "Dinner". The button wrote a dinner and said so, which
+                was honest right up until the day could hold a breakfast, a lunch
+                and a snack as well — at which point the label would have been the
+                only thing still insisting there was one meal a night. Dinner is
+                still what it pre-selects; it just no longer claims to be all a day
+                can have. */}
+            {!loading && onAddMeal && day.canAddMeal !== false && (
+              <button
+                type="button"
+                className="day-row__add-meal"
+                aria-label={`Plan a meal on ${day.dayOfMonth}`}
+                onClick={only(() => onAddMeal(day.date))}
+              >
+                + Meal
+              </button>
+            )}
 
-        {!loading && onAddDay && (
-          <button
-            type="button"
-            className="day-row__add"
-            aria-label={`Add event on ${day.dayOfMonth}`}
-            onClick={only(() => onAddDay(day.date))}
-          >
-            +
-          </button>
+            {!loading && onAddDay && (
+              <button
+                type="button"
+                className="day-row__add"
+                aria-label={`Add event on ${day.dayOfMonth}`}
+                onClick={only(() => onAddDay(day.date))}
+              >
+                +
+              </button>
+            )}
+          </>
         )}
       </div>
     </section>

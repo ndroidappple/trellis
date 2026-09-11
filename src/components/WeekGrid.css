@@ -87,38 +87,72 @@
   padding-top: 14px;
 }
 
-/* A day that has already happened recedes in contrast — and now in its share
- * of any *surplus* height too, though never below its floor.
+/* A day that has already happened recedes in contrast, and now genuinely
+ * collapses — this reverses an earlier decision here, and it's worth
+ * recording why.
  *
- * The floor is untouched and non-negotiable: `min-height: 84px` still exists
- * because a short viewport does not degrade gracefully, it *clips* — buttons
- * and weekday labels sliced off by overflow:hidden with no sign anything is
- * missing. Monday still holds what happened on Monday at exactly the height
- * it always did, and a task that was due then and was not done is exactly as
- * readable as it ever was. Dimming de-prioritises; the floor is what stops
- * that from ever becoming hiding.
+ * The previous version kept the 84px floor and only reweighted growth
+ * beyond it (`flex-grow: 0.4`, unchanged below), on the reasoning that the
+ * floor existed to stop silent clipping and shouldn't move. That held for
+ * clipping, but it quietly assumed there was meaningful slack above the
+ * floor to redistribute in the first place. Measured against this
+ * household's real board_settings (`chores: full`, `shopping: compact`) at
+ * the iPad's actual portrait height, there is about 14px of true surplus on
+ * the *entire* board — reweighting how 14px splits across five rows and a
+ * dock is a change of a pixel or two per row, which is indistinguishable
+ * from nothing. The floor itself was the only thing large enough to matter.
  *
- * What changed is who wins the room *beyond* that floor. Every non-today row
- * used to have equal flex-grow regardless of date, so by Friday five done
- * rows inflated to match Saturday's still-relevant one, one to one — a wall
- * of history stretched tall for no reason, while the dock below it stayed
- * capped at its declared height no matter how much slack the week grid was
- * sitting on. `flex-grow: 0.4` here means a past row keeps its floor but
- * stops competing for that slack on equal terms with what's still ahead.
+ * So the floor now genuinely drops to `--tap-min` (52px — PAST_ROW_MIN_HEIGHT
+ * in useDetailLevel.ts, which also feeds Board.tsx's weekFloorFor so
+ * `.board__week`'s own min-height comes down with it; see the note there
+ * for why the container's floor has to move too or none of this reaches the
+ * dock). The `min-height: 84px` clipping argument doesn't disappear — it
+ * moves to a new, smaller content contract: a collapsed row commits to
+ * showing the weekday, the date, and a one-line summary
+ * (`.day-row__summary`), never the full event list, so there is nothing
+ * left inside it that 52px could clip.
  *
- * `PAST_ROW_WEIGHT` in useDetailLevel.ts must match the value below — that
- * constant is how the board works out an *ordinary* row's real rendered
- * height for the tight/mid/open decision, and letting the two drift apart
- * would make the board misjudge its own density. */
+ * The real trade, stated plainly: Monday no longer holds what happened on
+ * Monday at a glance — that used to be the point of keeping the floor
+ * fixed. A collapsed row stays exactly as tappable as before (still the
+ * same `onClick={openDay}`), so nothing is lost, only moved one tap away.
+ * `PAST_ROW_WEIGHT` below still gives a past row a little of any leftover
+ * growth on top of its new floor, for the same reason as before — it just
+ * no longer has to do the entire job on its own. */
 .day-row--past {
   flex: 0.4 1 0;
+  min-height: var(--tap-min);
+  padding-top: 6px;
+  padding-bottom: 6px;
   background: var(--past-face);
   border-left-color: var(--past-rule);
+}
+
+.day-row--past .day-row__rail {
+  align-items: center;
 }
 
 .day-row--past .day-row__dom,
 .day-row--past .day-row__dow {
   color: var(--ink-faint);
+}
+
+.day-row--past .day-row__dom { font-size: 20px; }
+.day-row--past .day-row__dow { font-size: 15px; }
+
+/* The one-line stand-in for a collapsed row's event list: the day's title
+   if there's exactly one thing, otherwise a count. Never both event chips
+   and this — see the doc comment above .day-row--past for why a collapsed
+   row commits to only ever showing one or the other. */
+.day-row__summary {
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-faint);
+  font-family: var(--font-text);
+  font-size: var(--size-min);
 }
 
 /* One opacity on the content rather than a past variant of every chip token.

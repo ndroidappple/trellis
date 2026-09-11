@@ -14,9 +14,9 @@ export type DetailLevel = 'tight' | 'mid' | 'open';
 
 /**
  * Today's row is flex: 2.4. A past row is PAST_ROW_WEIGHT (keep this in sync
- * with `.day-row--past` in WeekGrid.css) — it still has the same 84px floor
- * as any other row, it just no longer competes for growth beyond that floor
- * on equal terms with today or what's still ahead. Everything else is 1.
+ * with `.day-row--past` in WeekGrid.css) — it no longer competes for growth
+ * beyond its own floor on equal terms with today or what's still ahead.
+ * Everything else is 1.
  *
  * The total varies with how many days in view are past, which is why this is
  * a function of the actual days rather than a constant: a week with nobody
@@ -31,6 +31,39 @@ export function weightedRowsFor(days: { isToday: boolean; isPast?: boolean }[]):
     (sum, d) => sum + (d.isToday ? 2.4 : d.isPast ? PAST_ROW_WEIGHT : 1),
     0
   );
+}
+
+/**
+ * Row floors, in sync with WeekGrid.css. A past row's floor is `--tap-min`
+ * (52px) rather than the ordinary 84px — the same value the row's own tap
+ * target already has to clear, not a separately-tuned number. This is what
+ * makes several past days actually free real height rather than only
+ * reweighting growth that, on a real iPad with the dock already claiming
+ * most of the slack, turned out to be a few pixels per row: see the
+ * incident this was built to fix, recorded in the feature backlog.
+ */
+const ORDINARY_ROW_MIN_HEIGHT = 84;
+const TODAY_ROW_MIN_HEIGHT = 190;
+export const PAST_ROW_MIN_HEIGHT = 52;
+const GAP_PX = 7;
+
+/**
+ * The week grid's real minimum height for the days actually on screen —
+ * replaces a static worst-case constant in Board.css, because that constant
+ * assumed every non-today row needs 84px, which is no longer true once
+ * several are past. A static floor sized for the worst case would force
+ * `.board__week` to that height regardless of how many rows actually
+ * collapsed, and the space freed by collapsing them would be reabsorbed by
+ * the week grid's own flex-grow before it ever reached the dock.
+ */
+export function weekFloorFor(days: { isToday: boolean; isPast?: boolean }[]): number {
+  const gaps = Math.max(0, days.length - 1) * GAP_PX;
+  const rows = days.reduce(
+    (sum, d) =>
+      sum + (d.isToday ? TODAY_ROW_MIN_HEIGHT : d.isPast ? PAST_ROW_MIN_HEIGHT : ORDINARY_ROW_MIN_HEIGHT),
+    0
+  );
+  return rows + gaps;
 }
 
 /**

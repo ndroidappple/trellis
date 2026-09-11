@@ -1,5 +1,5 @@
-import { Fragment, type ReactNode } from 'react';
-import { useDetailLevel, weightedRowsFor } from '../hooks/useDetailLevel';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { useDetailLevel, weightedRowsFor, weekFloorFor } from '../hooks/useDetailLevel';
 import { WeekGrid, type DayData } from './WeekGrid';
 import { SectionDock, SectionPanel, type SectionMode } from './SectionPanel';
 import type { Person } from './PersonBadge';
@@ -80,6 +80,12 @@ export function Board(props: Props) {
   const pastShare = notToday.length > 0
     ? notToday.filter((d) => d.isPast).length / notToday.length
     : 0;
+
+  // Replaces Board.css's static worst-case min-height on .board__week: once
+  // several days actually collapse (see .day-row--past in WeekGrid.css) the
+  // grid's true floor is lower, and the container's own min-height has to
+  // follow that down or the freed space never leaves .board__week at all.
+  const weekFloor = weekFloorFor(props.days);
 
   // Built once so the button and the plain-text variants cannot drift apart.
   const subLine = (
@@ -166,7 +172,11 @@ export function Board(props: Props) {
       </header>
 
       {/* The ref goes on the element whose height the level is derived from. */}
-      <div className="board__week" ref={weekRef}>
+      <div
+        className="board__week"
+        ref={weekRef}
+        style={{ '--week-floor': `${weekFloor}px` } as CSSProperties}
+      >
         <WeekGrid
           days={props.days}
           level={level}

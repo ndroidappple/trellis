@@ -219,12 +219,15 @@ p.board__sub {
 .board__week {
   flex: 1 1 auto;
   display: flex;
-  /* 6 ordinary rows at their own 84px floor + today's 190px floor + the
-     6 gaps between them (--gap-slat) — the real minimum the week grid
-     needs, not a guess. Below this, the dock (which has its own clamp()
-     floor) gets clipped by .board's overflow:hidden before the week does —
-     the week is the important element here, not the dock. */
-  min-height: calc(6 * 84px + 190px + 6 * var(--gap-slat));
+  /* Set from Board.tsx's weekFloorFor(days) — the real minimum this week's
+     actual rows need, not a guess. A past row floors at 52px now rather
+     than 84px, so this number gets smaller as more of the week is behind
+     you, and the fallback calc() (unweighted worst case, nobody past) only
+     matters if the custom property is somehow never set. Below whatever
+     this resolves to, the dock (which has its own clamp() floor) gets
+     clipped by .board's overflow:hidden before the week does — the week is
+     the important element here, not the dock. */
+  min-height: var(--week-floor, calc(6 * 84px + 190px + 6 * var(--gap-slat)));
 }
 
 @media (prefers-reduced-motion: reduce) {

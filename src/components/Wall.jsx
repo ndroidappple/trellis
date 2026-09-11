@@ -34,6 +34,7 @@ import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
 import Sheet from './Sheet'
 import AddRow from './AddRow'
+import SwipeAway from './SwipeAway'
 import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, useLongPress } from '../hooks/useLongPress'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
@@ -1643,6 +1644,7 @@ export default function Wall({ profile, people }) {
     peopleById: orderedPeople,
     onAdd: addChore,
     onOpenSettings: setReschedulingChore,
+    onRemove: removeChore,
     commonChores,
     onDragStart: startDrag,
     draggingId: drag?.chore?.id ?? null,
@@ -1793,6 +1795,7 @@ export default function Wall({ profile, people }) {
           meals={mealsFor(dayViewing)}
           tasks={tasksFor(dayViewing)}
           taskIsDone={choreIsDone}
+          onRemoveTask={removeChore}
           canAddMeal={nextFreeSlot(mealsFor(dayViewing)) != null}
           peopleById={orderedPeople}
           today={today}
@@ -2034,6 +2037,7 @@ function DayView({
   meals,
   tasks,
   taskIsDone,
+  onRemoveTask,
   canAddMeal,
   peopleById,
   today,
@@ -2179,6 +2183,7 @@ function DayView({
             done={taskIsDone(task)}
             onToggle={() => onToggleTask(task)}
             onEdit={() => onEditTask(task)}
+            onRemove={onRemoveTask ? () => onRemoveTask(task) : undefined}
           />
         ))}
 
@@ -2204,24 +2209,26 @@ function DayView({
  * wall-mounted iPad, and having the sheet answer to a different gesture than
  * the chip for the same object would undo the point of having one.
  */
-function TaskRow({ task, done, onToggle, onEdit }) {
+function TaskRow({ task, done, onToggle, onEdit, onRemove }) {
   const press = useLongPress(onEdit)
 
   return (
-    <button
-      className={done ? 'sheet-row is-done' : 'sheet-row'}
-      {...press.handlers}
-      onClick={() => {
-        if (press.consumeClick()) return
-        onToggle()
-      }}
-    >
-      <span>{task.title}</span>
-      <span className="sheet-row__meta">
-        {done ? 'Done' : 'Tap to tick off · hold to reschedule'}
-        {priorityLabel(task.priority) ? ` · ${priorityLabel(task.priority)}` : ''}
-      </span>
-    </button>
+    <SwipeAway onDelete={onRemove}>
+      <button
+        className={done ? 'sheet-row is-done' : 'sheet-row'}
+        {...press.handlers}
+        onClick={() => {
+          if (press.consumeClick()) return
+          onToggle()
+        }}
+      >
+        <span>{task.title}</span>
+        <span className="sheet-row__meta">
+          {done ? 'Done' : 'Tap to tick off · hold to reschedule'}
+          {priorityLabel(task.priority) ? ` · ${priorityLabel(task.priority)}` : ''}
+        </span>
+      </button>
+    </SwipeAway>
   )
 }
 

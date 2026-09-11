@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { SkeletonRows } from './Skeleton'
 import AddRow from './AddRow'
+import SwipeAway from './SwipeAway'
 import { formatCents } from '../lib/cost'
 import { groupByAisle, qtyLabel } from '../lib/shopping'
 
@@ -89,7 +90,20 @@ export function ShoppingRow({ item, onToggle }) {
  * Shared by the dock panel and the full-page sheet so the two cannot drift
  * into disagreeing about what the shop looks like.
  */
-export function ShoppingAisles({ items, onToggle, onRemove, dense = false }) {
+export function ShoppingAisles({
+  items,
+  onToggle,
+  onRemove,
+  /**
+   * Whether to also show the persistent "×".
+   *
+   * Separate from `onRemove` because the two questions came apart the moment
+   * a swipe existed: *may* this row be deleted, and does it carry a button
+   * saying so. The dock answers yes and no.
+   */
+  removeButton = false,
+  dense = false,
+}) {
   const groups = groupByAisle(items)
 
   return (
@@ -107,26 +121,38 @@ export function ShoppingAisles({ items, onToggle, onRemove, dense = false }) {
           </h3>
 
           <div className="shop-aisle__items">
-            {group.items.map((item) =>
-              // Delete only exists on the full page. In the dock it was a
-              // permanent 44px neighbour of the primary tap, for an action
-              // taken about once a month — the page has room to offer it
-              // without putting it under a thumb that meant to tick.
-              onRemove ? (
-                <div key={item.id} className="shop-row-wrap">
+            {group.items.map((item) => (
+              /*
+               * Swipe deletes in both places; the "×" stays only on the page.
+               *
+               * That asymmetry is the original reasoning intact rather than
+               * reversed. A permanent 44px target beside the primary tap was
+               * refused in the dock because it is a mis-tap generator on a
+               * wall, for something done about once a month — and it still
+               * would be. A swipe costs no pixels at rest and cannot be hit
+               * by a thumb that meant to tick, so the dock can finally have
+               * the action without the neighbour. The page keeps the button
+               * as well, because a gesture cannot be the only route to
+               * anything.
+               */
+              <SwipeAway key={item.id} onDelete={onRemove ? () => onRemove(item) : undefined}>
+                {removeButton && onRemove ? (
+                  <div className="shop-row-wrap">
+                    <ShoppingRow item={item} onToggle={onToggle} />
+                    <button
+                      className="panel-row__remove"
+                      data-no-swipe
+                      onClick={() => onRemove(item)}
+                      aria-label={`Remove ${item.body}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
                   <ShoppingRow item={item} onToggle={onToggle} />
-                  <button
-                    className="panel-row__remove"
-                    onClick={() => onRemove(item)}
-                    aria-label={`Remove ${item.body}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ) : (
-                <ShoppingRow key={item.id} item={item} onToggle={onToggle} />
-              )
-            )}
+                )}
+              </SwipeAway>
+            ))}
           </div>
         </section>
       ))}
@@ -148,6 +174,9 @@ export default function ShoppingPanel({
   onToggle,
   onAdd,
   onAddGroceries,
+  /* Swipe-only here: see the note in ShoppingAisles about why the dock
+     refuses a permanent delete button and can still have the action. */
+  onRemove,
 }) {
   const [view, setView] = useState(0)
 
@@ -180,7 +209,7 @@ export default function ShoppingPanel({
     <>
       <div className="panel-list">
         {items.length === 0 && <p className="muted">Empty.</p>}
-        <ShoppingAisles items={items} onToggle={onToggle} dense />
+        <ShoppingAisles items={items} onToggle={onToggle} onRemove={onRemove} dense />
       </div>
 
       <AddRow

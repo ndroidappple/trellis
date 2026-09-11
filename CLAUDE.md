@@ -657,6 +657,54 @@ teaches the fast one. This matters more than usual in this app: the `MainMenu`
 docstring exists because settings used to be reachable only by an undocumented
 long-press, so shipping a second secret gesture would be a poor joke.
 
+## Swipe a row left to delete it
+
+`components/SwipeAway.jsx` wraps a row rather than being built into one — the
+three places that want it (chore rows, shopping rows, the day sheet's tasks)
+have three different row components and only this behaviour in common.
+
+**Why a gesture, when both lists had refused a delete button.** The shopping
+dock has none on purpose: a permanent 44px "×" beside the primary tap is a
+mis-tap generator on a wall, for something done about once a month. The chore
+row went the same way and moved delete two taps down into its settings sheet.
+Both were right against the options available, and both left the common case
+slow. A swipe costs no pixels at rest, sits nowhere near the tap target, and
+cannot be triggered by the imprecise press a wall attracts — so the dock can
+finally have the action without the neighbour. `removeButton` on
+`ShoppingAisles` is now separate from `onRemove` for exactly this: *may* this
+row be deleted, versus does it carry a button saying so. The dock answers yes
+and no.
+
+**`touch-action: pan-y` on the track is the load-bearing declaration**, the
+same trick `.panel-row__grip` uses in the other direction. It hands vertical
+panning to the browser and keeps horizontal, so a swipe and a list scroll
+never have to out-race each other. The engagement test (12px, and horizontal
+must beat vertical by 1.4×) is the second line of that defence for pointer
+devices, where `touch-action` does nothing.
+
+Three more things it has to get right, all verified in a harness:
+
+- **A swipe ends in a click.** Without the capture-phase swallow, swiping a
+  chore away also ticks it on the way out.
+- **Nothing is irreversible.** Every caller already routes through
+  `offerUndo`, so a swipe lands the same nine-second undo a sheet delete
+  does. That is what makes the gesture affordable on a wall people brush past.
+- **The old routes stay.** The chore sheet still deletes and the shopping page
+  keeps its "×" — a gesture with no keyboard and no screen-reader equivalent
+  cannot be the only way to do anything.
+
+Deliberately not applied to meals or events in the day sheet. Clearing a meal
+is not deleting a row — the meal plan keeps the night — and an event carries a
+time, an owner and a delete button already inside its own editor.
+
+**Testing it is harder than writing it**, and the trap is worth recording:
+React flushes `pointermove` at non-discrete priority, so reading
+`style.transform` straight after `dispatchEvent` returns the *previous*
+render's value. An early pass looked like the gesture was dead when it was
+working perfectly. Step the synthetic pointer events through `setTimeout`
+(not `requestAnimationFrame` — that does not fire in a background tab) and
+read after each.
+
 ## Adding a task to a day
 
 The day view had "Add event" and nothing else, so a day was somewhere things

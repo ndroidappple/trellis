@@ -1,4 +1,5 @@
 import { ChecklistRow } from './ChecklistRow'
+import SwipeAway from './SwipeAway'
 import { SkeletonRows } from './Skeleton'
 import AddRow from './AddRow'
 import { priorityLabel } from '../lib/capture'
@@ -36,8 +37,10 @@ function ChoreRow({
   onCycleCredit,
   onDragStart,
   onOpenSettings,
+  onRemove,
 }) {
   return (
+    <SwipeAway onDelete={onRemove ? () => onRemove(chore) : undefined}>
     <div
       className={[
         'panel-row',
@@ -58,6 +61,7 @@ function ChoreRow({
           type="button"
           className="panel-row__grip"
           aria-label={`Reschedule ${chore.title}`}
+          data-no-swipe
           onPointerDown={(e) => onDragStart?.(chore, e)}
         >
           <span aria-hidden="true">⠿</span>
@@ -103,6 +107,7 @@ function ChoreRow({
         {when}
       </button>
     </div>
+    </SwipeAway>
   )
 }
 
@@ -118,6 +123,7 @@ function EpisodicRow({
   when,
   onLog,
   onOpenSettings,
+  onRemove,
 }) {
   /*
    * Who is *selected* on this row, which is not the same as whose turn it is.
@@ -144,6 +150,7 @@ function EpisodicRow({
     : 'not done yet'
 
   return (
+    <SwipeAway onDelete={onRemove ? () => onRemove(chore) : undefined}>
     <div className="panel-row panel-row--episodic">
       <div className="panel-row__body">
         <span className="panel-row__title">{chore.title}</span>
@@ -218,6 +225,7 @@ function EpisodicRow({
         {when}
       </button>
     </div>
+    </SwipeAway>
   )
 }
 
@@ -239,6 +247,7 @@ export default function ChoresPanel({
   onOpenSettings,
   commonChores = [],
   onDragStart,
+  onRemove,
   draggingId,
   scheduleLabelFor,
   dueLabelFor,
@@ -320,6 +329,7 @@ export default function ChoresPanel({
                     when={scheduleLabelFor?.(c)}
                     onLog={onLog}
                     onOpenSettings={onOpenSettings}
+                    onRemove={onRemove}
                   />
                 )
               }
@@ -368,6 +378,7 @@ export default function ChoresPanel({
                     onCycleCredit={() => onCycleCredit?.(chore)}
                     onDragStart={onDragStart}
                     onOpenSettings={onOpenSettings}
+                    onRemove={onRemove}
                   />
                 )
               }

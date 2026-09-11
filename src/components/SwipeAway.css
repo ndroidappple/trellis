@@ -1,0 +1,81 @@
+/*
+ * Swipe a row left to delete it. See SwipeAway.jsx for the gesture.
+ *
+ * The wrapper is the clip; the track is the part that moves; the reveal sits
+ * behind and is simply uncovered. Nothing animates in — the row moving is the
+ * animation, which is why the reveal needs no transition of its own and never
+ * appears on a list at rest.
+ */
+/*
+ * 4px to match `.checklist-row`, which is the card the reveal appears behind.
+ * The wrapper has no size of its own — `.panel-row` and the sheet rows carry
+ * their own padding — so this only rounds the clip.
+ */
+.swipe {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+/*
+ * `pan-y` is the whole reason this coexists with a scrolling panel: the
+ * browser keeps vertical panning and hands us horizontal, so a scroll never
+ * has to be wrestled back and a swipe never has to out-race one.
+ */
+.swipe__track {
+  position: relative;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+/* Only while settling back. During the drag the row must track the finger
+   exactly — a transition there feels like lag, not like smoothing. */
+.swipe__track:not(.is-moving) {
+  transition: transform var(--dur-state) var(--ease-standard);
+}
+
+.swipe__reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 20px;
+
+  background: var(--urgent-tint);
+  color: var(--urgent);
+  font-family: var(--font-text);
+  font-size: var(--size-min);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+
+  transition: background var(--dur-state) var(--ease-standard),
+    color var(--dur-state) var(--ease-standard);
+}
+
+/* Past the commit distance. The colour arriving is the confirmation — it
+   happens under the finger, before the decision, which is the only moment it
+   is useful. */
+.swipe__reveal.is-armed {
+  background: var(--urgent);
+  color: var(--person-ink);
+}
+
+/* Committed: off the edge, then the row is actually removed. */
+.swipe.is-exiting .swipe__track {
+  transform: translateX(-100%);
+  transition: transform var(--dur-move) var(--ease-exit);
+}
+
+.swipe.is-exiting {
+  transition: opacity var(--dur-move) var(--ease-exit);
+  opacity: 0.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swipe__track:not(.is-moving),
+  .swipe.is-exiting .swipe__track,
+  .swipe.is-exiting {
+    transition: none;
+  }
+}

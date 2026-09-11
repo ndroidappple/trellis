@@ -83,7 +83,7 @@ export function ShoppingSheet({
 
       {items.length === 0 && <p className="sheet__empty">Nothing on the list.</p>}
 
-      <ShoppingAisles items={items} onToggle={onToggle} onRemove={onRemove} />
+      <ShoppingAisles items={items} onToggle={onToggle} onRemove={onRemove} removeButton />
 
       {/* The dock can only afford to say how many ingredients are unpriced.
           The page has room to say which — and an unpriced ingredient is

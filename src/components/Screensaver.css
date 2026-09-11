@@ -134,6 +134,23 @@ html[data-saver='night'] body { background: #0B0C08; }
   position: absolute;
   top: 50%;
   left: 50%;
+
+  /*
+   * Centre of the *screen*, not of this overlay.
+   *
+   * `.saver` is `position: fixed; inset: 0`, and on a Home Screen web app with
+   * `viewport-fit=cover` that box stops short of the strip behind the home
+   * indicator — which is the whole reason the root element has to be painted
+   * separately (see the canvas note above). So the overlay is a little shorter
+   * than the glass, and anything centred in it sits half that strip too high.
+   * Half the bottom inset puts it back.
+   *
+   * `env()` resolves to 0 everywhere without a safe area, so this is inert off
+   * the device — and it is the one part of the clock's placement that cannot
+   * be checked from a desktop browser.
+   */
+  margin-top: calc(env(safe-area-inset-bottom, 0px) / 2);
+
   animation: saver-clock 397s ease-in-out infinite;
 
   /*
@@ -169,11 +186,24 @@ html[data-saver='night'] body { background: #0B0C08; }
   white-space: nowrap;
 }
 
+/*
+ * A loop with a mean of exactly zero, which the first version did not have.
+ *
+ * Its three hand-picked waypoints averaged about +0.45vmin right and down, so
+ * the clock spent most of every cycle below and right of centre and only
+ * passed through the middle. Drifting is meant to be invisible; a drift with a
+ * bias is just being off-centre, slowly.
+ *
+ * Four points at ±A on each axis in quarter-turns give a diamond whose every
+ * quarter cancels the one opposite it — mean zero on both axes by
+ * construction, not by choosing numbers carefully.
+ */
 @keyframes saver-clock {
-  0%   { transform: translate(-50%, -50%) translate(-1.7vmin, 1.2vmin); }
-  33%  { transform: translate(-50%, -50%) translate(1.8vmin, -1.5vmin); }
-  66%  { transform: translate(-50%, -50%) translate(1.2vmin, 1.7vmin); }
-  100% { transform: translate(-50%, -50%) translate(-1.7vmin, 1.2vmin); }
+  0%   { transform: translate(-50%, -50%) translate(1.7vmin, 0); }
+  25%  { transform: translate(-50%, -50%) translate(0, 1.7vmin); }
+  50%  { transform: translate(-50%, -50%) translate(-1.7vmin, 0); }
+  75%  { transform: translate(-50%, -50%) translate(0, -1.7vmin); }
+  100% { transform: translate(-50%, -50%) translate(1.7vmin, 0); }
 }
 
 /* The composition breathes and wanders. Small numbers — this is not meant to

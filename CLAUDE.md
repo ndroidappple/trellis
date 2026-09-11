@@ -381,9 +381,20 @@ variant (22:00–06:00, `NIGHT_FROM_HOUR` / `NIGHT_TO_HOUR`).
   no text at all, because text sits in fixed pixels. The first answer moved
   the clock each minute, which was the wrong shape for the problem — a
   discrete jump is the one kind of movement the eye cannot miss, so it read as
-  unplaced rather than protected. Centred now, drifting ~1.8vmin over 397s,
+  unplaced rather than protected. Centred now, drifting ±1.7vmin over 397s,
   share-prime with the 247s growth and 331s drift: no glance resolves it as
-  motion and no digit holds a pixel. Under `prefers-reduced-motion` the drift
+  motion and no digit holds a pixel. **The drift loop must average exactly
+  zero.** The first one used three hand-picked waypoints that averaged about
+  +0.45vmin right and down, so the clock spent most of every cycle below and
+  right of centre — which is not drifting, it is being off-centre slowly. Four
+  points at ±A in quarter-turns make a diamond whose every quarter cancels the
+  one opposite, so the mean is zero by construction. Measured: 0.00px on both
+  axes over 200 samples. Also **`margin-top: env(safe-area-inset-bottom) / 2`**
+  — `.saver` is `fixed; inset: 0`, which stops short of the home-indicator
+  strip (the same fact that forces the root-element background above), so
+  anything centred in the overlay sits half that strip too high on the actual
+  wall. That line is inert off-device and is the one piece of the clock's
+  placement that cannot be checked from a desktop browser. Under `prefers-reduced-motion` the drift
   stops and it dims instead, being then the only lit thing on the panel. **The glyphs win on
   contrast, not by clearing space behind them**, and that took three goes. A
   radial wash on the element's box erased about a third of the width of the

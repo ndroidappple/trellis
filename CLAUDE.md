@@ -637,8 +637,9 @@ on Thursday" while looking at Thursday.
 
 `DayView` now has a Tasks section: what `tasksFor(date)` finds (the same
 `isScheduled` + `occurrenceFor` test the week grid's chips use, so the sheet and
-the board cannot disagree), tapping ticks, right-click/hold opens the chore
-sheet, and an `AddRow` captures new ones.
+the board cannot disagree), tapping ticks, holding opens the chore sheet
+(the same `useLongPress` the chips use — a right-click is not a thing that
+happens on a wall-mounted iPad), and an `AddRow` captures new ones.
 
 **A capture field rather than a footer button, and the asymmetry with events is
 the point.** An event needs a time and an owner, which is a form. A task is one

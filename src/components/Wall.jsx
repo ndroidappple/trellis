@@ -34,7 +34,7 @@ import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
 import Sheet from './Sheet'
 import AddRow from './AddRow'
-import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX } from '../hooks/useLongPress'
+import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, useLongPress } from '../hooks/useLongPress'
 import ChoresPanel from './ChoresPanel'
 import ShoppingPanel from './ShoppingPanel'
 import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
@@ -2172,26 +2172,15 @@ function DayView({
 
         {tasks.length === 0 && <p className="sheet__empty">Nothing due.</p>}
 
-        {tasks.map((task) => {
-          const done = taskIsDone(task)
-          return (
-            <button
-              key={task.id}
-              className={done ? 'sheet-row is-done' : 'sheet-row'}
-              onClick={() => onToggleTask(task)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                onEditTask(task)
-              }}
-            >
-              <span>{task.title}</span>
-              <span className="sheet-row__meta">
-                {done ? 'Done' : 'Tap to tick off'}
-                {priorityLabel(task.priority) ? ` · ${priorityLabel(task.priority)}` : ''}
-              </span>
-            </button>
-          )
-        })}
+        {tasks.map((task) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            done={taskIsDone(task)}
+            onToggle={() => onToggleTask(task)}
+            onEdit={() => onEditTask(task)}
+          />
+        ))}
 
         <AddRow
           placeholder={`Add a task for ${dayLabel(date)}`}
@@ -2203,6 +2192,36 @@ function DayView({
         />
       </div>
     </Sheet>
+  )
+}
+
+/**
+ * One task in the day sheet: tick it, or hold it to open everything else.
+ *
+ * Its own component because the hold needs a hook and this is inside a map.
+ * The gesture is the same `useLongPress` the board's chips use rather than a
+ * `contextmenu` handler — a right-click is not a thing that happens on a
+ * wall-mounted iPad, and having the sheet answer to a different gesture than
+ * the chip for the same object would undo the point of having one.
+ */
+function TaskRow({ task, done, onToggle, onEdit }) {
+  const press = useLongPress(onEdit)
+
+  return (
+    <button
+      className={done ? 'sheet-row is-done' : 'sheet-row'}
+      {...press.handlers}
+      onClick={() => {
+        if (press.consumeClick()) return
+        onToggle()
+      }}
+    >
+      <span>{task.title}</span>
+      <span className="sheet-row__meta">
+        {done ? 'Done' : 'Tap to tick off · hold to reschedule'}
+        {priorityLabel(task.priority) ? ` · ${priorityLabel(task.priority)}` : ''}
+      </span>
+    </button>
   )
 }
 

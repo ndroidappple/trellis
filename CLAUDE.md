@@ -327,15 +327,45 @@ variant (22:00–06:00, `NIGHT_FROM_HOUR` / `NIGHT_TO_HOUR`).
   screensaver naming only `html[data-saver=…]` left `body` painted
   board-beige and a strip that did not match the scene above it. Both are set
   now, so they cannot drift apart.
-- **There is text now: the time, and it wanders.** The original rule was no
-  text at all, because text sits in fixed pixels — correct, and the reason the
-  clock's position is derived from the minute itself rather than parked in the
-  middle. It is stable while a minute is on screen and somewhere else on the
-  next one, spreading the glyphs over a wide band across a day. Derived rather
-  than CSS-animated, so `prefers-reduced-motion` neither parks it nor animates
-  against the preference. `useClockMinute` also re-reads on
-  `visibilitychange`: an iPad back from suspend would otherwise light up
-  showing a time from some minutes ago, which is worse than showing none.
+- **The leaves never sat on the vines, for three separate reasons.** Each is
+  invisible in code review and only one is obvious on screen.
+  1. `.saver__leaf` set `transform-box: fill-box; transform-origin: center`
+     while the rotation is applied as the SVG `rotate(deg cx cy)` form, which
+     carries its own centre. The origin is composed twice and the rotation
+     becomes a large translation — a leaf computed for (50, 591) rendered at
+     (-235, 693). The pair was never needed; `saver-leaf` animates opacity
+     alone.
+  2. Placement offset each leaf a flat 3.2 units in *x* with a rotation from
+     its index. A vine is a sine, so on the stretches that lean, a horizontal
+     offset puts the leaf in open space. Both now come from the curve: offset
+     along the tangent's normal, long axis `LEAN_DEG` off the climb.
+  3. Timing assumed a linear climb (`at = t * 0.72`). It runs on
+     `cubic-bezier(0.35, 0, 0.45, 1)`, so leaves opened up to a tenth of a
+     stem-length above the tip. `climbPhaseFor` inverts the easing and
+     `arcFrac` measures along the path rather than in the curve's parameter,
+     since the tip is a dash offset. Leaves carry `--vi` too: stems are
+     staggered `-9s` apiece and a leaf without it opened up to 45 seconds
+     early. The window shortens to 38% so none outlives the cycle that drew
+     it — that alone left leaves in clear air 37 seconds of every cycle.
+
+  **Verify against rendered geometry, not attributes.** The first check here
+  read `cx`/`cy`, pronounced every leaf perfect, and was measuring the
+  intention while the bug sat in the transform. Walk the ellipse outline
+  through `getCTM()` into the vines' space and compare against
+  `getPointAtLength` samples.
+- **There is text now: the time, and it stays centred.** The original rule was
+  no text at all, because text sits in fixed pixels. The first answer moved
+  the clock each minute, which was the wrong shape for the problem — a
+  discrete jump is the one kind of movement the eye cannot miss, so it read as
+  unplaced rather than protected. Centred now, drifting ~1.8vmin over 397s,
+  share-prime with the 247s growth and 331s drift: no glance resolves it as
+  motion and no digit holds a pixel. Under `prefers-reduced-motion` the drift
+  stops and it dims instead, being then the only lit thing on the panel. A
+  radial wash in the ground colour sits behind it so vines thin out through
+  the numerals rather than climbing across them — invisible as a shape, and it
+  darkens rather than lightens, so it costs no emitted light. `useClockMinute`
+  re-reads on `visibilitychange`: an iPad back from suspend would otherwise
+  light up showing a time from some minutes ago.
 - **"Sleep now" used to last about fifteen seconds.** The button is a tap,
   the tap runs `markActive` on its way past, so `lastActivity` said somebody
   was here — and the next tick dutifully answered "not idle" and switched the

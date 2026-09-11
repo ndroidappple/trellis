@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { EventChip, type EventChipData } from './EventChip';
 import { SkeletonChips } from './Skeleton';
 import { visibleChipCount, type DetailLevel } from '../hooks/useDetailLevel';
@@ -183,7 +184,13 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onEventLongPre
 }
 
 export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onEventLongPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOverDate, onPrevWeek, onNextWeek }: Props) {
-  const { dragX, settling, opacity, handlers } = useSwipeWeek({ onPrevWeek, onNextWeek });
+  const { dragX, settling, opacity, armed, handlers } = useSwipeWeek({ onPrevWeek, onNextWeek });
+
+  // Which way a drag in progress is headed. Derived straight from dragX
+  // rather than returned by the hook — the hook decides *when* a release
+  // commits, not which words describe that, so the direction-to-copy
+  // mapping lives here with the rest of the grid's presentation.
+  const direction = dragX < 0 ? 'next' : dragX > 0 ? 'prev' : null;
 
   return (
     <div
@@ -195,6 +202,25 @@ export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onEv
       }}
       {...handlers}
     >
+      {/* Confirms which way the swipe will land before release does it,
+          the same "Release to…" idiom SwipeAway uses for delete — and
+          counter-translated so it holds its place on screen while the grid
+          underneath it is the thing actually moving. */}
+      {direction && (
+        <div
+          className="week-swipe-hint"
+          data-armed={armed}
+          style={{
+            '--hint-x': `${-dragX}px`,
+            transition: settling ? 'transform var(--dur-move) var(--ease-standard)' : 'none',
+          } as CSSProperties}
+          aria-hidden="true"
+        >
+          {direction === 'next'
+            ? (armed ? 'Release for next week' : 'Next week')
+            : (armed ? 'Release for previous week' : 'Previous week')}
+        </div>
+      )}
       {days.map((day) => (
         <DayRow
           key={day.date}

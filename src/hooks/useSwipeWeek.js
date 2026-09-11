@@ -142,6 +142,10 @@ export function useSwipeWeek({ onPrevWeek, onNextWeek } = {}) {
     // MAX_DRAG_PX, which would otherwise be a second place that constant
     // has to be kept in sync.
     opacity: 1 - (Math.abs(dragX) / MAX_DRAG_PX) * 0.1,
+    // Past this, releasing commits. Exposed so a caller can confirm the
+    // release before it happens — the same "Release to…" idiom SwipeAway
+    // uses — without hardcoding COMMIT_PX a second place.
+    armed: Math.abs(dragX) >= COMMIT_PX,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClickCapture },
   }
 }

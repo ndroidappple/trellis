@@ -1,4 +1,5 @@
 .week-grid {
+  position: relative;
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
@@ -11,6 +12,48 @@
      iOS's own gesture recognizer treating a drag as a page rubber-band
      before useSwipeWeek's pointer handlers see it. */
   touch-action: none;
+}
+
+/*
+ * Centred over the grid regardless of how far the grid has been dragged —
+ * it carries its own inverse translateX for exactly that reason, since it
+ * is a child of the element that is moving. Neutral colours on purpose:
+ * SwipeAway's equivalent uses --urgent because a delete is a destructive
+ * confirmation, but paging the week is not, and borrowing that palette here
+ * would make swiping the board read as dangerous.
+ */
+.week-swipe-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* The centring translate and the counter-drag offset have to be one
+     declaration, not two — a second inline `transform` from JS would
+     replace this rule's entirely rather than compose with it. --hint-x
+     carries the (negative of the) grid's own drag distance. */
+  transform: translate(calc(-50% + var(--hint-x, 0px)), -50%);
+  z-index: 5;
+
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--slat-face);
+  box-shadow: var(--raise-2);
+
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: var(--size-min);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Past the commit distance. The same contrast-flip SwipeAway uses to
+   confirm a release will land, under the finger before the decision. */
+.week-swipe-hint[data-armed='true'] {
+  background: var(--ink);
+  color: var(--slat-face);
+  border-color: var(--ink);
 }
 
 .day-row {

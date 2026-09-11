@@ -184,43 +184,6 @@
   color: var(--ink-faint);
 }
 
-/* Reads as money, and as the opposite number to the help button beside it.
-   Same 40px circle so the two sit as a pair rather than as a control and an
-   afterthought. */
-.price-button {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid var(--rule);
-  background: transparent;
-  color: var(--ink-soft);
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-weight: 500;
-  font-size: 21px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background var(--dur-state) var(--ease-standard),
-    color var(--dur-state) var(--ease-standard),
-    border-color var(--dur-state) var(--ease-standard);
-}
-
-.price-button:active {
-  background: var(--slat-face);
-  color: var(--ink);
-}
-
-/* On is the same fill the filter chips use for a chosen option — this is a
-   two-state control in a row of two-state controls, and inventing a second
-   visual language for "selected" three inches from the first one is how a
-   surface stops reading as one thing. */
-.price-button.is-on {
-  background: var(--person-a);
-  border-color: var(--person-a);
-  color: var(--person-ink);
-}
-
 /* ---------------------------------------------------------------- artwork */
 
 .recipe-art {
@@ -726,6 +689,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .book__card { transition: none; }
-  .price-button { transition: none; }
   .book__card:active { transform: none; }
 }

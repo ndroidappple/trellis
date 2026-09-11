@@ -87,3 +87,22 @@ export const SHOW_FILTERS = [
 export function minutesOf(r) {
   return r.total_minutes ?? r.cook_minutes ?? null
 }
+
+/**
+ * What the shelf does about price — one control, three states.
+ *
+ * Lives here with the other chip sets rather than in the component, because
+ * it is the same kind of thing: a labelled row of mutually exclusive options
+ * the book renders with `FilterRow`.
+ *
+ * Each chip names what you get rather than which switch you are flipping,
+ * and the three states exist because seeing a price and sorting by one are
+ * different questions. "Per serving" is for browsing normally while still
+ * knowing what things cost; "Cheapest first" is for the evening the budget
+ * is nearly gone.
+ */
+export const PRICE_OPTIONS = [
+  { id: 'off', label: 'Off' },
+  { id: 'serving', label: 'Per serving' },
+  { id: 'cheapest', label: 'Cheapest first' },
+]

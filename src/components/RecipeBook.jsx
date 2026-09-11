@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Sheet from './Sheet'
 import {
   EFFORT_FILTERS,
+  PRICE_OPTIONS,
   PROTEINS,
   SHOW_FILTERS,
   TIME_FILTERS,
@@ -130,29 +131,52 @@ function ingredientLine(ing) {
 /* ---------------------------------------------------------------- price */
 
 /**
- * Whether the shelf is showing prices, remembered across a close.
+ * What the shelf does about price — one control, three states.
  *
- * localStorage rather than the household row, for the same reason cook
- * progress is per-device: this is a fact about how someone is reading the
- * book right now, not a decision about the household. The wall being left in
- * price mode should not put prices in front of somebody picking a recipe on
- * their phone.
+ * This replaces a "$" button that sat in the search row beside the help "i".
+ * Two problems with that, and the second is the real one:
+ *
+ *   - It was filed with the wrong things. The "i" explains how to edit a
+ *     recipe; it is about the book as an artefact. Price is about the recipes
+ *     *in* the book, which is what every control in the filter block below is
+ *     about. Adjacency is a claim that two controls are related, and that one
+ *     was false.
+ *   - **It conflated seeing a price with sorting by one.** Turning prices on
+ *     also resorted the shelf, which is a lot to hide inside a currency glyph,
+ *     and left no way to browse alphabetically while still seeing what things
+ *     cost. Naming the three states makes the sort something you ask for.
+ *
+ * So it is now a labelled row of chips like Protein and Effort, reading
+ * "PRICE  [ Off ] [ Per serving ] [ Cheapest first ]" — where each chip names
+ * what you get rather than which switch you are flipping. The options live in
+ * lib/recipeFilters.js with the other chip sets.
+ *
+ * Remembered in localStorage rather than the household row, for the same
+ * reason cook progress is per-device: this is a fact about how someone is
+ * reading the book right now, not a decision about the household. The wall
+ * left in price mode should not put prices in front of somebody picking a
+ * recipe on their phone.
  */
 const PRICE_KEY = 'trellis.book-prices'
 
 function readPriceMode() {
   try {
-    return localStorage.getItem(PRICE_KEY) === 'on'
+    const saved = localStorage.getItem(PRICE_KEY)
+    // 'on' is what the button wrote before this was three states. It meant
+    // prices *and* the sort, so it becomes 'cheapest' rather than 'serving' —
+    // anyone who left it on gets back the shelf they left.
+    if (saved === 'on') return 'cheapest'
+    return PRICE_OPTIONS.some((o) => o.id === saved) ? saved : 'off'
   } catch {
     // Private mode or a cleared quota. Off is the old behaviour, and the old
     // behaviour worked.
-    return false
+    return 'off'
   }
 }
 
-function writePriceMode(on) {
+function writePriceMode(mode) {
   try {
-    localStorage.setItem(PRICE_KEY, on ? 'on' : 'off')
+    localStorage.setItem(PRICE_KEY, mode)
   } catch {
     /* see above */
   }
@@ -211,23 +235,6 @@ function byPrice(costOf) {
     }
     return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
   }
-}
-
-/** The toggle itself. A price is money, so the control is the currency sign. */
-function PriceButton({ on, onClick }) {
-  const label = on ? 'Hide prices per serving' : 'Show prices per serving'
-  return (
-    <button
-      type="button"
-      className={on ? 'price-button is-on' : 'price-button'}
-      aria-pressed={on}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-    >
-      $
-    </button>
-  )
 }
 
 /* ------------------------------------------------------------- the shelf */
@@ -313,7 +320,7 @@ export default function RecipeBook({
   const [q, setQ] = useState('')
   const [f, setF] = useState(NO_FILTERS)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [prices, setPrices] = useState(readPriceMode)
+  const [price, setPrice] = useState(readPriceMode)
 
   const set = (key) => (value) => setF((prev) => ({ ...prev, [key]: value }))
   const filtered = f.protein !== 'any' || f.time !== 'any' || f.effort !== 'any' || f.show !== 'all'
@@ -378,14 +385,17 @@ export default function RecipeBook({
     })
 
     /*
-     * Price mode reorders as well as annotates, and that is the point of it.
-     * The question being asked is "what is the cheapest thing I could cook
-     * tonight", and answering it with nineteen prices in alphabetical order
-     * leaves the reader doing the sort by eye. Alphabetical returns the
-     * moment prices go away.
+     * Only "Cheapest first" reorders. The question "what is the cheapest
+     * thing I could cook tonight" is not answered by nineteen prices in
+     * alphabetical order — it leaves the reader doing the sort by eye — but
+     * it is a different question from "what does this cost", and the shelf
+     * should not silently rearrange itself for someone who only asked the
+     * second one.
      */
-    return prices ? [...matches].sort(byPrice((r) => costIndex.get(r.id))) : matches
-  }, [recipes, q, f, proteinIndex, prices, costIndex])
+    return price === 'cheapest'
+      ? [...matches].sort(byPrice((r) => costIndex.get(r.id)))
+      : matches
+  }, [recipes, q, f, proteinIndex, price, costIndex])
 
   const countLabel = loading
     ? 'Loading…'
@@ -406,7 +416,7 @@ export default function RecipeBook({
    * a glitch.
    */
   const subtitle =
-    prices && !loading
+    price !== 'off' && !loading
       ? [
           budgetLeftCents == null
             ? null
@@ -416,17 +426,18 @@ export default function RecipeBook({
           // Its own segment rather than a clause, because "left week of
           // September 14 – 20" is not a sentence.
           budgetWeekLabel && `week of ${budgetWeekLabel}`,
-          'cheapest first',
+          // Said only when it is true. The chip already says "Cheapest first",
+          // so repeating it under every sort would be furniture; saying it
+          // when the shelf has just rearranged itself is information.
+          price === 'cheapest' ? 'cheapest first' : null,
         ]
           .filter(Boolean)
           .join(' · ')
       : countLabel
 
-  function togglePrices() {
-    setPrices((was) => {
-      writePriceMode(!was)
-      return !was
-    })
+  function setPriceMode(mode) {
+    writePriceMode(mode)
+    setPrice(mode)
   }
 
   return (
@@ -445,7 +456,6 @@ export default function RecipeBook({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <PriceButton on={prices} onClick={togglePrices} />
         <HelpButton onClick={() => setHelpOpen(true)} label="How do I add or edit a recipe?" />
       </div>
 
@@ -454,11 +464,16 @@ export default function RecipeBook({
         <FilterRow label="Time" options={TIME_FILTERS} value={f.time} onChange={set('time')} />
         <FilterRow label="Effort" options={EFFORT_FILTERS} value={f.effort} onChange={set('effort')} />
         <FilterRow label="Show" options={SHOW_FILTERS} value={f.show} onChange={set('show')} />
+        {/* Last, because it is the only row that changes what the cards *say*
+            rather than which cards are there — and because "Cheapest first"
+            reorders the grid, which is the largest thing any control here
+            does. It reads as the end of the sentence the other four start. */}
+        <FilterRow label="Price" options={PRICE_OPTIONS} value={price} onChange={setPriceMode} />
       </div>
 
       <div className="book__grid">
         {shown.map((r) => {
-          const price = prices ? priceLabel(costOf(r)) : null
+          const shownPrice = price === 'off' ? null : priceLabel(costOf(r))
           return (
             <button
               key={r.id}
@@ -472,18 +487,18 @@ export default function RecipeBook({
                   sentence of facts you read; this is a figure you compare
                   against the card beside it, and comparing is a great deal
                   harder when the number is the fourth clause of a line. */}
-              {price && (
+              {shownPrice && (
                 <span
                   className={
-                    price.known
-                      ? price.partial
+                    shownPrice.known
+                      ? shownPrice.partial
                         ? 'book__card-price is-partial'
                         : 'book__card-price'
                       : 'book__card-price is-unknown'
                   }
                 >
-                  <span className="book__card-figure">{price.figure}</span>
-                  <span className="book__card-per">{price.note}</span>
+                  <span className="book__card-figure">{shownPrice.figure}</span>
+                  <span className="book__card-per">{shownPrice.note}</span>
                 </span>
               )}
 

@@ -179,6 +179,8 @@ export function Board(props: Props) {
           dragging={props.dragging}
           dragOverDate={props.dragOverDate}
           onOpenDay={props.onOpenDay}
+          onPrevWeek={props.onPrevWeek}
+          onNextWeek={props.onNextWeek}
         />
       </div>
 

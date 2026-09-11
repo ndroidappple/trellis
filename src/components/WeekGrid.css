@@ -4,6 +4,13 @@
   flex-direction: column;
   gap: var(--gap-slat);
   min-height: 0;
+
+  /* Nothing in here scrolls, so there is no panning gesture to protect —
+     unlike SwipeAway's track, which cedes vertical panning with pan-y
+     because its list does scroll. Claiming the gesture outright here stops
+     iOS's own gesture recognizer treating a drag as a page rubber-band
+     before useSwipeWeek's pointer handlers see it. */
+  touch-action: none;
 }
 
 .day-row {

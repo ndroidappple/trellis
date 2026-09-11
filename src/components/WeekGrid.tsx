@@ -1,6 +1,7 @@
 import { EventChip, type EventChipData } from './EventChip';
 import { SkeletonChips } from './Skeleton';
 import { visibleChipCount, type DetailLevel } from '../hooks/useDetailLevel';
+import { useSwipeWeek } from '../hooks/useSwipeWeek';
 import type { Person } from './PersonBadge';
 import './WeekGrid.css';
 
@@ -50,6 +51,9 @@ interface Props {
   dragging?: boolean;
   /** The row currently under the pointer. */
   dragOverDate?: string | null;
+  /** Wired to a swipe across the grid — left for next week, right for previous. */
+  onPrevWeek?: () => void;
+  onNextWeek?: () => void;
 }
 
 function DayRow({ day, level, loading, initialsFor, onEventPress, onEventLongPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOver }: {
@@ -178,9 +182,19 @@ function DayRow({ day, level, loading, initialsFor, onEventPress, onEventLongPre
   );
 }
 
-export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onEventLongPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOverDate }: Props) {
+export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onEventLongPress, onAddDay, onAddMeal, onOpenDay, dragging, dragOverDate, onPrevWeek, onNextWeek }: Props) {
+  const { dragX, settling, opacity, handlers } = useSwipeWeek({ onPrevWeek, onNextWeek });
+
   return (
-    <div className="week-grid">
+    <div
+      className="week-grid"
+      style={{
+        transform: `translateX(${dragX}px)`,
+        transition: settling ? 'transform var(--dur-move) var(--ease-standard)' : 'none',
+        opacity,
+      }}
+      {...handlers}
+    >
       {days.map((day) => (
         <DayRow
           key={day.date}

@@ -45,9 +45,11 @@
    * animation had been quietly dark all along. */
   --ground: #14150F;
   --line: rgba(230, 236, 220, 0.10);
-  --stem: rgba(126, 176, 148, 0.42);
-  --foliage: rgba(126, 176, 148, 0.28);
-  --clock: rgba(230, 236, 220, 0.34);
+  --stem: rgba(126, 176, 148, 0.46);
+  --stem-tip: rgba(126, 176, 148, 0.24);
+  --foliage: rgba(139, 184, 150, 0.34);
+  --foliage-deep: rgba(96, 148, 124, 0.20);
+  --clock: rgba(233, 238, 224, 0.55);
 
   overflow: hidden;
   cursor: none;
@@ -134,11 +136,25 @@ html[data-saver='night'] body { background: #0B0C08; }
   left: 50%;
   animation: saver-clock 397s ease-in-out infinite;
 
+  /*
+   * A hairline of separation, and nothing more.
+   *
+   * Any ground-coloured halo wide enough to *hide* a vine also hides the
+   * lattice, and a lattice-free patch is a visible rectangle — the same
+   * defect as the radial wash this replaced, at a smaller size. Widening the
+   * falloff made it worse, not better: four overlapping shadows around
+   * adjacent glyphs merge into one boxy blob.
+   *
+   * So the glyphs win on contrast instead. `--clock` is now brighter than
+   * `--stem`, which it was not before — a 34% white numeral behind a 46%
+   * green stem loses, and no amount of shadow fixes the wrong thing being
+   * brighter. The shadow is then only asked to hold a 3px edge where a vine
+   * actually crosses a stroke, which is small enough to erase nothing.
+   */
   text-shadow:
-    0 0 9px var(--ground),
-    0 0 9px var(--ground),
-    0 0 20px var(--ground),
-    0 0 20px var(--ground);
+    0 0 3px var(--ground),
+    0 0 3px var(--ground),
+    0 0 7px var(--ground);
 
   font-family: var(--font-display);
   font-optical-sizing: auto;
@@ -179,7 +195,6 @@ html[data-saver='night'] body { background: #0B0C08; }
 .saver__lattice path {
   fill: none;
   stroke: var(--line);
-  stroke-width: 0.7;
   stroke-dasharray: 900;
   stroke-dashoffset: 900;
   animation: saver-draw var(--cycle) ease-in-out infinite;
@@ -187,31 +202,75 @@ html[data-saver='night'] body { background: #0B0C08; }
   animation-delay: calc(var(--i) * -1.7s);
 }
 
+/* Two directions at two weights. Not a true weave — that would need the
+   over/under to alternate at every crossing — but it is what a weave reads as
+   from across a room: one set of slats sitting behind the other. Uniform
+   lines at uniform spacing read as graph paper; this reads as timber. */
+.saver__lattice--back path  { stroke-width: 0.55; }
+.saver__lattice--front path { stroke-width: 0.85; }
+
 /* --- the vines --------------------------------------------------------- */
 
-/* One property does all the work: the dash gap is the length of the path, so
-   winding the offset from `len` to 0 walks a growing tip up the curve. The
-   browser composites it, so a four-minute climb costs nothing per frame. */
-.saver__vine {
-  fill: none;
-  stroke: var(--stem);
-  stroke-width: 1.3;
-  stroke-linecap: round;
-  stroke-dasharray: var(--len);
-  stroke-dashoffset: var(--len);
+/*
+ * The growth is a clip, and the clip is on the *plant* — stem and its own
+ * leaves inside one group.
+ *
+ * It was `stroke-dashoffset` on a stroked path, which is elegant and cost
+ * nothing, and it ruled out the one thing that most separates a stem from a
+ * wire: a stroke is a single width for its whole length. The vines are filled
+ * outlines now, heavy at the soil and fine at the tip, which no stroke can be.
+ *
+ * `inset(100% 0 0 0)` is a zero-height window at the bottom of the element's
+ * box; winding the top inset to 0 grows that window upward. So the reveal is
+ * a line rising through the plant, which is what growth looks like, and it
+ * takes the foliage with it — a leaf cannot precede its own stem because they
+ * are clipped by the same edge.
+ *
+ * If a browser does not support it the declaration is dropped and the plant
+ * renders whole and unanimated, which is a scene that has stopped growing
+ * rather than a scene that is missing.
+ */
+.saver__plant {
+  clip-path: inset(100% 0 0 0);
+  -webkit-clip-path: inset(100% 0 0 0);
   animation: saver-climb var(--cycle) cubic-bezier(0.35, 0, 0.45, 1) infinite;
   animation-delay: calc(var(--i) * -9s);
 }
 
+/* Filled, not stroked — see above. The gradient runs root to tip: a stem
+   catches more light where it is thick and low, and fading the tip is also
+   what keeps the finest part of the taper from aliasing into a dotted line at
+   wall scale. */
+.saver__vine {
+  fill: url(#saver-stem);
+  stroke: none;
+}
+
 @keyframes saver-climb {
-  0%   { stroke-dashoffset: var(--len); opacity: 0; }
-  6%   { opacity: 1; }
+  0% {
+    clip-path: inset(100% 0 0 0);
+    -webkit-clip-path: inset(100% 0 0 0);
+    opacity: 0;
+  }
+  6% { opacity: 1; }
   /* Grown by ~72% of the cycle, then a long hold and a long retreat. The
      retreat matters as much as the growth: nothing may still be lit when the
      next cycle starts drawing over it. */
-  72%  { stroke-dashoffset: 0; opacity: 1; }
-  86%  { stroke-dashoffset: 0; opacity: 1; }
-  100% { stroke-dashoffset: 0; opacity: 0; }
+  72% {
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  86% {
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    -webkit-clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
 }
 
 @keyframes saver-draw {
@@ -224,55 +283,29 @@ html[data-saver='night'] body { background: #0B0C08; }
 
 /* --- the leaves -------------------------------------------------------- */
 
-/* Each opens just behind where its vine's tip will be, which is what --at
-   encodes: the fraction of the cycle by which the stem has passed it. */
 /*
- * No `transform-box` / `transform-origin` here, and their absence is
- * load-bearing.
+ * No animation at all on a leaf any more, and that is the point.
  *
- * They used to be set to `fill-box` / `center`, which reads as harmless
- * tidiness and was the reason the leaves never sat on the vines. The rotation
- * is applied as `rotate(deg cx cy)` — the SVG form that carries its own centre
- * — so a CSS transform-origin composes a *second* origin onto it: the element
- * ends up rotated about (2cx, 2cy) instead of (cx, cy), which is not a
- * rotation at all but a large translation. One leaf computed for (50, 591) was
- * rendering at (-235, 693), most of a screen away from its stem.
+ * Each one used to carry its own delay, computed from where its stem's tip
+ * would be — through the climb easing, in path length rather than curve
+ * parameter, offset by its vine's stagger. Three separate bugs lived in that
+ * arithmetic. The clip on `.saver__plant` now reveals the leaf at the exact
+ * moment it reveals the stem beneath it, so the arithmetic is gone rather than
+ * corrected, and seventy-eight animations went with it.
  *
- * The pair was never needed: `saver-leaf` animates opacity and nothing else.
+ * It reads better too: the clip edge crosses each leaf rather than switching
+ * it on, so it unrolls from its base as the line passes.
  */
 .saver__leaf {
-  fill: var(--foliage);
-  opacity: 0;
-  animation: saver-leaf var(--cycle) ease-out infinite;
-  /* `--vi`, not the leaf's own index. The stems are staggered against each
-     other by -9s apiece, and a leaf timed without that stagger opens at a
-     moment its own stem has not yet reached — for the last vine, 45 seconds
-     early. It looked exactly like what it was: foliage with no branch. */
-  animation-delay: calc(var(--vi) * -9s + var(--at) * var(--cycle));
+  fill: url(#saver-leaf);
 }
 
-/*
- * Opens six points of the cycle after its stem passes, and — the part that
- * matters — is gone again before the cycle wraps.
- *
- * The window used to run to 55%, and a leaf's clock is shifted forward by
- * `--at`, which reaches 0.60 for the highest ones. 0.60 + 0.55 is past the
- * end: those leaves were still fading out fifteen points into the *next*
- * cycle, over a stem that had just reset to nothing and grown only a fifth of
- * the way back up. Thirty-seven seconds of every cycle had leaves hanging in
- * clear air near the top of the screen.
- *
- * 38% is the most that fits: the highest leaf opens at 0.60 and must be gone
- * by 1.0. Leaves therefore come and go while the stem persists, which is also
- * the better read — the lower ones recede as the plant climbs past them.
- */
-@keyframes saver-leaf {
-  0%   { opacity: 0; }
-  6%   { opacity: 1; }
-  28%  { opacity: 1; }
-  38%  { opacity: 0; }
-  100% { opacity: 0; }
-}
+/* --- gradient stops ---------------------------------------------------- */
+
+.saver__stop--stem-root { stop-color: var(--stem); }
+.saver__stop--stem-tip  { stop-color: var(--stem-tip); }
+.saver__stop--leaf-lit  { stop-color: var(--foliage); }
+.saver__stop--leaf-deep { stop-color: var(--foliage-deep); }
 
 /* --- night ------------------------------------------------------------- *
  *
@@ -286,10 +319,12 @@ html[data-saver='night'] body { background: #0B0C08; }
   --drift: 662s;
   --ground: #0B0C08;
   --line: rgba(230, 236, 220, 0.07);
-  --stem: rgba(126, 176, 148, 0.26);
-  --foliage: rgba(126, 176, 148, 0.16);
+  --stem: rgba(126, 176, 148, 0.28);
+  --stem-tip: rgba(126, 176, 148, 0.14);
+  --foliage: rgba(139, 184, 150, 0.19);
+  --foliage-deep: rgba(96, 148, 124, 0.11);
   /* Readable from a bed at 3am without being the thing that woke you. */
-  --clock: rgba(230, 236, 220, 0.20);
+  --clock: rgba(233, 238, 224, 0.30);
 }
 
 /* --- paused ------------------------------------------------------------ *
@@ -299,10 +334,14 @@ html[data-saver='night'] body { background: #0B0C08; }
  * day on a device that must stay cool across a multi-week uptime. Pausing also
  * makes the return seamless: the timeline resumes where it stopped rather than
  * snapping to wherever it would have got to. */
+/* `.saver__plant`, not `.saver__vine` — the growth animation moved onto the
+   group when the reveal became a clip, and a pause list naming the old
+   elements would silently stop pausing the thing it exists to pause. Leaves
+   carry no animation at all now, so they are not listed. */
 .saver[data-paused='true'] .saver__grow,
 .saver[data-paused='true'] .saver__lattice path,
-.saver[data-paused='true'] .saver__vine,
-.saver[data-paused='true'] .saver__leaf {
+.saver[data-paused='true'] .saver__plant,
+.saver[data-paused='true'] .saver__clock {
   animation-play-state: paused;
 }
 

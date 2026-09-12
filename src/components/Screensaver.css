@@ -176,7 +176,14 @@ html[data-saver='night'] body { background: #0B0C08; }
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 300;
-  font-size: clamp(64px, 13vmin, 156px);
+  /* Raised from clamp(64px, 13vmin, 156px) — legible across a room mattered
+     more than restraint here, this being the thing the wall shows for most
+     of its life. 18vmin resolves to ~184px on the actual 1024×1366 wall
+     iPad — by arithmetic, not yet seen rendered. Worth a look on the actual
+     wall: drift plus a wider glyph string ("12:45 PM" in tabular Fraunces)
+     is exactly the kind of combination that can clip quietly at the screen
+     edge without anything on a desktop browser catching it. */
+  font-size: clamp(72px, 18vmin, 210px);
   line-height: 1;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;

@@ -34,17 +34,19 @@ export function weightedRowsFor(days: { isToday: boolean; isPast?: boolean }[]):
 }
 
 /**
- * Row floors, in sync with WeekGrid.css. A past row's floor is `--tap-min`
- * (52px) rather than the ordinary 84px — the same value the row's own tap
- * target already has to clear, not a separately-tuned number. This is what
- * makes several past days actually free real height rather than only
- * reweighting growth that, on a real iPad with the dock already claiming
- * most of the slack, turned out to be a few pixels per row: see the
- * incident this was built to fix, recorded in the feature backlog.
+ * Row floors, in sync with WeekGrid.css. A past row's floor is 44px —
+ * deliberately below this app's own --tap-min (52px, tuned for an isolated
+ * button) and pinned instead to Apple's HIG minimum tap target, since a
+ * mis-tap on a run of day rows still opens *a* day rather than hitting
+ * nothing. This is what makes several past days actually free real height
+ * rather than only reweighting growth that, on a real iPad with the dock
+ * already claiming most of the slack, turned out to be a few pixels per
+ * row: see the incident this was built to fix, recorded in the feature
+ * backlog.
  */
 const ORDINARY_ROW_MIN_HEIGHT = 84;
 const TODAY_ROW_MIN_HEIGHT = 190;
-export const PAST_ROW_MIN_HEIGHT = 52;
+export const PAST_ROW_MIN_HEIGHT = 44;
 const GAP_PX = 7;
 
 /**

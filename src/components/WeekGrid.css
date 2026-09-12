@@ -116,15 +116,24 @@
  * no longer has to do the entire job on its own. */
 .day-row--past {
   flex: 0.4 1 0;
-  min-height: var(--tap-min);
-  padding-top: 6px;
-  padding-bottom: 6px;
+  /* Deliberately below this app's own --tap-min (52px, tuned for an
+     isolated button). 44px is Apple's own HIG minimum tap target, and a
+     mis-tap on a continuous run of day rows still opens *a* day rather
+     than doing nothing, which is a more forgiving failure than a button
+     that silently eats a touch. */
+  min-height: 44px;
+  padding-top: 2px;
+  padding-bottom: 2px;
   background: var(--past-face);
   border-left-color: var(--past-rule);
 }
 
 .day-row--past .day-row__rail {
   align-items: center;
+  /* The base rail carries a 4px top inset tuned for the ordinary row's
+     extra headroom; centred in a 44px row that inset just pushes the
+     numeral off-centre instead of doing anything useful. */
+  padding-top: 0;
 }
 
 .day-row--past .day-row__dom,

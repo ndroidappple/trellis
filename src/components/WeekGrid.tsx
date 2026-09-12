@@ -217,23 +217,24 @@ export function WeekGrid({ days, level, loading, initialsFor, onEventPress, onEv
       }}
       {...handlers}
     >
-      {/* Confirms which way the swipe will land before release does it,
-          the same "Release to…" idiom SwipeAway uses for delete — and
-          counter-translated so it holds its place on screen while the grid
-          underneath it is the thing actually moving. */}
-      {direction && (
+      {/* Only appears once the drag has actually armed — the same "Release
+          to…" idiom SwipeAway uses for delete, and counter-translated so it
+          holds its place on screen while the grid underneath it is the
+          thing actually moving. Nothing shows before that: a "Next week" /
+          "Previous week" label used to appear the moment the drag engaged,
+          which meant reading two different messages in one gesture for no
+          reason — the only one that matters is the one confirming what a
+          release will actually do. */}
+      {direction && armed && (
         <div
           className="week-swipe-hint"
-          data-armed={armed}
           style={{
             '--hint-x': `${-dragX}px`,
             transition: settling ? 'transform var(--dur-move) var(--ease-standard)' : 'none',
           } as CSSProperties}
           aria-hidden="true"
         >
-          {direction === 'next'
-            ? (armed ? 'Release for next week' : 'Next week')
-            : (armed ? 'Release for previous week' : 'Previous week')}
+          {direction === 'next' ? 'Release for next week' : 'Release for previous week'}
         </div>
       )}
       {days.map((day) => (

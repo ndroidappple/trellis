@@ -1,16 +1,28 @@
 import { useCallback, useRef, useState } from 'react'
 
-/** How far the grid must be dragged, on release, to commit a week change. */
-const COMMIT_PX = 80
+/**
+ * How far the grid must be dragged, on release, to commit a week change.
+ *
+ * 80px committed too easily: a normal flick crosses it before the "Release
+ * for…" hint has even had a chance to become legible, so people were landing
+ * on a different week before they'd consciously decided to. This is a bigger
+ * number than SwipeAway's COMMIT_PX (96px) on purpose — that gesture commits
+ * a reversible action with a nine-second undo behind it; this one re-anchors
+ * the whole board, with nothing to undo it back to where you were, so it
+ * should ask for a more deliberate drag, not a lighter one.
+ */
+const COMMIT_PX = 160
 
 /**
  * The furthest the grid visually follows the finger. Travel past this is
  * still tracked (so releasing well beyond it still commits), it just stops
  * moving anything — the same hard-clamp shape as SwipeAway's MAX_REVEAL,
  * for the same reason: a drag that kept dragging forever would look like the
- * board coming loose rather than a page being turned.
+ * board coming loose rather than a page being turned. Kept 80px above
+ * COMMIT_PX, same margin as before, so there's still room to keep dragging
+ * — and see the "Release for…" hint hold steady — after it arms.
  */
-const MAX_DRAG_PX = 160
+const MAX_DRAG_PX = 240
 
 /**
  * Same engagement test as SwipeAway, and deliberately the same numbers: a

@@ -1,9 +1,15 @@
-/* Holds the board to exactly one screen. The board itself is still 100dvh —
-   the banner overlays rather than stacking (see .banner in App.css), so this
+/* Holds the board to exactly one screen. --app-height (set by
+   useVisualViewportHeight from window.visualViewport) wins once JS has run —
+   100dvh is the pre-JS/no-visualViewport fallback, not the real answer, on a
+   Home Screen web app where dvh has not reliably tracked the keyboard's
+   effect on the visible area. See that hook for the failure this replaces:
+   the board staying full height and scrolled a keyboard's-height too high.
+   The banner overlays rather than stacking (see .banner in App.css), so this
    never has more than one screen of content to contain. */
 .board-wrapper {
   height: 100vh;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
 }
@@ -11,6 +17,7 @@
 .board {
   height: 100vh;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
   background: var(--plaster);
   color: var(--ink);
   font-family: var(--font-text);

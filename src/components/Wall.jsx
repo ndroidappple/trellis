@@ -30,6 +30,7 @@ import {
 } from '../lib/chores'
 import { useChoreDrag } from '../hooks/useChoreDrag'
 import { useToday } from '../hooks/useToday'
+import { useVisualViewportHeight } from '../hooks/useVisualViewportHeight'
 import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
 import Sheet from './Sheet'
@@ -209,6 +210,7 @@ const RECIPE_BOOK_QUERY = `
  */
 export default function Wall({ profile, people }) {
   const today = useToday()
+  useVisualViewportHeight()
   const [anchor, setAnchor] = useState(() => startOfWeek(today))
   const [lastSync, setLastSync] = useState(null)
   const [events, setEvents] = useState([])

@@ -790,9 +790,10 @@ function EditHelp({ onClose }) {
  * correction wants a target you can hit without aiming rather than the biggest
  * one on screen.
  *
- * 30% of a 12.9" iPad in portrait is about 300pt: far above anything anyone
- * misses, and comfortably clear of the middle, where a tap meant for "next"
- * would otherwise have to be placed with care. Below about a quarter the zone
+ * 30% of an 11" iPad in portrait is about 250pt (300pt on the old 12.9"):
+ * still far above anything anyone misses, and comfortably clear of the
+ * middle, where a tap meant for "next" would otherwise have to be placed
+ * with care. Below about a quarter the zone
  * starts to need looking at, which defeats the point of the mode; much above a
  * third and the forward tap — the one made twenty times a recipe — starts
  * feeling hemmed in.

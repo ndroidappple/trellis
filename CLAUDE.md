@@ -1,9 +1,12 @@
 # Trellis (wall-planner)
 
-A shared household wall calendar for two people (Nick + Ed), meant to run
-full-screen on an iPad mounted on a wall — plus each person's phone for
-quick checks. Vite + React (JS, with a few TypeScript files in the design
-system) + Supabase (Postgres, auth, realtime).
+A shared household calendar for two people (Nick + Ed), meant to run
+full-screen on an 11" iPad Pro on a magnetic counter dock beside the Sonos
+speaker — plus each person's phone for quick checks. Not wall-mounted: it was
+originally designed for a wall-mounted 12.9" iPad, fixed in portrait, and
+Feature #17 re-targeted it to the smaller counter iPad in either orientation,
+detected automatically (`useOrientation`). Vite + React (JS, with a few
+TypeScript files in the design system) + Supabase (Postgres, auth, realtime).
 
 Repo: `github.com/ndroidappple/trellis`, local checkout at
 `~/Documents/wall-planner`.
@@ -225,10 +228,14 @@ reskin — `Wall.jsx` was rebuilt to feed real data into the new components.
   chores rather than assigning them, which is what `rotates` is for (below).
   On a done chore the badge now shows who actually *did* it, from the
   completion log, rather than who it was assigned to.
-- **Landscape iPad orientation** — row/panel minimum heights (see below)
-  are tuned for portrait (1024×1366pt, the "12.9" iPad in portrait" this
-  was built for per the original design comments). In landscape the dock
-  panels will get tight or clipped. Not addressed yet.
+- **Landscape iPad orientation** — addressed in Feature #17. Row/panel
+  minimum heights (see below) were tuned only for portrait on the original
+  12.9" wall iPad; landscape on the 11" counter dock is 834pt of height, less
+  than either device ever had in portrait, so the dock now sits beside the
+  week (`.board__body` in Board.css) rather than under it when
+  `useOrientation` reports landscape — each gets its own full-height column
+  instead of negotiating a split of one shared column. First-guess numbers
+  throughout, not yet checked on the actual dock — see the open item below.
 
 **Settings:** `Menu → Settings`, or long-press the board (~650ms). Also holds
 **Sleep now**, which drops straight into the ambient scene without waiting out
@@ -1045,7 +1052,15 @@ link. Settled the hard way; the constraints below are all load-bearing.
 - Decide whether to bring back a to-do list UI, and if so, where — no
   design surface currently exists for a third dock section, and
   `SectionDock` hardcodes two children.
-- Landscape orientation isn't tuned.
+- **Feature #17 (11" counter dock, dual orientation) has never been seen on
+  actual hardware** — same category as the screensaver's own unresolved
+  item below. Everything in it is reasoned from the code's declared
+  constants (chip min-heights, tap targets, `weekFloorFor`), not measured on
+  a screen. The tightest known case: a landscape week where nothing has
+  gone "past" yet (Sunday) is computed to fit the new dock-beside-week
+  layout by roughly 6px — closer to a rounding error than a margin. Check
+  that day/orientation combination first. `maxFlourishesFor`'s 2-vs-3 split
+  and the 380px dock sidebar width are also first-guess, unverified numbers.
 - Broader "personality" pass was requested (typography done — real
   Fraunces/Figtree now installed — but color/texture/voice was only
   brainstormed, not decided or implemented).

@@ -123,9 +123,10 @@ export default function Screensaver({ night, onWake }) {
     >
       {/*
         One SVG, scaled to cover. `preserveAspectRatio="xMidYMid slice"` is what
-        lets a fixed 400×600 coordinate system fill a 1024×1366 wall without the
-        lattice going oval — the drawing is designed once and cropped, rather
-        than stretched to whatever shape the screen is.
+        lets a fixed 400×600 coordinate system fill the 834×1194 counter dock
+        (or 1194×834 turned sideways — `slice` doesn't care, it crops to
+        whatever shape the screen is) without the lattice going oval — the
+        drawing is designed once and cropped, rather than stretched.
       */}
       <svg
         className="saver__scene"

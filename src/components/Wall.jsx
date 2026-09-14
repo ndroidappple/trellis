@@ -31,6 +31,7 @@ import {
 import { useChoreDrag } from '../hooks/useChoreDrag'
 import { useToday } from '../hooks/useToday'
 import { useVisualViewportHeight } from '../hooks/useVisualViewportHeight'
+import { useOrientation } from '../hooks/useOrientation'
 import { combineStatus, useRealtimeTable } from '../hooks/useRealtimeTable'
 import { Board } from './Board'
 import Sheet from './Sheet'
@@ -121,18 +122,19 @@ const FLOURISHES = [
 ]
 
 /**
- * Three, and the number is measured rather than picked.
+ * How many asides fit depends on how wide the header actually is, which now
+ * varies by orientation on the 11" iPad rather than being one fixed number:
+ * portrait (834pt) is narrower than the 1024pt this was originally measured
+ * against, landscape (1194pt) is wider. `maxFlourishesFor` below is the
+ * orientation-aware version of what used to be a single constant.
  *
- * The heading shares the header row with the sync state and the week
- * arrows, so it gets roughly two thirds of the board's width. The range
- * label takes about half of that on its own. Three short asides plus their
- * separators fit what is left on a 12.9" iPad in portrait; four do not.
- *
- * The header wraps rather than clips if this is ever wrong (see
+ * The header wraps rather than clips if either guess is wrong (see
  * .board__sub), so the failure mode is a slightly taller header, not the
  * silent amputation this layout is prone to.
  */
-const MAX_FLOURISHES = 3
+function maxFlourishesFor(orientation) {
+  return orientation === 'landscape' ? 3 : 2
+}
 
 /**
  * How many chore titles the palette remembers. Eight is about what fits in
@@ -149,14 +151,14 @@ const COMMON_CHORE_LIMIT = 8
  * header aside on upgrade would be a puzzling little regression. Unknown
  * ids are dropped rather than rendered as blanks.
  */
-function toFlourishIds(value) {
+function toFlourishIds(value, max = maxFlourishesFor('portrait')) {
   const known = (id) => FLOURISHES.some((f) => f.id === id)
   const chosen = Array.isArray(value) ? value : value == null || value === 'off' ? [] : [value]
   // Canonical order, not tap order: the header should not reshuffle itself
   // because of the sequence someone happened to tick the chips in.
   return FLOURISHES.filter((f) => chosen.includes(f.id) && known(f.id))
     .map((f) => f.id)
-    .slice(0, MAX_FLOURISHES)
+    .slice(0, max)
 }
 
 const MEAL_PLAN_QUERY = `
@@ -211,6 +213,8 @@ const RECIPE_BOOK_QUERY = `
 export default function Wall({ profile, people }) {
   const today = useToday()
   useVisualViewportHeight()
+  const orientation = useOrientation()
+  const maxFlourishes = maxFlourishesFor(orientation)
   const [anchor, setAnchor] = useState(() => startOfWeek(today))
   const [lastSync, setLastSync] = useState(null)
   const [events, setEvents] = useState([])
@@ -1522,7 +1526,10 @@ export default function Wall({ profile, people }) {
     day: 'numeric',
   })
 
-  const flourishIds = useMemo(() => toFlourishIds(settings.flourish), [settings.flourish])
+  const flourishIds = useMemo(
+    () => toFlourishIds(settings.flourish, maxFlourishes),
+    [settings.flourish, maxFlourishes]
+  )
 
   // One aside can spell itself out; several have to share the row, so they
   // switch to their short forms. Derived from `today` so these re-render at
@@ -1551,9 +1558,9 @@ export default function Wall({ profile, people }) {
 
   function toggleFlourish(id) {
     const on = flourishIds.includes(id)
-    if (!on && flourishIds.length >= MAX_FLOURISHES) return
+    if (!on && flourishIds.length >= maxFlourishes) return
     const next = on ? flourishIds.filter((x) => x !== id) : [...flourishIds, id]
-    updateSetting('flourish', toFlourishIds(next))
+    updateSetting('flourish', toFlourishIds(next, maxFlourishes))
   }
 
   function handleEventPress(id) {
@@ -2829,8 +2836,10 @@ function SettingsPanel({
   onToggleFlourish,
   onClose,
 }) {
-  const chosen = toFlourishIds(settings.flourish)
-  const atMax = chosen.length >= MAX_FLOURISHES
+  const orientation = useOrientation()
+  const maxFlourishes = maxFlourishesFor(orientation)
+  const chosen = toFlourishIds(settings.flourish, maxFlourishes)
+  const atMax = chosen.length >= maxFlourishes
 
   const householdMin = settings.screensaverMin ?? DEFAULT_TIMEOUT_MIN
   const effectiveMin = deviceTimeout ?? householdMin
@@ -2885,8 +2894,8 @@ function SettingsPanel({
 
         <p className="settings-row__hint">
           {atMax
-            ? `Showing ${MAX_FLOURISHES} — untick one to swap it out. Together they use their short forms.`
-            : `Pick up to ${MAX_FLOURISHES}. Two or more switch to short forms so the header still fits.`}
+            ? `Showing ${maxFlourishes} — untick one to swap it out. Together they use their short forms.`
+            : `Pick up to ${maxFlourishes}. Two or more switch to short forms so the header still fits.`}
         </p>
 
         {/*

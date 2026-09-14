@@ -178,8 +178,11 @@ html[data-saver='night'] body { background: #0B0C08; }
   font-weight: 300;
   /* Raised from clamp(64px, 13vmin, 156px) — legible across a room mattered
      more than restraint here, this being the thing the wall shows for most
-     of its life. 18vmin resolves to ~184px on the actual 1024×1366 wall
-     iPad, which by rough character-width arithmetic still leaves real
+     of its life. 18vmin resolves to ~184px on the old 1024×1366 wall iPad;
+     on the 11" counter dock (834×1194 portrait, 1194×834 landscape) vmin is
+     834 either way it sits, so this now resolves to ~150px in both
+     orientations — the same number, which is a nice accident of vmin using
+     whichever axis is shorter. Character-width arithmetic still leaves real
      margin either side even under the ±1.7vmin drift. That arithmetic isn't
      a guarantee, though — a locale with a longer AM/PM marker, or this page
      open in a wider browser window where the 210px ceiling actually applies,

@@ -43,9 +43,18 @@ export function weightedRowsFor(days: { isToday: boolean; isPast?: boolean }[]):
  * already claiming most of the slack, turned out to be a few pixels per
  * row: see the incident this was built to fix, recorded in the feature
  * backlog.
+ *
+ * ORDINARY_ROW_MIN_HEIGHT and PAST_ROW_MIN_HEIGHT did not move for the 11"
+ * retune, on purpose — both are anchored to a touch target (an event chip's
+ * own 56px min-height, Apple's 44px HIG minimum) rather than to reading
+ * distance, and fingers didn't get smaller when the screen did.
+ * TODAY_ROW_MIN_HEIGHT did move: it's sized to the date rail, not a chip,
+ * and the rail's numeral shrank from 78px to 60px (tokens.css
+ * --size-dom-today-open) because that size existed only for wall-distance
+ * legibility. Keep this in sync with .day-row--today in WeekGrid.css.
  */
 const ORDINARY_ROW_MIN_HEIGHT = 84;
-const TODAY_ROW_MIN_HEIGHT = 190;
+const TODAY_ROW_MIN_HEIGHT = 150;
 export const PAST_ROW_MIN_HEIGHT = 44;
 const GAP_PX = 7;
 

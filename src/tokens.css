@@ -135,29 +135,41 @@
   --font-display: 'Fraunces Variable', Fraunces, Georgia, serif;
   --font-text: Figtree, system-ui, sans-serif;
 
-  /* Wall sizes. These assume a 12.9" iPad in portrait, read from across a
-   * kitchen. Nothing here should shrink without testing at that distance. */
-  --size-event: 23px;
-  --size-event-mid: 24px;
-  --size-event-open: 26px;
-  --size-meta: 17px;
-  --size-detail: 16px;
-  --size-dom: 30px;
-  --size-dom-today: 62px;
-  --size-dom-today-open: 78px;
-  --size-panel-title: 26px;
-  --size-row: 22px;
+  /* Counter sizes. These assumed a 12.9" iPad wall-mounted and read from
+   * across a kitchen; the iPad is now 11" on a magnetic counter dock next to
+   * the Sonos, which is both a smaller panel and a closer read — nobody
+   * glances at it from across the room anymore. So this isn't a proportional
+   * shrink to the new screen width, it's a real reduction: roughly 12-23%
+   * off each size, more on the numerals that existed solely for three-metre
+   * legibility (--size-dom-today, --size-dom-today-open). First-guess
+   * numbers, like everything else sized before the actual hardware existed
+   * to check against — verify once this is visible on the actual dock. */
+  --size-event: 20px;
+  --size-event-mid: 21px;
+  --size-event-open: 22px;
+  --size-meta: 15px;
+  --size-detail: 14px;
+  --size-dom: 26px;
+  --size-dom-today: 50px;
+  --size-dom-today-open: 60px;
+  --size-panel-title: 23px;
+  --size-row: 19px;
 
-  /* Type floor. Everything on this board is read standing at arm's length
-   * from a wall-mounted iPad, not leaning into a laptop — 13-15px type that
-   * looks like tasteful fine print on a desk is genuinely hard to see there.
-   * 17px is the minimum for anything carrying meaning; controls want 18px+.
-   * Below it only: the crash-screen stack trace, and initials inside a
-   * person badge where colour and position already carry the meaning.
+  /* Type floor. Lower than it was for the same reason as the sizes above —
+   * this is now read at counter distance, not across a kitchen — but still a
+   * floor and not a suggestion: below it, type starts to disappear rather
+   * than just reading smaller. 15px is the minimum for anything carrying
+   * meaning; controls want 16px+. Below it only: the crash-screen stack
+   * trace, and initials inside a person badge where colour and position
+   * already carry the meaning.
    */
-  --size-min: 17px;
+  --size-min: 15px;
 
-  /* --- geometry --- */
+  /* --- geometry ---
+   * --tap-min deliberately did NOT shrink along with the sizes above. It is
+   * sized to a fingertip, not to a reading distance, and fingers are the
+   * same size on the 11" counter dock as they were on the 12.9" wall mount —
+   * the case for shrinking type doesn't apply to it. */
   --tap-min: 52px;         /* nothing tappable goes below this */
   --badge: 30px;
   --gap-slat: 7px;

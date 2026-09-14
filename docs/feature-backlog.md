@@ -2938,6 +2938,142 @@ is already closest to phone-native.
 
 ---
 
+# Feature #17 — Move to an 11" iPad on a counter dock, both orientations
+
+**Priority:** High — the hardware this maps to is what the household is
+actually about to use.
+**Category:** Platform / Surfaces
+**Status:** First pass implemented, unverified on real hardware.
+**Depends On:** Nothing structural. Overlaps Feature #16 (Trellis on an
+iPhone) in that both had to introduce width/orientation-aware layout where
+none existed before — that groundwork (the `useOrientation` hook, the habit
+of qualifying rules on a data attribute rather than a bare `@media`) is now
+shared infrastructure, not something #16 has to invent separately.
+**Primary Goal:** Re-target the board from a wall-mounted 12.9" iPad fixed in
+portrait to an 11" iPad Pro on a magnetic counter dock next to the Sonos
+speaker, working correctly in whichever orientation it's actually sitting in.
+
+## 1. What changed, physically
+
+Nick and Ed decided against wall-mounting. The iPad instead sits on a
+magnetic dock on the counter, and it's Nick's 11" iPad Pro rather than Ed's
+12.9" — smaller, and read from counter distance rather than across the
+kitchen. Because a countertop dock isn't fixed the way a wall mount is, the
+iPad can sit in either orientation, and the household wants both to work
+with the correct one detected automatically rather than picked once and
+left.
+
+11" iPad Pro logical points: 834×1194 portrait, 1194×834 landscape (2x
+scale). The 12.9" this was built for: 1024×1366 portrait. Portrait on the
+new device is ~19% narrower; landscape is shorter than either device has
+ever been in portrait.
+
+## 2. What was actually wrong in the code
+
+- **Nothing detected orientation at all.** No `matchMedia`, no
+  `screen.orientation`, anywhere. The entire layout assumed one fixed shape.
+- **The board is a single flex column** — header, then week, then dock
+  stacked underneath it (`Board.css`) — and `.board`'s `overflow: hidden` is
+  deliberate and load-bearing (see "Holds the board to exactly one screen"):
+  this app does not scroll, by design, so there was no fallback for a
+  shape that didn't fit.
+- **The week grid's own floor can exceed landscape's entire height budget.**
+  `weekFloorFor` (worst case, a Sunday with nothing "past" yet): today's row
+  (was 190px) plus six ordinary rows (84px each) plus gaps ≈ 736px. Landscape
+  on either iPad size is 834pt of height *total* — after the header and
+  padding, stacking the dock underneath that would have left it well under
+  100px, nowhere near its own ~300px floor (`.section-panel--full`/`--compact`
+  clamps in `SectionPanel.css`). This was the real blocker, not the 11" size
+  change specifically — landscape was always going to be this tight on
+  either iPad, because landscape height is short on both.
+- **Type sizes and the type floor were commented as tuned for "read from
+  across a kitchen" at 12.9"** (`tokens.css`). A counter dock is a closer
+  read on a smaller panel, so keeping those sizes would have wasted screen
+  real estate the new device doesn't have to spare.
+- **`MAX_FLOURISHES = 3`** (`Wall.jsx`) was picked because three short header
+  asides fit the 12.9" portrait width (1024pt) and a fourth didn't. 11"
+  portrait (834pt) is narrower than that; 11" landscape (1194pt) is wider.
+
+What was already fine, no changes needed: `Screensaver.jsx`'s scene uses
+`preserveAspectRatio="xMidYMid slice"` on a fixed viewBox, which crops to
+any aspect ratio rather than assuming one — it already survives both the
+size and orientation change. `useDetailLevel`'s "tight / mid / open" system
+measures real rendered height via `ResizeObserver` rather than trusting a
+viewport constant, so a cramped landscape row degrading to "+N more" is it
+doing its existing job, not new behaviour. `RecipeBook.jsx`'s cook-mode
+`BACK_ZONE` is a percentage of the reading area, not a pixel value.
+
+## 3. Decisions made (with Ed, and confirmed in this session)
+
+- **Landscape gets a real layout, not a degraded one.** The dock moves
+  beside the week instead of under it (`.board__body` becomes a row when
+  `useOrientation` reports landscape) — each gets the full column height
+  rather than splitting one shared column. Both dock sections stay
+  reachable and equally functional in both orientations.
+- **The type-size floor is allowed to shrink.** Counter distance on a
+  smaller panel no longer needs three-metre legibility, so `tokens.css`'s
+  sizes dropped roughly 12–23%, more on the numerals that existed solely for
+  wall-distance reading (`--size-dom-today`, `--size-dom-today-open`).
+  `--tap-min` (52px) deliberately did **not** shrink — it's sized to a
+  fingertip, not a reading distance, and that didn't change.
+
+## 4. What shipped in this pass
+
+- `src/hooks/useOrientation.js` — `matchMedia('(orientation: landscape)')`
+  with a change listener; `Board.tsx` stamps the result as
+  `data-orientation` on `.board`, and CSS throughout qualifies on that
+  attribute rather than a bare `@media (orientation:)`, so JS and CSS share
+  one source of truth.
+- `tokens.css` — retuned type sizes and `--size-min` (17px → 15px), per the
+  decision above.
+- `TODAY_ROW_MIN_HEIGHT` (`useDetailLevel.ts` / `.day-row--today` in
+  `WeekGrid.css`): 190px → 150px, in step with the date numeral it exists to
+  fit. `ORDINARY_ROW_MIN_HEIGHT` (84px) and `PAST_ROW_MIN_HEIGHT` (44px)
+  deliberately did **not** move — both are anchored to a touch target (an
+  event chip's own min-height, Apple's HIG minimum) rather than to reading
+  distance, and did not get an ergonomic reason to shrink.
+- `Board.tsx` / `Board.css` — new `.board__body` wrapper around the week and
+  dock, so only that portion (not the header) switches to a row in
+  landscape; header sizing also tightens a little in landscape, since it has
+  no use for wall-distance sizing and every pixel back is a pixel the
+  week's floor can afford.
+- `SectionPanel.css` — a landscape-specific sizing path for the dock
+  (`flex: 0 0 380px` sidebar, panels flex-filling its height) alongside the
+  existing portrait one (vh-based `clamp()`, tuned for the dock sharing a
+  column with the week) — they answer different layout questions and
+  neither reduces to the other cleanly enough to share code.
+- `Wall.jsx` — `MAX_FLOURISHES` became `maxFlourishesFor(orientation)`:
+  2 in portrait, 3 in landscape (unchanged from before, since 1194pt has as
+  much room as the original 1024pt design did). Threaded through
+  `toFlourishIds`, `toggleFlourish`, and `SettingsPanel`'s copy.
+- Stale resolution comments (`Screensaver.jsx`, `Screensaver.css`,
+  `RecipeBook.jsx`) updated to the 11" numbers where they stated a specific
+  figure; comments that were already aspect-ratio-generic were left alone.
+
+## 5. What's still open
+
+- **Nothing in this pass has been seen on the actual dock**, or in a browser
+  at the real dimensions — this session had no way to sign in and render the
+  authenticated board to check it visually (see Authentication: the 8-digit
+  emailed code). Every number above is reasoned from the code's own declared
+  constants, not measured on a screen. This is the same category of
+  unfinished as the screensaver's own "not yet verified on the actual wall"
+  item — treat it the same way: real, but not yet closeable from a laptop.
+- **The tightest known case is close.** A landscape week where nothing has
+  gone "past" yet (Sunday) is computed to fit the new layout by roughly 6px
+  — closer to a rounding error in this arithmetic than a real margin. Check
+  that specific day/orientation combination first once the dock exists.
+- The 380px dock sidebar width and the 2-vs-3 flourish split are first-guess
+  numbers, same spirit as the vh `clamp()` values already in
+  `SectionPanel.css` — tune them once this is visible on the actual dock.
+- Broader "wall" terminology in code comments and `CLAUDE.md` (e.g. "Wall
+  survival") was left alone — the resilience concerns it describes
+  (suspending timers, silent staleness, a crash that isn't a blank
+  rectangle) apply identically to an always-on counter device, so renaming
+  it is cosmetic, not a fix, and wasn't done here.
+
+---
+
 # Long-Term Trellis Direction
 
 The ultimate goal is not simply to have more modules.

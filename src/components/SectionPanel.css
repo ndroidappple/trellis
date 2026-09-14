@@ -80,6 +80,56 @@
   flex: 0 0 auto;
 }
 
+/* Landscape: the dock is a sidebar beside the week (see .board__body in
+ * Board.css), not a strip underneath it — so it gets its own full column
+ * height to work with instead of negotiating for whatever the week left
+ * over. That makes the vh-based clamp() sizing above the wrong tool here:
+ * those clamps were tuned against "a fraction of the *whole* board's
+ * height, after the week's floor", which no longer describes this layout at
+ * all once the two stop sharing a column. Flex-filling the sidebar is simpler
+ * and correct for what the sidebar actually is.
+ *
+ * Two full panels side-by-side (data-cols='2') would be two ~185px-wide
+ * columns in a 380px sidebar — too narrow to read a chore or shopping row
+ * in — so landscape stacks regardless of how many are "full"; only how many
+ * are visible (data-stack) matters here.
+ *
+ * 380px sidebar width, 140px/72px floors: first-guess numbers, same as the
+ * vh clamps above — verify once this is visible on the actual dock.
+ */
+.board[data-orientation='landscape'] .section-dock {
+  flex: 0 0 380px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.board[data-orientation='landscape'] .section-panel--full,
+.board[data-orientation='landscape'] .section-panel--compact {
+  padding: 16px 20px;
+}
+
+.board[data-orientation='landscape'] .section-dock[data-stack='1'] .section-panel--full,
+.board[data-orientation='landscape'] .section-dock[data-stack='1'] .section-panel--compact {
+  flex: 1 1 auto;
+  height: auto;
+  max-height: none;
+}
+
+.board[data-orientation='landscape'] .section-dock[data-stack='2'] .section-panel--full {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 140px;
+  max-height: none;
+}
+
+.board[data-orientation='landscape'] .section-dock[data-stack='2'] .section-panel--compact {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 72px;
+  max-height: none;
+}
+
 .section-panel h2 {
   font-family: var(--font-display);
   font-optical-sizing: auto;

@@ -223,6 +223,18 @@ p.board__sub {
   outline-offset: 2px;
 }
 
+/* Portrait: week-then-dock in one column, exactly as before the 11" /
+   dual-orientation work — the dock sits in the height the week leaves
+   under it. This wrapper only exists so landscape (below) can turn into a
+   row without also pulling the header into it. */
+.board__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
 .board__week {
   flex: 1 1 auto;
   display: flex;
@@ -235,6 +247,46 @@ p.board__sub {
      clipped by .board's overflow:hidden before the week does — the week is
      the important element here, not the dock. */
   min-height: var(--week-floor, calc(6 * 84px + 190px + 6 * var(--gap-slat)));
+}
+
+/* Landscape: 834pt of height, not 1194–1366pt, and this board never
+ * scrolls. The week's own floor (weekFloorFor — six ordinary rows plus
+ * today, easily 700px+ on a day nothing has collapsed to "past" yet) can by
+ * itself exceed what landscape has left after the header and padding, which
+ * leaves the dock nothing when it sits underneath in one column. Moving the
+ * dock beside the week instead of below it gives each its own full-height
+ * column rather than a split of one shared column — the week no longer
+ * competes with the dock for height at all, only for width, which
+ * landscape has more of (1194pt vs 834pt in portrait).
+ *
+ * The header shrinks a little too (see .board__today-label below): it does
+ * not need three-metre sizing to free height it isn't using for anything
+ * else, and every pixel back here is a pixel the week's floor can afford.
+ *
+ * First-guess split (roughly two-thirds week, one-third dock) — verify once
+ * this is visible on the actual dock. The single tightest case is a week
+ * where nothing has gone "past" yet (Sunday): the week's floor is at its
+ * largest exactly when the header trim below is doing all the work.
+ */
+.board[data-orientation='landscape'] .board__body {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.board[data-orientation='landscape'] .board__week {
+  min-width: 0;
+}
+
+.board[data-orientation='landscape'] .board__header {
+  gap: 10px;
+}
+
+.board[data-orientation='landscape'] .board__today-label {
+  font-size: 26px;
+}
+
+.board[data-orientation='landscape'] .board__sub {
+  font-size: 17px;
 }
 
 @media (prefers-reduced-motion: reduce) {

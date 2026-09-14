@@ -1,5 +1,6 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { useDetailLevel, weightedRowsFor, weekFloorFor } from '../hooks/useDetailLevel';
+import { useOrientation } from '../hooks/useOrientation';
 import { WeekGrid, type DayData } from './WeekGrid';
 import { SectionDock, SectionPanel, type SectionMode } from './SectionPanel';
 import type { Person } from './PersonBadge';
@@ -63,6 +64,7 @@ interface Props {
 
 export function Board(props: Props) {
   const [weekRef, level] = useDetailLevel(weightedRowsFor(props.days));
+  const orientation = useOrientation();
 
   const flourishes = props.flourishes ?? [];
   const cycleable = (props.flourishCycleable ?? true) && !!props.onCycleFlourish;
@@ -101,7 +103,7 @@ export function Board(props: Props) {
   );
 
   return (
-    <div className="board" data-detail={level}>
+    <div className="board" data-detail={level} data-orientation={orientation}>
       <header className="board__header">
         {/* Today is the thing you read from across the room, so it gets the
             size. The week being viewed is context and sits underneath. */}
@@ -171,50 +173,63 @@ export function Board(props: Props) {
         </div>
       </header>
 
-      {/* The ref goes on the element whose height the level is derived from. */}
-      <div
-        className="board__week"
-        ref={weekRef}
-        style={{ '--week-floor': `${weekFloor}px` } as CSSProperties}
-      >
-        <WeekGrid
-          days={props.days}
-          level={level}
-          loading={props.loading}
-          initialsFor={props.initialsFor}
-          onEventPress={props.onEventPress}
-          onEventLongPress={props.onEventLongPress}
-          onAddDay={props.onAddDay}
-          onAddMeal={props.onAddMeal}
-          dragging={props.dragging}
-          dragOverDate={props.dragOverDate}
-          onOpenDay={props.onOpenDay}
-          onPrevWeek={props.onPrevWeek}
-          onNextWeek={props.onNextWeek}
-        />
+      {/*
+        Portrait stacks week-then-dock in one column, same as always — there
+        is enough height (1194pt+) for the dock to take what the week leaves
+        under it. Landscape (834pt) does not have that height to share: the
+        week's own floor alone can exceed what's left once the header and
+        padding are accounted for, which leaves nothing for the dock. So in
+        landscape .board__body switches to a row instead — week and dock
+        become side-by-side columns, each getting the *entire* body height
+        rather than negotiating a split of one shared column. See the
+        data-orientation rules in Board.css and SectionPanel.css.
+      */}
+      <div className="board__body">
+        {/* The ref goes on the element whose height the level is derived from. */}
+        <div
+          className="board__week"
+          ref={weekRef}
+          style={{ '--week-floor': `${weekFloor}px` } as CSSProperties}
+        >
+          <WeekGrid
+            days={props.days}
+            level={level}
+            loading={props.loading}
+            initialsFor={props.initialsFor}
+            onEventPress={props.onEventPress}
+            onEventLongPress={props.onEventLongPress}
+            onAddDay={props.onAddDay}
+            onAddMeal={props.onAddMeal}
+            dragging={props.dragging}
+            dragOverDate={props.dragOverDate}
+            onOpenDay={props.onOpenDay}
+            onPrevWeek={props.onPrevWeek}
+            onNextWeek={props.onNextWeek}
+          />
+        </div>
+
+        <SectionDock modes={[props.settings.chores, props.settings.shopping]} pastShare={pastShare}>
+          <SectionPanel
+            title="Weekly To Do"
+            count={props.choresCount}
+            mode={props.settings.chores}
+            compact={props.choresCompact}
+            onOpen={props.onOpenChores}
+          >
+            {props.chores}
+          </SectionPanel>
+
+          <SectionPanel
+            title="Shopping"
+            count={props.shoppingCount}
+            mode={props.settings.shopping}
+            compact={props.shoppingCompact}
+            onOpen={props.onOpenShopping}
+          >
+            {props.shopping}
+          </SectionPanel>
+        </SectionDock>
       </div>
-
-      <SectionDock modes={[props.settings.chores, props.settings.shopping]} pastShare={pastShare}>
-        <SectionPanel
-          title="Weekly To Do"
-          count={props.choresCount}
-          mode={props.settings.chores}
-          compact={props.choresCompact}
-          onOpen={props.onOpenChores}
-        >
-          {props.chores}
-        </SectionPanel>
-
-        <SectionPanel
-          title="Shopping"
-          count={props.shoppingCount}
-          mode={props.settings.shopping}
-          compact={props.shoppingCompact}
-          onOpen={props.onOpenShopping}
-        >
-          {props.shopping}
-        </SectionPanel>
-      </SectionDock>
     </div>
   );
 }

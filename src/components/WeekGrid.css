@@ -70,12 +70,17 @@
 }
 
 /* Today takes a bit over twice an ordinary row's share, at every level.
-   Keep the 2.4 in sync with weightedRowsFor in useDetailLevel.ts. 190px
+   Keep the 2.4 in sync with weightedRowsFor in useDetailLevel.ts. 150px
    covers the stacked date + weekday + "Today" badge in the rail even at the
-   'open' detail level, where the date numeral alone is 78px. */
+   'open' detail level, where the date numeral alone is 60px (was 190px/78px
+   before the 11" retune — the numeral shrank because it existed for
+   three-metre wall legibility that a counter dock doesn't need, and this
+   floor shrank by the same ratio since it's driven by the same numeral, not
+   independently chosen). Keep this in sync with TODAY_ROW_MIN_HEIGHT in
+   useDetailLevel.ts. */
 .day-row--today {
   flex: 2.4 1 0;
-  min-height: 190px;
+  min-height: 150px;
   background: var(--today-face);
   border-left: 14px solid var(--ink);
   box-shadow: 0 1px 0 var(--rule);

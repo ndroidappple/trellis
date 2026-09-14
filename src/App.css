@@ -1034,6 +1034,21 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   font-size: 19px;
 }
 
+/* Feature #19: one row per person, name and connect-status side by side —
+   the same shape .settings-row itself uses, one level down. */
+.calendar-connections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.calendar-connections__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* "unpriced" on a meal — small, but it qualifies a money figure, so it has
    to be readable rather than decorative. 12px uppercase was a smudge. */
 .tag {

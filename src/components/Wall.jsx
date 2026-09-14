@@ -45,6 +45,7 @@ import { ShoppingSheet, ToDoSheet } from './PanelSheets'
 import MainMenu from './MainMenu'
 import HomeSheet from './HomeSheet'
 import DateTimePicker from './DateTimePicker'
+import { googleCalendarConfigured, startGoogleCalendarConnect } from '../lib/googleCalendar'
 import Screensaver from './Screensaver'
 import { useIdle } from '../hooks/useIdle'
 import { clearCookProgress, readCookProgress, writeCookProgress } from '../lib/cookProgress'
@@ -229,6 +230,9 @@ export default function Wall({ profile, people }) {
   const [staples, setStaples] = useState([])
   const [budget, setBudget] = useState(12000)
   const [editing, setEditing] = useState(null)
+  // A read-only Google Calendar event's tap target — a glance, never the
+  // full EventEditor. See handleEventPress/handleEventLongPress.
+  const [glancing, setGlancing] = useState(null)
   // { date, slot } — a slot is now part of *which* meal is being edited, not
   // an assumption made when it is saved.
   const [mealEditing, setMealEditing] = useState(null)
@@ -345,6 +349,11 @@ export default function Wall({ profile, people }) {
       .select('*')
       .gte('starts_at', from.toISOString())
       .lt('starts_at', to.toISOString())
+      // Hidden Google Calendar events (Feature #19) still exist in the
+      // table — hiding one doesn't touch Google, and a re-sync still
+      // updates it — they just never render. Filtered at the query, not
+      // client-side, so a hidden event costs nothing to fetch either.
+      .is('hidden_at', null)
       .order('starts_at', { ascending: true })
 
     if (error) setError(error.message)
@@ -1427,7 +1436,7 @@ export default function Wall({ profile, people }) {
   const swallowNextClick = useRef(false)
 
   function handlePressStart(e) {
-    if (editing || mealEditing || dayViewing || settingsOpen || bookOpen || homeOpen || reschedulingChore) return
+    if (editing || glancing || mealEditing || dayViewing || settingsOpen || bookOpen || homeOpen || reschedulingChore) return
     if (menuOpen) return
     // Holding a "+" button shouldn't also summon settings behind the dialog
     // it opens.
@@ -1602,7 +1611,13 @@ export default function Wall({ profile, people }) {
       return
     }
     const ev = events.find((e) => e.id === id)
-    if (ev) setEditing(ev)
+    if (!ev) return
+    // Google owns this event, not Trellis — EventEditor's Save would change
+    // nothing Google ever sees, and its Delete would remove the local copy
+    // only for the next sync to bring it straight back. Neither is what
+    // tapping it should do.
+    if (ev.read_only) setGlancing(ev)
+    else setEditing(ev)
   }
 
   /**
@@ -1643,7 +1658,13 @@ export default function Wall({ profile, people }) {
     }
 
     const ev = events.find((e) => e.id === id)
-    if (ev) setEditing(ev)
+    if (!ev) return
+    // Same branch as the tap, for the same reason — see handleEventPress.
+    // "Uniform even where it is redundant" already meant holding an event
+    // opens the same thing a tap does; a read-only event just has a
+    // different "same thing" to open.
+    if (ev.read_only) setGlancing(ev)
+    else setEditing(ev)
   }
 
   /**
@@ -1874,6 +1895,18 @@ export default function Wall({ profile, people }) {
         />
       )}
 
+      {glancing && (
+        <EventGlance
+          event={glancing}
+          people={orderedPeople}
+          onClose={() => setGlancing(null)}
+          onHidden={() => {
+            setGlancing(null)
+            loadEvents()
+          }}
+        />
+      )}
+
       {mealEditing && (
         <MealEditor
           date={mealEditing.date}
@@ -2099,6 +2132,8 @@ export default function Wall({ profile, people }) {
           }}
           onToggleFlourish={toggleFlourish}
           onClose={() => setSettingsOpen(false)}
+          profile={profile}
+          people={orderedPeople}
         />
       )}
 
@@ -2694,6 +2729,56 @@ function EventEditor({ initial, profile, people, personFor, onClose, onSaved, on
   )
 }
 
+/**
+ * A Google Calendar event's tap target (Feature #19). Everything
+ * EventEditor is not: no title field, no Save, no Delete — Google owns
+ * this, Trellis only mirrors it. The one real action is Hide, which sets
+ * `hidden_at` rather than deleting the row, so the next sync doesn't just
+ * bring it back.
+ */
+function EventGlance({ event, people, onClose, onHidden }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  const owner = people.find((p) => p.id === event.owner_id)
+  const when = event.all_day
+    ? dayLabel(toDateInputValue(new Date(event.starts_at)))
+    : `${dayLabel(toDateInputValue(new Date(event.starts_at)))} · ${timeLabel(new Date(event.starts_at))}`
+
+  async function hide() {
+    setBusy(true)
+    setError(null)
+    const { error: hideError } = await supabase
+      .from('events')
+      .update({ hidden_at: new Date().toISOString() })
+      .eq('id', event.id)
+    setBusy(false)
+    if (hideError) setError(hideError.message)
+    else onHidden()
+  }
+
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
+        <h2>{event.title}</h2>
+        <p className="muted">{when}</p>
+        <p className="muted">
+          From {owner ? `${owner.display_name}’s` : 'a'} Google Calendar
+        </p>
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="actions">
+          <button className="ghost danger" onClick={hide} disabled={busy}>
+            {busy ? 'Hiding…' : 'Hide from Trellis'}
+          </button>
+          <button onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function dayLabel(dateIso) {
   const d = new Date(`${dateIso}T00:00`)
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
@@ -2853,6 +2938,8 @@ function SettingsPanel({
   onSleep,
   onToggleFlourish,
   onClose,
+  profile,
+  people,
 }) {
   const orientation = useOrientation()
   const maxFlourishes = maxFlourishesFor(orientation)
@@ -2980,6 +3067,8 @@ function SettingsPanel({
           reason is worth reading: a control that silently does nothing teaches
           people the setting is broken.
         */}
+        <CalendarConnections profile={profile} people={people} />
+
         <button className="settings-sleep" onClick={onSleep} disabled={!canSleep}>
           Sleep now
         </button>
@@ -2998,5 +3087,74 @@ function SettingsPanel({
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Feature #19. One row per household member — each connects their own
+ * Google Calendar independently, since the household decided both people
+ * should be able to, not just whoever set this up. Reads
+ * calendar_connection_status() (016_google_calendar.sql) rather than the
+ * calendar_connections table directly — that RPC is the only thing
+ * allowed to say "connected", never the refresh token itself.
+ */
+function CalendarConnections({ profile, people }) {
+  const [status, setStatus] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase.rpc('calendar_connection_status').then(({ data, error: rpcError }) => {
+      if (cancelled) return
+      if (rpcError) setError(rpcError.message)
+      else setStatus(data ?? [])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const configured = googleCalendarConfigured()
+
+  return (
+    <>
+      {/* Hints live as siblings after .settings-row, never nested inside it
+          — that row is a flex space-between (label left, controls right),
+          and a multi-line hint nested in it gets squeezed into that same
+          narrow right-hand column instead of spanning full width below.
+          "Screen timeout" above already gets this right; this used to not. */}
+      <div className="settings-row">
+        <span className="settings-row__label">Google Calendar</span>
+        <div className="calendar-connections">
+          {people.map((p) => {
+            const connection = status?.find((c) => c.profile_id === p.id)
+            return (
+              <div key={p.id} className="calendar-connections__row">
+                <span>{p.display_name}</span>
+                {connection ? (
+                  <span className="settings-row__hint">Connected</span>
+                ) : (
+                  <button
+                    className="chip"
+                    disabled={!configured || p.id !== profile.id}
+                    onClick={() => startGoogleCalendarConnect(p.id, profile.household_id)}
+                  >
+                    Connect
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {error && <p className="error">{error}</p>}
+      {!configured && (
+        <p className="settings-row__hint">
+          Not set up yet — needs a Google Cloud OAuth client (see Feature #19
+          in the backlog) before this does anything.
+        </p>
+      )}
+    </>
   )
 }

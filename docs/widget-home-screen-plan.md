@@ -143,6 +143,38 @@ pointer-event resize gesture commits correctly. **Not yet checked on the
 real iPad** — portrait's computed grid floor (1136px) is close to the
 available viewport and needs that check before being trusted.
 
+**Two real bugs the desktop/mouse-based verification above never caught,
+found on the actual iPad and fixed the same day:**
+- `WidgetGrid.tsx` set `pointer-events: none` on the dragged/resized tile's
+  own ancestor cell the instant a gesture started, to let the drop-cell
+  hit-test overlay underneath receive `elementFromPoint` — but the overlay
+  was already stacked above it by `z-index`, so that mutation was both
+  unnecessary and the likely reason every touch drag/resize silently did
+  nothing on real hardware: WebKit fires `pointercancel` when
+  `pointer-events` changes on an element involved in an active touch
+  sequence, including an ancestor of the element that just called
+  `setPointerCapture()`. Removed; hit-testing still works purely from
+  z-index.
+- `useWidgetResize.js` called `onCommit(...)` — which reaches all the way up
+  to the board-settings-owning component's `setState` — from *inside* the
+  functional updater passed to `setResize`. React updaters must be pure;
+  calling another component's setState from one is exactly what "Cannot
+  update a component while rendering a different component" warns about,
+  and under StrictMode's deliberate double-invocation of updaters (this app
+  wraps everything in `<StrictMode>`) it could fire during a render pass
+  instead of the `pointerup` handler. `useWidgetDrag.js` never had this —
+  its `end()` already called `onDrop` as a plain statement after `setDrag`,
+  not inside its updater, matching `useChoreDrag.js`'s proven shape exactly.
+  Fixed by tracking the live delta in a ref (written as a plain assignment
+  in the `move` handler, not inside any updater) and calling `onCommit`
+  after a plain `setResize(null)`.
+
+Both were reproducible from a desktop browser once looked for (dispatched
+touch-type `PointerEvent`s plus watching the console), but neither showed up
+during the original mouse-driven verification — worth remembering for
+Phase 2 onward: mouse testing rules things in, it doesn't rule touch-specific
+issues out.
+
 **Not yet wired, worth knowing before Phase 2:** `useViewportClass.js`
 exists but nothing calls it yet — Board.tsx and WidgetGrid always render the
 full draggable grid regardless of viewport size, so a phone visiting the

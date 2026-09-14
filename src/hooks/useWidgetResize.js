@@ -18,6 +18,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export function useWidgetResize(onCommit) {
   const [resize, setResize] = useState(null) // { widgetId, dx, dy }
   const widgetId = useRef(null)
+  const startPos = useRef({ x: 0, y: 0 })
+  // Mirrors `resize`'s dx/dy for `end()` to read synchronously. Written
+  // directly in `move()` below — a plain event-handler assignment, not
+  // inside a state updater — precisely because a previous version of this
+  // hook called `onCommit` (which reaches all the way up to Wall's own
+  // setState) from *inside* setResize's functional-updater callback.
+  // React updaters must be pure; calling another component's setState from
+  // one is exactly what "Cannot update a component while rendering a
+  // different component" warns about, and it's not just a lint nicety —
+  // confirmed on the real iPad as the reason resize (and drag, which had
+  // the same shape) silently did nothing: React's dev-mode purity check
+  // (StrictMode double-invokes updaters) could fire the commit during a
+  // render pass instead of the pointerup handler.
+  const latestDelta = useRef({ dx: 0, dy: 0 })
   const active = resize !== null
 
   const startResize = useCallback((id, event) => {
@@ -25,8 +39,10 @@ export function useWidgetResize(onCommit) {
     event.stopPropagation()
 
     widgetId.current = id
+    startPos.current = { x: event.clientX, y: event.clientY }
+    latestDelta.current = { dx: 0, dy: 0 }
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    setResize({ widgetId: id, startX: event.clientX, startY: event.clientY, dx: 0, dy: 0 })
+    setResize({ widgetId: id, dx: 0, dy: 0 })
   }, [])
 
   useEffect(() => {
@@ -34,16 +50,17 @@ export function useWidgetResize(onCommit) {
 
     function move(e) {
       e.preventDefault()
-      setResize((r) => (r ? { ...r, dx: e.clientX - r.startX, dy: e.clientY - r.startY } : r))
+      const dx = e.clientX - startPos.current.x
+      const dy = e.clientY - startPos.current.y
+      latestDelta.current = { dx, dy }
+      setResize((r) => (r ? { ...r, dx, dy } : r))
     }
 
     function end() {
       const id = widgetId.current
       widgetId.current = null
-      setResize((r) => {
-        if (id && r) onCommit(id, r.dx, r.dy)
-        return null
-      })
+      setResize(null)
+      if (id) onCommit(id, latestDelta.current.dx, latestDelta.current.dy)
     }
 
     window.addEventListener('pointermove', move, { passive: false })

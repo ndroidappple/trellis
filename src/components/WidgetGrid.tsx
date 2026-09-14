@@ -158,7 +158,18 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
           style={{
             gridColumn: `${placement.x + 1} / span ${placement.w}`,
             gridRow: `${placement.y + 1} / span ${placement.h}`,
-            pointerEvents: placement.id === activeId && drag ? 'none' : undefined,
+            // Deliberately NOT `pointerEvents: 'none'` on the active cell
+            // during a drag/resize, even though that sounds like the more
+            // obviously-correct way to let the drop-cell overlay (below)
+            // receive elementFromPoint hits instead of this tile — the
+            // z-index stacking in WidgetGrid.css already guarantees that,
+            // and this specific mutation, applied to an ANCESTOR of the
+            // element that just called setPointerCapture() on the very
+            // same pointerdown, is what was silently killing every real
+            // touch gesture on the actual iPad (confirmed on hardware):
+            // WebKit fires pointercancel when pointer-events changes on an
+            // element involved in an active touch sequence. Mouse-driven
+            // testing (real or CDP-simulated) never surfaced this.
           }}
         >
           {renderTile(placement, {

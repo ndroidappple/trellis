@@ -160,9 +160,12 @@
   border-color: var(--person-a);
 }
 
+/* 3:2 per the recipe-photography system (docs/backlog-recipe-images.md) —
+   aspect-ratio rather than a fixed height, so the crop ratio holds regardless
+   of the grid column's actual width. */
 .book__card-art {
   flex: 0 0 auto;
-  height: 132px;
+  aspect-ratio: 3 / 2;
 }
 
 .book__card-title {
@@ -258,9 +261,12 @@
 .recipe-art--plate[data-tint='3'] { background: rgba(63, 122, 94, 0.09); }
 .recipe-art--plate[data-tint='4'] { background: rgba(156, 95, 62, 0.08); }
 
+/* 16:9 hero crop of the same 3:2 master (docs/backlog-recipe-images.md) —
+   object-fit: cover on .recipe-art img trims top/bottom, matching the
+   system's stated card/viewer crop split without needing two stored files. */
 .recipe__hero {
   flex: 0 0 auto;
-  height: 220px;
+  aspect-ratio: 16 / 9;
 }
 
 .recipe__hero.recipe-art--plate {

@@ -101,15 +101,39 @@ export function defaultLayout(orientation, enabledIds = ['calendar', 'todo', 'sh
     // Week and dock as separate full-height columns, same shape as today's
     // landscape board (Board.tsx: "each gets its own full-height column
     // instead of negotiating a split of one shared column").
+    //
+    // Calendar sits at exactly its own minCellSpan here (4, 10) — no slack,
+    // on purpose, unlike portrait below. It's a real, known limitation: in
+    // this arrangement Calendar's resize grip has nowhere legal to go
+    // (already at the grid's row maximum, and every column it could grow
+    // into is claimed by the dock). Giving it slack would mean either
+    // growing GRID_CONFIG.landscape.rows — which raises the whole grid's
+    // floor (rows * ROW_MIN_PX + gaps) and risks the exact tight-margin
+    // failure Feature #17 already hit once in landscape (fits by "roughly
+    // 6px" in its own known worst case) — or narrowing the dock's default
+    // width toward its own minCellSpan.w (1), which would make To-Do/
+    // Shopping visibly cramped by default (their content still always
+    // renders "full" until Phase 3's size tiers exist). Neither is a change
+    // to make on a guess; it wants the real landscape measurement Phase 5
+    // owns, or a fresh look once Phase 2 adds Home and the whole
+    // arrangement gets redesigned anyway.
     if (ids.includes('calendar')) placements.push(rect('calendar', 0, 0, 4, 10))
     if (ids.includes('todo')) placements.push(rect('todo', 4, 0, 2, 5))
     if (ids.includes('shopping')) placements.push(rect('shopping', 4, 5, 2, 5))
   } else {
     // Week on top, dock sharing the row budget underneath — today's
-    // portrait shape.
-    if (ids.includes('calendar')) placements.push(rect('calendar', 0, 0, 4, 10))
-    if (ids.includes('todo')) placements.push(rect('todo', 0, 10, 2, 6))
-    if (ids.includes('shopping')) placements.push(rect('shopping', 2, 10, 2, 6))
+    // portrait shape. Calendar gets 1 row of slack above its own
+    // minCellSpan.h (11, not 10) so its resize grip actually has somewhere
+    // to go — width has none to give (already at the grid's 4-column max)
+    // and won't without growing GRID_CONFIG itself. The dock gives up
+    // exactly that one row (6 -> 5 each), landing well above its own
+    // minCellSpan.h (3), so nothing there gets visibly cramped by it. This
+    // is safe in a way the landscape case isn't: it only grows the row
+    // *portrait already has plenty of* (16 total, vs. landscape's tight
+    // 10), so it can't reproduce Feature #17's landscape-specific risk.
+    if (ids.includes('calendar')) placements.push(rect('calendar', 0, 0, 4, 11))
+    if (ids.includes('todo')) placements.push(rect('todo', 0, 11, 2, 5))
+    if (ids.includes('shopping')) placements.push(rect('shopping', 2, 11, 2, 5))
   }
 
   // Defensive, not decorative: catches a future WIDGET_ORDER/default-rect

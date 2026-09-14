@@ -286,6 +286,12 @@
   color: var(--ink-faint);
 }
 
+/* Both add buttons were a dashed outline on transparent — quiet on purpose
+   (see the drop-target comment below, same reasoning), but a dashed border
+   reads as "not built yet" everywhere else software does it, and it was the
+   most dated-looking control left in the app once Home shipped with filled,
+   tonal tiles. A soft tint keeps the same quietness (it's still barely there
+   at rest) without the placeholder look — filled, just at low volume. */
 .day-row__add {
   align-self: center;
   /* var(--tap-min) — this app's own stated touch-target floor. It was 44px
@@ -293,13 +299,19 @@
   width: var(--tap-min);
   height: var(--tap-min);
   border-radius: 50%;
-  border: 1px dashed var(--rule);
-  background: transparent;
-  color: var(--ink-soft);
+  border: none;
+  background: var(--lit-tint);
+  color: var(--lit-deep);
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
+  transition: background var(--dur-state) var(--ease-standard);
+}
+
+.day-row__add:active {
+  background: var(--lit);
+  color: var(--slat-face);
 }
 
 .day-row__add:focus-visible {
@@ -307,17 +319,26 @@
   outline-offset: 2px;
 }
 
+/* Meal green, not the new amber — this button already had a colour identity
+   (--meal-rule) tying it to the same material every meal chip on the board
+   reads as. Filling it with --meal-tint carries that forward; amber would
+   have blurred "this adds a meal" into "this is generically inviting". */
 .day-row__add-meal {
   align-self: center;
   border-radius: 999px;
-  border: 1px dashed var(--meal-rule);
-  background: transparent;
+  border: none;
+  background: var(--meal-tint);
   color: var(--ink-soft);
   font-size: 18px;
   padding: 8px 16px;
   min-height: var(--tap-min);
   cursor: pointer;
   flex-shrink: 0;
+  transition: background var(--dur-state) var(--ease-standard);
+}
+
+.day-row__add-meal:active {
+  background: var(--meal-rule);
 }
 
 .day-row__add-meal:focus-visible {

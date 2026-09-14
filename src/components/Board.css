@@ -216,6 +216,19 @@ p.board__sub {
   width: var(--tap-min);
   height: var(--tap-min);
   cursor: pointer;
+
+  /* Centres the week arrows' glyphs exactly as before, and is what makes
+     this class reusable for an SVG icon (Home) rather than only the arrows'
+     text glyphs — an icon has no baseline to center on the way a glyph
+     does. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.board__step svg {
+  width: 20px;
+  height: 20px;
 }
 
 .board__step:focus-visible {

@@ -23,6 +23,45 @@
   flex: 1 1 auto;
 }
 
+/* Collapsed by default — see the comment above where this renders in
+   RecipeBook.jsx. The dot is the only thing that changes at rest, so a
+   filter left on from a previous visit doesn't silently change what's on
+   screen with nothing to explain why. */
+.book__filters-toggle {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 17px;
+  padding: 0 18px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.book__filters-toggle[aria-expanded='true'],
+.book__filters-toggle:active {
+  background: var(--chip-face);
+  color: var(--ink);
+}
+
+.book__filters-toggle.is-active {
+  border-color: var(--lit);
+  color: var(--lit-deep);
+}
+
+.book__filters-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lit);
+}
+
 .book__filters {
   flex: 0 0 auto;
   display: flex;

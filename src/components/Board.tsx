@@ -52,6 +52,9 @@ interface Props {
   onOpenDay?: (date: string) => void;
   /** Straight to the recipe book — the one room that earns its own button. */
   onOpenBook?: () => void;
+  /** Straight to Home (lights and scenes) — see the header-right comment
+      below for why this is an icon, not a third text door next to Recipes. */
+  onOpenHome?: () => void;
   /** Everything else that is not this week. */
   onOpenMenu?: () => void;
   /** Open each dock section as a full page. */
@@ -137,15 +140,33 @@ export function Board(props: Props) {
               Menu. Spelled out rather than glyphs, for the same reason as
               always: a recipe book nobody can find is just a database.
 
+              Home is the newest room and does not yet have Recipes' years of
+              being reached for daily — but it was asked for by name as
+              wanting one-tap access, not a trip through Menu, so it gets a
+              door too. An icon rather than a third spelled-out word: the
+              header has already been measured tight enough to wrap at this
+              iPad's own portrait width, and a glyph costs a fraction of a
+              text pill's space. It still keeps its Menu row (same reasoning
+              as Recipes, which keeps both) — losing "hidden on the board"-
+              style completeness for the sake of a shortcut would be the
+              wrong trade.
+
               Both come first and are fenced off by the rule, because they are
               the only controls here that leave the week. Sitting either
               between "Today" and the arrows would file a doorway to another
               room among the controls for moving around this one. */}
-          {(props.onOpenBook || props.onOpenMenu) && (
+          {(props.onOpenBook || props.onOpenHome || props.onOpenMenu) && (
             <>
               {props.onOpenBook && (
                 <button className="board__menu" onClick={props.onOpenBook}>
                   Recipes
+                </button>
+              )}
+              {props.onOpenHome && (
+                <button className="board__step" onClick={props.onOpenHome} aria-label="Home: lights and scenes">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11.2c.6.4 1 1.1 1 1.8h4c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z" />
+                  </svg>
                 </button>
               )}
               {props.onOpenMenu && (

@@ -35,7 +35,7 @@ function Shell({ children }) {
 }
 
 /**
- * Sign-in is a 6-digit code typed into the app, not a link tapped in Mail.
+ * Sign-in is an 8-digit code typed into the app, not a link tapped in Mail.
  *
  * The link cannot work on the wall. On iOS a Home Screen web app has its own
  * storage container, and tapping a link in Mail opens the *default browser* —
@@ -72,7 +72,7 @@ function SignIn() {
     if (error) return setStatus({ kind: 'error', text: error.message })
 
     setStage('code')
-    setStatus({ kind: 'ok', text: 'Check your email for a 6-digit code.' })
+    setStatus({ kind: 'ok', text: `Check your email for a ${CODE_LENGTH}-digit code.` })
   }
 
   async function verifyCode() {

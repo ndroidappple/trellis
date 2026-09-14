@@ -1,0 +1,164 @@
+/* Lives inside .card.dialog (App.css), whose broad `.card button` / `.card
+   input` rules (filled green, forced 52px min-height, white background)
+   exist for the dialog's own primary actions and would otherwise flatten
+   every control in here into a green button or a white text field. Every
+   selector below is scoped through `.card .dtp` specifically so it wins on
+   specificity rather than on being later in the stylesheet, which would be
+   fragile the moment import order changes. */
+
+.dtp {
+  width: 100%;
+}
+
+.card .dtp__trigger {
+  width: 100%;
+  min-height: var(--tap-min);
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 400;
+  text-align: left;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.card .dtp__trigger[aria-expanded='true'] {
+  border-color: var(--lit);
+}
+
+.dtp__panel {
+  margin-top: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--chip-face);
+  border-radius: 10px;
+}
+
+.dtp__days {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dtp__days::-webkit-scrollbar { display: none; }
+
+.card .dtp__day {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.card .dtp__day.is-on {
+  background: var(--lit);
+  border-color: var(--lit);
+  color: var(--slat-face);
+  font-weight: 600;
+}
+
+.dtp__more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+/* The escape hatch for anything more than a week out — deliberately kept as
+   a plain native date field rather than restyled to look important. Quick
+   days are the primary interaction; this is what's left over. */
+.card .dtp__more input {
+  min-height: 32px;
+  width: auto;
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 15px;
+  padding: 0;
+}
+
+.dtp__time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dtp__stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.dtp__stepper span {
+  min-width: 34px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.card .dtp__stepper button {
+  width: 34px;
+  min-height: 26px;
+  height: 26px;
+  padding: 0;
+  background: #fff;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dtp__colon {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink-faint);
+  align-self: center;
+  margin-top: -14px;
+}
+
+.card .dtp__ampm {
+  align-self: center;
+  min-height: 40px;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card .dtp__done {
+  align-self: flex-end;
+  min-height: 36px;
+  padding: 0 16px;
+  background: transparent;
+  border: none;
+  color: var(--person-a);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}

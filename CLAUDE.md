@@ -163,6 +163,34 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   meal-planning UI (whole-week panel + recipe picker). Kept as reference;
   `Wall.jsx`'s `MealEditor` is the current per-day equivalent.
 
+## Editing recipe content (for you, not the household)
+
+The recipe book's "i" button (`RecipeBook.jsx`'s `EditHelp`) used to show this
+whole section verbatim to anyone who tapped it — including Ed, at the
+counter, with a "Supabase dashboard" and "write a migration" answer to a
+question a non-technical household member has no way to act on. It now says,
+correctly, "there's no in-app editor yet, tell Nick" — the actual how-to
+moved here.
+
+**To fix a time, a title, or a step:** Supabase dashboard → Table Editor →
+`recipes` (or `recipe_steps` / `recipe_ingredients`). Edit the cell and save;
+it appears on the wall within a second or two. Also set that field's row in
+`recipe_field_provenance` to `user_supplied` — most times, and all three of
+the newest methods, are model estimates, and the next enrichment pass will
+overwrite anything still marked `ai_enrichment`. Marking it yours makes it
+permanent.
+
+**To add a whole recipe:** write a migration in `supabase/migrations/` rather
+than typing it into the dashboard, so a rebuilt project still has it. Insert
+the `recipes` row, then its `recipe_ingredients` and `recipe_steps`. A recipe
+with `status = 'active'` must have at least one ingredient — a deferred
+trigger rejects the transaction at commit otherwise. Use `'conditional'`
+while it's still a stub.
+
+**Or just ask Claude** — "Add my mum's lasagne to Trellis" or "the curry
+actually takes 30 minutes, not 45" is enough. It has the schema, knows the
+constraints, and will write and apply the migration itself.
+
 ## Database (Supabase)
 
 Two-person household model — see `handle_new_user()` in
@@ -1030,6 +1058,32 @@ link. Settled the hard way; the constraints below are all load-bearing.
 
 ## Open items from the last session
 
+- **A recipe-book bug hunt session left one real code fix undone.** Eight
+  `recipe_ingredients` rows on Chicken Tortilla Soup have the literal string
+  `'none'` in `preparation` instead of null, so they render as "olive oil,
+  none". The display code is already correct
+  (`[ing.name, ing.preparation].filter(Boolean).join(', ')`); this needs
+  `update recipe_ingredients set preparation = null where preparation =
+  'none'` run against the live project. Auto mode's safety classifier
+  refused to run it directly as a "mass update" pattern — it needs either a
+  Bash/SQL permission grant or running by hand.
+- **The screensaver's wake-tap swallow was seen to leak through once, out of
+  two tries, in browser automation.** Re-read `Screensaver.jsx`'s
+  `handlePointerDown`: the capture-phase `click` listener is registered
+  synchronously before `onWake()` runs, and a real pointerdown always
+  precedes its own click in a single gesture — there's no code-level race
+  visible for genuine touch/mouse input. The one leak is far more likely an
+  artifact of how the automation tool's synthetic clicks were sequenced
+  (confirmed separately that its clicks do fire real `pointerdown`, but
+  their relationship to the following `click` isn't guaranteed the way a
+  real gesture's is) than a real regression. Didn't change the code on the
+  strength of that alone; worth a deliberate real-device retest rather than
+  writing it off entirely.
+- **The header date still wraps to three lines on anything narrower than
+  the design's assumed width** (confirmed at 638px and 448px; not confirmed
+  or ruled out at the real 834px portrait minimum). Separate from the phone
+  layout gap (Feature #16) — this can happen on a browser window or a
+  narrower iPad without being a phone at all. Not fixed this pass.
 - **The ambient screen timeout has not been seen on the wall.** Everything
   checkable in a browser is checked (fade, night variant, swallowed wake touch,
   pause when hidden, and that the drift layers genuinely move — ~4.9px in 2.5s

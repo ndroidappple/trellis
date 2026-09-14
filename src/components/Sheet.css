@@ -234,6 +234,30 @@
   border-color: var(--person-a);
 }
 
+/* The day view's meal rows — the recipe, "Cook it", "Change or clear" — used
+   to be visually identical, so a night with a plan gave equal weight to
+   cooking it and undoing it. Cooking is the point of a cook night; this is
+   the one row on the page that gets to look like it. */
+.sheet-row--primary {
+  background: var(--lit-tint);
+  border-color: var(--lit);
+}
+
+.sheet-row--primary span:first-child {
+  color: var(--lit-deep);
+  font-weight: 600;
+}
+
+.sheet-row--primary:active {
+  background: var(--lit);
+  border-color: var(--lit-deep);
+}
+
+.sheet-row--primary:active span:first-child,
+.sheet-row--primary:active .sheet-row__meta {
+  color: var(--slat-face);
+}
+
 .sheet-row__meta {
   font-size: 17px;
   color: var(--ink-soft);

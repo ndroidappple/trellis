@@ -321,6 +321,8 @@ export default function RecipeBook({
   const [f, setF] = useState(NO_FILTERS)
   const [helpOpen, setHelpOpen] = useState(false)
   const [price, setPrice] = useState(readPriceMode)
+  // Closed by default — see the comment above .book__filters for why.
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const set = (key) => (value) => setF((prev) => ({ ...prev, [key]: value }))
   const filtered = f.protein !== 'any' || f.time !== 'any' || f.effort !== 'any' || f.show !== 'all'
@@ -456,20 +458,38 @@ export default function RecipeBook({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        {/* Closed by default. Five filter rows — Protein, Time, Effort, Show,
+            Price — used to sit between the search bar and the first recipe,
+            which meant the single most common thing anyone does here
+            ("what's for dinner") opened onto a wall of controls before a
+            single dish was visible. The dot says when a filter is doing
+            something invisible while collapsed, so this isn't a control that
+            silently changes what you're looking at. */}
+        <button
+          type="button"
+          className={filtered || price !== 'off' ? 'book__filters-toggle is-active' : 'book__filters-toggle'}
+          aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          Filters
+          {(filtered || price !== 'off') && <span className="book__filters-dot" aria-hidden="true" />}
+        </button>
         <HelpButton onClick={() => setHelpOpen(true)} label="How do I add or edit a recipe?" />
       </div>
 
-      <div className="book__filters">
-        <FilterRow label="Protein" options={proteinOptions} value={f.protein} onChange={set('protein')} />
-        <FilterRow label="Time" options={TIME_FILTERS} value={f.time} onChange={set('time')} />
-        <FilterRow label="Effort" options={EFFORT_FILTERS} value={f.effort} onChange={set('effort')} />
-        <FilterRow label="Show" options={SHOW_FILTERS} value={f.show} onChange={set('show')} />
-        {/* Last, because it is the only row that changes what the cards *say*
-            rather than which cards are there — and because "Cheapest first"
-            reorders the grid, which is the largest thing any control here
-            does. It reads as the end of the sentence the other four start. */}
-        <FilterRow label="Price" options={PRICE_OPTIONS} value={price} onChange={setPriceMode} />
-      </div>
+      {filtersOpen && (
+        <div className="book__filters">
+          <FilterRow label="Protein" options={proteinOptions} value={f.protein} onChange={set('protein')} />
+          <FilterRow label="Time" options={TIME_FILTERS} value={f.time} onChange={set('time')} />
+          <FilterRow label="Effort" options={EFFORT_FILTERS} value={f.effort} onChange={set('effort')} />
+          <FilterRow label="Show" options={SHOW_FILTERS} value={f.show} onChange={set('show')} />
+          {/* Last, because it is the only row that changes what the cards *say*
+              rather than which cards are there — and because "Cheapest first"
+              reorders the grid, which is the largest thing any control here
+              does. It reads as the end of the sentence the other four start. */}
+          <FilterRow label="Price" options={PRICE_OPTIONS} value={price} onChange={setPriceMode} />
+        </div>
+      )}
 
       <div className="book__grid">
         {shown.map((r) => {
@@ -722,54 +742,14 @@ function EditHelp({ onClose }) {
   return (
     <div className="help" role="dialog" aria-modal="true" aria-label="How to edit recipes">
       <div className="help__panel">
-        <h2 className="help__title">Changing the recipe book</h2>
+        <h2 className="help__title">Changing a recipe</h2>
 
         <p className="help__lead">
-          Trellis can read the recipe book but not write to it yet. Everything below
-          works today; an editor in the app is the next slice.
+          There&rsquo;s no in-app editor yet, so a typo, a wrong time, or a missing
+          step can&rsquo;t be fixed from here. Tell Nick what&rsquo;s wrong and
+          he can get it corrected — the actual how-to for that lives outside the
+          app, not in here.
         </p>
-
-        <div className="help__section">
-          <h3>To fix a time, a title or a step</h3>
-          <p>
-            Supabase dashboard → Table Editor → <code>recipes</code> (or{' '}
-            <code>recipe_steps</code> / <code>recipe_ingredients</code>). Edit the cell
-            and save. It appears on the wall within a second or two.
-          </p>
-          <p className="help__warn">
-            One extra step, and it matters: also set that field&rsquo;s row in{' '}
-            <code>recipe_field_provenance</code> to <code>user_supplied</code>. Most
-            times and all three of the newest methods are model estimates, and the next
-            enrichment pass will overwrite anything still marked{' '}
-            <code>ai_enrichment</code>. Marking it yours makes it permanent.
-          </p>
-        </div>
-
-        <div className="help__section">
-          <h3>To add a whole recipe</h3>
-          <p>
-            Write a migration in <code>supabase/migrations/</code> rather than typing it
-            into the dashboard, so a rebuilt project still has it. Insert the{' '}
-            <code>recipes</code> row, then its <code>recipe_ingredients</code> and{' '}
-            <code>recipe_steps</code>.
-          </p>
-          <p>
-            A recipe with <code>status = &lsquo;active&rsquo;</code> must have at least one
-            ingredient — a deferred trigger rejects the transaction at commit
-            otherwise. Use <code>&lsquo;conditional&rsquo;</code> while it is still a
-            stub.
-          </p>
-        </div>
-
-        <div className="help__section">
-          <h3>Or just ask Claude</h3>
-          <p>
-            &ldquo;Add my mum&rsquo;s lasagne to Trellis&rdquo; or &ldquo;the curry
-            actually takes 30 minutes, not 45&rdquo; is enough. It has the schema, knows
-            the constraints, and will write and apply the migration — which is what the
-            AI edit button would do from in here once there is one.
-          </p>
-        </div>
 
         <button className="help__close" onClick={onClose}>
           Got it

@@ -256,12 +256,17 @@
   margin-top: 4px;
 }
 
+/* Filled, not dashed — same reasoning as the board's own add buttons
+   (WeekGrid.css): a dashed outline reads as unfinished, not as quiet. Stays
+   the quietest tier of the three ("shortcut to creating one, not one
+   itself"), so it gets the plain ink tint rather than the warmer amber the
+   more prominent add controls picked up — this one shouldn't outrank them. */
 .panel-quick__chip {
   min-height: 40px;
   padding: 7px 14px;
-  border: 1px dashed var(--rule);
+  border: none;
   border-radius: 999px;
-  background: none;
+  background: var(--chip-face);
   color: var(--ink-soft);
   font-family: var(--font-text);
   font-size: 18px;

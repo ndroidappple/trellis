@@ -44,6 +44,7 @@ import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
 import { ShoppingSheet, ToDoSheet } from './PanelSheets'
 import MainMenu from './MainMenu'
 import HomeSheet from './HomeSheet'
+import DateTimePicker from './DateTimePicker'
 import Screensaver from './Screensaver'
 import { useIdle } from '../hooks/useIdle'
 import { clearCookProgress, readCookProgress, writeCookProgress } from '../lib/cookProgress'
@@ -1812,6 +1813,7 @@ export default function Wall({ profile, people }) {
         dragOverDate={drag?.over?.kind === 'day' ? drag.over.date : null}
         onOpenDay={handleOpenDay}
         onOpenBook={() => openBook()}
+        onOpenHome={() => setHomeOpen(true)}
         onOpenMenu={openMenu}
         onOpenChores={() => setSectionOpen('chores')}
         onOpenShopping={() => setSectionOpen('shopping')}
@@ -2215,7 +2217,7 @@ function DayView({
                 plus a Cook button that sits below the fold on a long one —
                 a screen and two taps while holding a pan. */}
             {meal.recipe.steps?.length > 0 && (
-              <button className="sheet-row" onClick={() => onCook(meal)}>
+              <button className="sheet-row sheet-row--primary" onClick={() => onCook(meal)}>
                 <span>Cook it</span>
                 <span className="sheet-row__meta">Step by step, screen stays awake</span>
               </button>
@@ -2454,10 +2456,14 @@ function ChoreSheet({
           <>
             <p className="muted">Due</p>
             <div className="field-row">
-              <input
-                type="date"
-                value={chore.due_on ?? ''}
-                onChange={(e) => onPatch({ due_on: e.target.value || null })}
+              {/* Defaults the picker's display to today when nothing is set
+                  yet — it only ever writes on an actual selection (a day
+                  chip, or the date fallback), never on render, so this
+                  doesn't silently give an unset chore a due date. */}
+              <DateTimePicker
+                value={chore.due_on ?? toDateInputValue(new Date())}
+                allDay
+                onChange={(due_on) => onPatch({ due_on })}
               />
               {chore.due_on && (
                 <button className="ghost" onClick={() => onPatch({ due_on: null })}>
@@ -2638,7 +2644,7 @@ function EventEditor({ initial, profile, people, personFor, onClose, onSaved, on
           onKeyDown={(e) => e.key === 'Enter' && save()}
         />
 
-        <input type={allDay ? 'date' : 'datetime-local'} value={when} onChange={(e) => setWhen(e.target.value)} />
+        <DateTimePicker value={when} allDay={allDay} onChange={setWhen} />
 
         <label className="row">
           <input type="checkbox" checked={allDay} onChange={(e) => toggleAllDay(e.target.checked)} />
@@ -2817,8 +2823,12 @@ function MealEditor({
             two are things you occasionally want, not things to be nudged
             towards. */}
         <div className="actions">
+          {/* "Change", not "Change meal" — the whole dialog is already about
+              this one meal, and the longer label was the one wrapping to two
+              lines in this three-button row while its neighbours stayed on
+              one, the only thing uneven about an otherwise even row. */}
           <button className="ghost" onClick={() => setPicking(true)}>
-            Change meal
+            Change
           </button>
           <button className="ghost danger" onClick={onClear}>
             Clear

@@ -90,6 +90,19 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   display: flex;
   flex-direction: column;
   gap: 16px;
+
+  /* Every full-screen Sheet scrolls if it needs to (.sheet__body); this
+     smaller popup never did. Settings and a chore's detail sheet have both
+     grown taller than a real viewport — 880px and 870px measured, against
+     an 834pt landscape height on the 11" iPad (Feature #17) — and with no
+     floor here, whatever fell below the fold (Sleep now, Delete) was simply
+     unreachable: not clipped-and-scrollable, gone. calc() against 100dvh
+     rather than a percentage, because a percentage height on a grid item
+     centered with place-items only resolves reliably against an explicit
+     parent size, and .scrim never declares one. 48px is .scrim's own
+     top+bottom padding (24px each). */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
 }
 
 /* Scoped to .card (sign-in, error screen, event/meal editor dialogs) —
@@ -695,8 +708,8 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   align-items: center;
   gap: 10px;
 
-  background: transparent;
-  border: 1px dashed var(--rule);
+  background: var(--lit-tint);
+  border: none;
   border-radius: 8px;
   padding: 0 14px;
 
@@ -704,21 +717,29 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   font-size: 18px;
   color: var(--ink-soft);
   cursor: pointer;
+  transition: background var(--dur-state) var(--ease-standard);
 }
 
-/* Dashed, and only here. Everywhere else in this app a dashed outline means
-   "a place something could go" — the day row's + buttons use the same
-   language — and that is exactly what this is. */
+/* Filled, not dashed — this was the last of the app's "invite to add
+   something" buttons still using a dashed outline (the day row's + buttons,
+   WeekGrid.css, and the dock's own quick-add chips, SectionPanel.css, both
+   moved to a filled tint for the same reason: dashed reads as unfinished,
+   not as quiet). Same warm tint as the day row's generic + button, since
+   this is the same kind of control — a generic invitation to add
+   something, not tied to a person or a meal. */
 .panel-add__open:active {
-  background: var(--chip-face);
-  color: var(--ink);
-  border-style: solid;
+  background: var(--lit);
+  color: var(--slat-face);
 }
 
 .panel-add__plus {
   font-size: 22px;
   line-height: 1;
   color: var(--ink-faint);
+}
+
+.panel-add__open:active .panel-add__plus {
+  color: var(--slat-face);
 }
 
 /* Narrow: it is the way out, not an equal third action beside Add. */

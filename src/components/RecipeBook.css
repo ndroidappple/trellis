@@ -263,10 +263,21 @@
 
 /* 16:9 hero crop of the same 3:2 master (docs/backlog-recipe-images.md) —
    object-fit: cover on .recipe-art img trims top/bottom, matching the
-   system's stated card/viewer crop split without needing two stored files. */
+   system's stated card/viewer crop split without needing two stored files.
+   .sheet__body has no width cap of its own (Sheet is inset: 0, edge to
+   edge), so at 16:9 the hero was scaling to the full sheet width — ~442px
+   tall on iPad portrait, ~644px on landscape, eating most of the screen
+   before the description. max-width caps that; the auto margins center it
+   within the wider sheet body (a flex item's cross-axis auto margins win
+   over the column's default align-items: stretch). Below 560px — phone,
+   narrow iPad — this is inert and the hero still fills the available
+   width, same as before. */
 .recipe__hero {
   flex: 0 0 auto;
   aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
 }
 
 .recipe__hero.recipe-art--plate {

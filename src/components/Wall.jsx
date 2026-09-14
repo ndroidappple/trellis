@@ -43,6 +43,7 @@ import ShoppingPanel from './ShoppingPanel'
 import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
 import { ShoppingSheet, ToDoSheet } from './PanelSheets'
 import MainMenu from './MainMenu'
+import HomeSheet from './HomeSheet'
 import Screensaver from './Screensaver'
 import { useIdle } from '../hooks/useIdle'
 import { clearCookProgress, readCookProgress, writeCookProgress } from '../lib/cookProgress'
@@ -232,6 +233,7 @@ export default function Wall({ profile, people }) {
   const [mealEditing, setMealEditing] = useState(null)
   const [reschedulingChore, setReschedulingChore] = useState(null)
   const [bookOpen, setBookOpen] = useState(false)
+  const [homeOpen, setHomeOpen] = useState(false)
   const [bookRecipes, setBookRecipes] = useState([])
   const [bookLoading, setBookLoading] = useState(false)
   const [recipeOpen, setRecipeOpen] = useState(null) // a recipe id, or null
@@ -1424,7 +1426,7 @@ export default function Wall({ profile, people }) {
   const swallowNextClick = useRef(false)
 
   function handlePressStart(e) {
-    if (editing || mealEditing || dayViewing || settingsOpen || bookOpen || reschedulingChore) return
+    if (editing || mealEditing || dayViewing || settingsOpen || bookOpen || homeOpen || reschedulingChore) return
     if (menuOpen) return
     // Holding a "+" button shouldn't also summon settings behind the dialog
     // it opens.
@@ -1965,6 +1967,10 @@ export default function Wall({ profile, people }) {
             setMenuOpen(false)
             setSectionOpen('shopping')
           }}
+          onHome={() => {
+            setMenuOpen(false)
+            setHomeOpen(true)
+          }}
           onSettings={() => {
             setMenuOpen(false)
             setSettingsOpen(true)
@@ -1981,6 +1987,8 @@ export default function Wall({ profile, people }) {
           opens the book and cook mode in the same breath, and for one round
           trip there is a recipe id and no recipe yet. Without the guard that
           gap renders as eighteen recipes you did not ask for. */}
+      {homeOpen && <HomeSheet onClose={() => setHomeOpen(false)} />}
+
       {bookOpen && !openRecipe && !cooking && (
         <RecipeBook
           recipes={bookRecipes}

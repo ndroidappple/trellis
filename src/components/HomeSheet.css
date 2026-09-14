@@ -1,0 +1,203 @@
+/* Feature #18 — Home. See the doc comment atop HomeSheet.jsx for what's
+   real here and what isn't. */
+
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ---------- room tabs ---------- */
+.home__rooms {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.home__rooms::-webkit-scrollbar { display: none; }
+
+.home__room {
+  flex: 0 0 auto;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: 999px;
+  font: 600 17px/1 var(--font-text);
+  padding: 10px 18px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+  transition: background var(--dur-state) var(--ease-standard),
+              color var(--dur-state) var(--ease-standard);
+}
+
+.home__room.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--slat-face);
+}
+
+/* ---------- scenes ---------- */
+.home__scenes {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.home__scenes::-webkit-scrollbar { display: none; }
+
+.home__scene {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--chip-face);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink);
+  font: 600 16px/1 var(--font-text);
+  padding: 11px 18px 11px 14px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.home__scene svg { width: 19px; height: 19px; color: var(--ink-soft); }
+.home__scene:active { background: var(--row-face); }
+
+/* ---------- device grid ---------- */
+.home__group-label {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  margin: 0 0 10px;
+}
+
+.home__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 620px) {
+  .home__grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.home-tile {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--rule);
+  text-align: left;
+  background: var(--row-face);
+  border-radius: var(--radius-panel);
+  padding: 16px;
+  min-height: 116px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-family: var(--font-text);
+  transition: transform var(--dur-tap) var(--ease-standard), background var(--dur-state) var(--ease-standard);
+  touch-action: manipulation;
+}
+
+.home-tile:active { transform: scale(0.97); }
+.home-tile.on { background: var(--slat-face); box-shadow: var(--lift); }
+
+/* Brightness fill climbs the tile like light filling a room — same idea as
+   the prototype, restyled onto --lit/--lit-deep instead of inventing a
+   parallel color scale for the same "on" meaning. */
+.home-tile__fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, var(--lit-deep), var(--lit));
+  opacity: 0.2;
+  transition: height 0.35s cubic-bezier(0.3, 0.8, 0.4, 1), opacity var(--dur-state) var(--ease-standard);
+  pointer-events: none;
+}
+.home-tile.on .home-tile__fill { opacity: 0.26; }
+
+.home-tile__icon {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--chip-face);
+  color: var(--ink-faint);
+  transition: background var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard);
+}
+.home-tile.on .home-tile__icon { background: var(--lit); color: var(--slat-face); }
+.home-tile__icon svg { width: 20px; height: 20px; }
+
+.home-tile__text { position: relative; }
+.home-tile__name { display: block; font-size: 16px; font-weight: 600; line-height: 1.2; color: var(--ink); }
+.home-tile__state { display: block; font-size: var(--size-min); color: var(--ink-soft); margin-top: 2px; }
+.home-tile.on .home-tile__state { color: var(--lit-deep); }
+
+.home__empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-soft);
+  border: 2px dashed var(--rule);
+  border-radius: var(--radius-panel);
+}
+.home__empty b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--ink);
+  margin-bottom: 5px;
+}
+
+/* ---------- brightness dialog ---------- */
+.home-dimmer-card {
+  width: min(300px, 100%);
+  align-items: center;
+  text-align: center;
+}
+.home-dimmer-card h2 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 23px;
+  margin: 0;
+}
+
+.home-dimmer {
+  width: 120px;
+  height: 240px;
+  border-radius: var(--radius-panel);
+  background: var(--row-face);
+  position: relative;
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+  align-self: center;
+}
+
+.home-dimmer__fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, var(--lit-deep), var(--lit));
+  transition: height 0.12s linear;
+}
+
+.home-dimmer__pct {
+  position: absolute;
+  left: 0; right: 0; bottom: 16px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 500;
+  color: var(--slat-face);
+  pointer-events: none;
+}
+.home-dimmer.off .home-dimmer__pct { color: var(--ink-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .home-tile, .home-tile__fill, .home-tile__icon, .home__room, .home-dimmer__fill {
+    transition: none;
+  }
+}

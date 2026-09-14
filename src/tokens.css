@@ -131,6 +131,17 @@
   --chip-face: rgba(46, 43, 35, 0.055);
   --row-face: rgba(46, 43, 35, 0.035);
 
+  /* --- device state (Feature #18, Home) ---
+   * Nothing existing means "this thing is currently active": --person-a/-b
+   * are people, --error is a failure, --meal-rule is a category of content.
+   * A light being on is none of those, so it gets its own accent rather than
+   * borrowing one and having it mean two things. Warm gold reads as lamplight
+   * and sits in its own lane next to --person-b (muted terracotta) and
+   * --error (brick red) rather than being confused for either. */
+  --lit: #D69A42;
+  --lit-deep: #B37D2C;
+  --lit-tint: rgba(214, 154, 66, 0.16);
+
   /* --- type --- */
   --font-display: 'Fraunces Variable', Fraunces, Georgia, serif;
   --font-text: Figtree, system-ui, sans-serif;

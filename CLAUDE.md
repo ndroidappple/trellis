@@ -92,6 +92,9 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
   returns null at Off. A layout preference was taking away per-row delete,
   "clear ticked" and the unpriced-ingredient list. The menu names each section
   even when its panel is hidden.
+- `src/components/HomeSheet.jsx` + `src/lib/home.js` — Feature #18, lights
+  and scenes. See "Home (lights and scenes)" below — in particular, this is
+  a UI shell with no real device behind it yet.
 - `src/components/Screensaver.jsx` + `src/hooks/useIdle.js` +
   `src/lib/screensaver.js` — Feature #5, first version. See "Ambient screen
   timeout" below.
@@ -501,6 +504,30 @@ into night.
 feature's Definition of Done and cannot be closed from a browser. It also
 requires **Settings → Display & Brightness → Auto-Lock → Never** on the iPad,
 or iPadOS blanks the screen first and none of this is ever seen.
+
+## Home (lights and scenes)
+
+Feature #18. `Menu → Home` opens `HomeSheet.jsx` — same tier and same
+mechanism (`Sheet`) as the recipe book and the dock's full pages. Room tabs,
+four scenes, a device tile grid with a brightness "fill" meter, tap to
+toggle, hold to dim (via the existing `useLongPress` hook, not a separate
+button — the same gesture a meal chip or a chore already uses).
+
+**Read this before touching it: it is a UI shell, not a feature.** Every
+device, room and scene it shows (`src/lib/home.js`) is a hardcoded
+placeholder. Toggling a tile changes local `useState` in `HomeSheet.jsx` and
+nothing else — no Supabase table, no realtime sync between the wall and a
+phone, no call to Home Assistant (the actual platform in play, per Nick),
+no real Sonos control. Two prototypes explored an *embedded* version living
+on the board itself; that was rejected for this pass because `SectionDock`
+hardcodes two children and Feature #17 had just finished making the board's
+vertical space work in landscape — a dedicated room avoids both problems by
+never competing with the board for space.
+
+Full writeup, including the exact "implemented now" / "future work" split
+and what real integration would require, is Feature #18 in
+`docs/feature-backlog.md` — read that before starting on real device
+control, not just this paragraph.
 
 ## Meal slots
 

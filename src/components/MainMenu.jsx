@@ -71,6 +71,7 @@ export default function MainMenu({
   onRecipes,
   onChores,
   onShopping,
+  onHome,
   onSettings,
   onClose,
 }) {
@@ -152,6 +153,14 @@ export default function MainMenu({
             onClick={onShopping}
             onHold={onSettings}
           />
+
+          {/* Lights and other household devices. Unlike To-Do and Shopping,
+              this has no board-level setting behind it yet — it isn't a
+              dock section, so there's nothing to hold for — see Feature #18. */}
+          <button className="menu__row" onClick={onHome}>
+            <span className="menu__row-label">Home</span>
+            <span className="menu__row-meta">Lights and scenes</span>
+          </button>
         </div>
 
         <div className="menu__group">

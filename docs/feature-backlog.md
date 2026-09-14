@@ -3074,6 +3074,125 @@ doing its existing job, not new behaviour. `RecipeBook.jsx`'s cook-mode
 
 ---
 
+# Feature #18 — Home (lights and scenes)
+
+**Priority:** Medium — new capability, nothing depends on it and nothing
+depends on it not existing.
+**Category:** New Room
+**Status:** UI shell implemented. Not connected to anything real — see
+"Implemented now" vs. "Future work" below; this line is the whole reason
+that split exists.
+**Depends On:** Nothing. Does not touch the board, `SectionDock`, or
+anything from Feature #17.
+**Primary Goal:** A room for controlling household devices — lights,
+scenes, and eventually the real Sonos speaker — reached the same way the
+recipe book and the dock's full pages are.
+
+## 1. Where this came from
+
+Two HTML prototypes existed in Nick's Downloads (`trellis-home-hub.html`,
+`trellis-home-layer.html`), nine minutes apart, exploring two different
+answers to "where does home control live": a dedicated full-screen room, or
+a widget embedded on the board itself alongside the week and dock.
+
+The embedded version was rejected for this pass, on two structural grounds
+rather than taste:
+- `SectionDock` hardcodes exactly two children (already a known limit —
+  see "Open items from the last session" in `CLAUDE.md`). Adding a third
+  would mean redesigning that component, not just adding content to it.
+- Feature #17 spent an entire pass making the board's vertical space work in
+  landscape (834pt of height, shared between the week grid and the dock).
+  Adding a third thing to that budget would reopen a problem just closed.
+
+A dedicated room, reached from `Menu → Home`, sidesteps both — it opens as
+its own full-screen `Sheet`, the same mechanism `RecipeBook`, `ToDoSheet` and
+`ShoppingSheet` already use, and never competes with the board for space.
+
+The interaction design borrows from the *embedded* prototype anyway, because
+it happened to match how Trellis already behaves better than the dedicated
+one did: tap-to-toggle / hold-to-dim (via the existing `useLongPress` hook —
+the same gesture a meal chip, a chore, or an event already uses) rather than
+a separate "⋯" button; a "Working…" transitional state on toggle, in the
+spirit of the app's existing honesty about state (the sync dot,
+`combineStatus`).
+
+## 2. Implemented now
+
+- **Navigation.** `Menu → Home` (new row in `MainMenu.jsx`, "Rooms" group),
+  opening `HomeSheet.jsx` via `Wall.jsx`'s `homeOpen` state — same pattern as
+  `bookOpen` and the recipe book.
+- **Room tabs** (All / Kitchen / Living Room / Bedroom / Entry) filter the
+  device grid; "All" groups by room with a label per group.
+- **Four scenes** (Good Morning, Dinner, Movie Night, Good Night), each a
+  room-by-room rule (`SCENES` in `src/lib/home.js`) applied to every device
+  in one tap.
+- **A device tile grid**, grouped by room, each tile showing a brightness
+  "fill" that climbs the tile like light filling it — tap toggles on/off,
+  hold (only on a dimmable device) opens a brightness dialog with a vertical
+  drag control, matching the `.card`/`.scrim` dialog styling every other
+  dialog in the app already uses (`SettingsPanel`, the event editor).
+- **One new design token set**: `--lit` / `--lit-deep` / `--lit-tint` in
+  `tokens.css` — the first "this is currently active" accent in the app.
+  Nothing existing meant that (`--person-a`/`-b` are people, `--error` is a
+  failure, `--meal-rule` is a category), so this is a deliberate addition,
+  not a reuse. Everything else — fonts, surfaces, radii, motion durations —
+  is Trellis's existing tokens; none of the prototypes' own palette
+  (Bricolage Grotesque, sage/amber) survived into the actual app.
+
+## 3. Future work — what does NOT exist yet
+
+This is the load-bearing section. Everything in it was cut deliberately for
+this pass, not overlooked:
+
+- **No real device control.** Toggling a tile changes local component state
+  in `HomeSheet.jsx` and nothing else. Nothing turns on, dims, or plays
+  anywhere in the real house.
+- **No persistence.** There is no Supabase table behind any of this —
+  `INITIAL_DEVICES` in `src/lib/home.js` is the permanent starting state on
+  every load. The wall and a phone opening Home at the same time would each
+  see their own copy and could disagree, unlike every other room in this
+  app (events, chores, shopping, meal plan all sync live). Fixing this means
+  a `devices` (and probably `scenes`) table, RLS following the same
+  `current_household_id()` pattern as everything else, and realtime
+  subscriptions the way `useRealtimeTable` already does for the board.
+- **No Home Assistant integration.** Confirmed as the actual platform in
+  play, and not started. Real integration likely means a Supabase Edge
+  Function holding Home Assistant's long-lived access token and proxying
+  its REST/WebSocket API — a browser tab can't hold that credential or
+  reach a LAN-local Home Assistant instance directly from outside the house
+  network without more thought (a public HA reverse proxy, or a Cloudflare
+  Tunnel/Nabu Casa-style relay).
+- **No real Sonos control**, despite "Sonos Arc" existing as a placeholder
+  device in the mock list. The now-playing UI from the prototype was
+  dropped for this pass entirely — not represented in the UI at all — since
+  a fake "Harvest Moon by Neil Young" card would misrepresent what's real
+  once Home Assistant devices start appearing beside it in the same grid.
+- **No honest failure state.** The embedded prototype's pending → failed →
+  retry-toast cycle existed to rehearse real hardware sometimes not
+  answering. Simulating a fake random failure against a mock device would
+  have been theater, so it was cut along with the toast component itself.
+  Bring it back — for real — once `toggle()` in `HomeSheet.jsx` is an actual
+  network call that can time out.
+- **No device/room/scene management UI.** `INITIAL_DEVICES`, `ROOMS` and
+  `SCENES` in `src/lib/home.js` are hardcoded placeholders standing in for
+  Nick and Ed's actual rooms and devices — nobody can add, rename, or remove
+  one from the app. Real device names should replace the placeholders
+  before this is something either of them actually reaches for.
+- **No favorites strip.** Cut along with the embedded-widget shell it was
+  designed for (see §1) — worth reconsidering only if a quick on-board
+  glance is wanted later without reopening the SectionDock question.
+
+## 4. If this becomes real
+
+Roughly in dependency order: a `devices` table + RLS + realtime (makes state
+actually shared, independent of any real hardware); a Home Assistant proxy
+via a Supabase Edge Function (makes toggling a tile do something); the
+honest pending/failed/retry cycle once there's a real call that can fail;
+device management UI once the household actually has more than a handful of
+devices to keep straight.
+
+---
+
 # Long-Term Trellis Direction
 
 The ultimate goal is not simply to have more modules.

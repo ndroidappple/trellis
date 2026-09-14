@@ -59,7 +59,18 @@ import {
   writeDeviceTimeout,
 } from '../lib/screensaver'
 import { DEFAULT_SLOT, MEAL_SLOTS, bySlot, mealMeta, nextFreeSlot, slotLabel } from '../lib/meals'
+import { defaultLayout, sanitizeLayout, GRID_CONFIG, MIN_CELL_SPAN } from '../hooks/useWidgetGrid'
+import { readDeviceLayoutOverride, writeDeviceLayoutOverride } from '../lib/widgetLayout'
 import './Sheet.css'
+
+// The household's starting widget arrangement — same shape `updateSetting`
+// writes back (see commitWidgetLayout below), computed once here rather
+// than inline so DEFAULT_SETTINGS and the "nothing saved yet" fallback in
+// loadSettings can't drift apart.
+const DEFAULT_WIDGET_LAYOUT = {
+  portrait: defaultLayout('portrait'),
+  landscape: defaultLayout('landscape'),
+}
 
 const DEFAULT_SETTINGS = {
   chores: 'full',
@@ -74,6 +85,11 @@ const DEFAULT_SETTINGS = {
   // not just the start hour.
   nightFromHour: NIGHT_FROM_HOUR,
   nightToHour: NIGHT_TO_HOUR,
+  // The household's default widget positions — jsonb again, same
+  // no-migration pattern. A wall-class device may still pin its own (see
+  // lib/widgetLayout.js), the same "device, not household" exception the
+  // screensaver override already established.
+  widgetLayout: DEFAULT_WIDGET_LAYOUT,
 }
 
 /**
@@ -192,6 +208,10 @@ export default function Wall({ profile, people, onRenameSelf }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [cookProgress, setCookProgress] = useState(null)
   const [deviceTimeout, setDeviceTimeout] = useState(readDeviceTimeout)
+  const [deviceWidgetLayout, setDeviceWidgetLayout] = useState(readDeviceLayoutOverride)
+  // "Rearrange widgets" mode, entered from MainMenu — see MainMenu.jsx's new
+  // row and Board.tsx's `rearranging` prop.
+  const [rearranging, setRearranging] = useState(false)
   const [dayViewing, setDayViewing] = useState(null) // an on_date string, or null
   const [sectionOpen, setSectionOpen] = useState(null) // 'chores' | 'shopping' | null
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
@@ -1242,6 +1262,39 @@ export default function Wall({ profile, people, onRenameSelf }) {
     }
   }
 
+  /**
+   * The layout Board actually renders: a per-device override if this
+   * screen has pinned one, otherwise the household default — sanitized
+   * against the live GRID_CONFIG/MIN_CELL_SPAN on every read (not just on
+   * write), since a layout saved before a grid-tuning pass could otherwise
+   * describe a widget that no longer fits. sanitizeLayout only drops what
+   * doesn't fit rather than inventing a placement for it, so a widget type
+   * this household's saved layout has never heard of (Home, before Phase 2
+   * exists) is simply absent until something writes a real position for it
+   * — expected today, not a bug.
+   */
+  const resolvedWidgetLayout = useMemo(() => {
+    const source = deviceWidgetLayout ?? settings.widgetLayout ?? DEFAULT_WIDGET_LAYOUT
+    return {
+      portrait: sanitizeLayout(source.portrait, GRID_CONFIG.portrait, MIN_CELL_SPAN.portrait),
+      landscape: sanitizeLayout(source.landscape, GRID_CONFIG.landscape, MIN_CELL_SPAN.landscape),
+    }
+  }, [deviceWidgetLayout, settings.widgetLayout])
+
+  // Board hands back only the orientation that actually changed — this
+  // patches just that key so a drag/resize on the wall's current
+  // orientation can never clobber whatever the other orientation last had
+  // saved.
+  function commitWidgetLayout(orientation, nextForOrientation) {
+    if (deviceWidgetLayout) {
+      const next = { ...deviceWidgetLayout, [orientation]: nextForOrientation }
+      setDeviceWidgetLayout(next)
+      writeDeviceLayoutOverride(next)
+      return
+    }
+    updateSetting('widgetLayout', { ...settings.widgetLayout, [orientation]: nextForOrientation })
+  }
+
   // Settings → Household → Weekly grocery budget. Same optimistic-with-
   // rollback shape as updateSetting, on the same household row — just a
   // plain column instead of a jsonb key, so it's its own call rather than a
@@ -1764,6 +1817,15 @@ export default function Wall({ profile, people, onRenameSelf }) {
     >
       {error && <p className="error banner">{error}</p>}
 
+      {rearranging && (
+        <div className="rearrange-banner" role="status">
+          <span>Drag a widget to move it, or its corner to resize.</span>
+          <button type="button" className="rearrange-banner__done" onClick={() => setRearranging(false)}>
+            Done
+          </button>
+        </div>
+      )}
+
       <Board
         todayLabel={todayLabel}
         rangeLabel={weekLabel(anchor)}
@@ -1776,7 +1838,6 @@ export default function Wall({ profile, people, onRenameSelf }) {
         loading={!booted}
         settings={settings}
         chores={<ChoresPanel mode="full" {...choresPanelProps} />}
-        choresCompact={<ChoresPanel mode="compact" {...choresPanelProps} />}
         choresCount={
           booted
             ? overdueCount > 0
@@ -1785,8 +1846,10 @@ export default function Wall({ profile, people, onRenameSelf }) {
             : undefined
         }
         shopping={<ShoppingPanel mode="full" {...shoppingPanelProps} />}
-        shoppingCompact={<ShoppingPanel mode="compact" {...shoppingPanelProps} />}
         shoppingCount={booted ? `${shoppingRemaining} to buy` : undefined}
+        widgetLayout={resolvedWidgetLayout}
+        rearranging={rearranging}
+        onCommitWidgetLayout={commitWidgetLayout}
         onPrevWeek={() => setAnchor(addDays(anchor, -7))}
         onNextWeek={() => setAnchor(addDays(anchor, 7))}
         onToday={isCurrentWeek ? undefined : () => setAnchor(startOfWeek(today))}
@@ -1969,6 +2032,10 @@ export default function Wall({ profile, people, onRenameSelf }) {
           onHome={() => {
             setMenuOpen(false)
             setHomeOpen(true)
+          }}
+          onRearrangeWidgets={() => {
+            setMenuOpen(false)
+            setRearranging(true)
           }}
           onSettings={(category) => {
             setMenuOpen(false)

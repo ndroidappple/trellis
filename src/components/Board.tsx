@@ -2,13 +2,25 @@ import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { useDetailLevel, weightedRowsFor, weekFloorFor } from '../hooks/useDetailLevel';
 import { useOrientation } from '../hooks/useOrientation';
 import { WeekGrid, type DayData } from './WeekGrid';
-import { SectionDock, SectionPanel, type SectionMode } from './SectionPanel';
+import { WidgetGrid, type Placement } from './WidgetGrid';
+import { WidgetTile } from './WidgetTile';
+import { MIN_CELL_SPAN } from '../hooks/useWidgetGrid';
 import type { Person } from './PersonBadge';
 import './Board.css';
+
+/** Still `'full' | 'compact' | 'off'` for now — Phase 3 owns replacing the
+    full/compact distinction with the new size-tier system; on/off is all
+    this phase reads (see the renderTile switch below). */
+export type SectionMode = 'full' | 'compact' | 'off';
 
 export interface SectionSettings {
   chores: SectionMode;
   shopping: SectionMode;
+}
+
+export interface WidgetLayoutByOrientation {
+  portrait: Placement[];
+  landscape: Placement[];
 }
 
 /** Whether the board can currently be trusted to be current. */
@@ -36,10 +48,8 @@ interface Props {
   loading?: boolean;
   settings: SectionSettings;
   chores: ReactNode;
-  choresCompact: ReactNode;
   choresCount?: string;
   shopping: ReactNode;
-  shoppingCompact: ReactNode;
   shoppingCount?: string;
   onPrevWeek?: () => void;
   onNextWeek?: () => void;
@@ -63,6 +73,15 @@ interface Props {
   /** Absent while the board is already showing the current week. */
   onToday?: () => void;
   initialsFor?: (person: Person) => string;
+
+  /** This orientation's committed widget arrangement — see the
+      widget-home-screen plan's "Sync scope" section for why household
+      default vs. per-device override lives in Wall.jsx, not here; Board
+      only ever reads whichever one Wall already resolved. */
+  widgetLayout: WidgetLayoutByOrientation;
+  /** "Rearrange widgets" mode, entered from MainMenu — see MainMenu.jsx. */
+  rearranging?: boolean;
+  onCommitWidgetLayout?: (orientation: 'portrait' | 'landscape', next: Placement[]) => void;
 }
 
 export function Board(props: Props) {
@@ -71,20 +90,6 @@ export function Board(props: Props) {
 
   const flourishes = props.flourishes ?? [];
   const cycleable = (props.flourishCycleable ?? true) && !!props.onCycleFlourish;
-
-  /*
-   * How much of the week (excluding today, which is never "dead") is behind
-   * us. 0 on a Sunday-anchored week's first day, climbing toward 1 by
-   * Saturday — and it's this, not the day of the week itself, that the dock
-   * responds to, so a week fully in the past (paged back a week) reads the
-   * same as the tail end of the current one. Feeds `--past-share` on the
-   * dock in SectionPanel.css, which is the other half of giving the week
-   * grid's reclaimed space somewhere useful to go.
-   */
-  const notToday = props.days.filter((d) => !d.isToday);
-  const pastShare = notToday.length > 0
-    ? notToday.filter((d) => d.isPast).length / notToday.length
-    : 0;
 
   // Replaces Board.css's static worst-case min-height on .board__week: once
   // several days actually collapse (see .day-row--past in WeekGrid.css) the
@@ -196,61 +201,97 @@ export function Board(props: Props) {
       </header>
 
       {/*
-        Portrait stacks week-then-dock in one column, same as always — there
-        is enough height (1194pt+) for the dock to take what the week leaves
-        under it. Landscape (834pt) does not have that height to share: the
-        week's own floor alone can exceed what's left once the header and
-        padding are accounted for, which leaves nothing for the dock. So in
-        landscape .board__body switches to a row instead — week and dock
-        become side-by-side columns, each getting the *entire* body height
-        rather than negotiating a split of one shared column. See the
-        data-orientation rules in Board.css and SectionPanel.css.
+        Each widget occupies a cell rect on one integer grid (see
+        useWidgetGrid.js) instead of the old two-region week/dock split —
+        that automatic space handoff (`--past-share`) is a deliberate
+        casualty of moving to user-placed widgets, not an oversight: see the
+        widget-home-screen plan's "What must not regress" section. Portrait
+        and landscape each carry their own independently-stored arrangement
+        (`props.widgetLayout`), which Wall.jsx already resolved from the
+        household default plus any per-device override before this ever
+        renders.
       */}
       <div className="board__body">
-        {/* The ref goes on the element whose height the level is derived from. */}
-        <div
-          className="board__week"
-          ref={weekRef}
-          style={{ '--week-floor': `${weekFloor}px` } as CSSProperties}
-        >
-          <WeekGrid
-            days={props.days}
-            level={level}
-            loading={props.loading}
-            initialsFor={props.initialsFor}
-            onEventPress={props.onEventPress}
-            onEventLongPress={props.onEventLongPress}
-            onAddDay={props.onAddDay}
-            onAddMeal={props.onAddMeal}
-            dragging={props.dragging}
-            dragOverDate={props.dragOverDate}
-            onOpenDay={props.onOpenDay}
-            onPrevWeek={props.onPrevWeek}
-            onNextWeek={props.onNextWeek}
-          />
-        </div>
+        <WidgetGrid
+          orientation={orientation}
+          layout={props.widgetLayout[orientation]}
+          rearranging={!!props.rearranging}
+          onCommitLayout={(next) => props.onCommitWidgetLayout?.(orientation, next)}
+          minSpans={MIN_CELL_SPAN[orientation]}
+          renderTile={(placement, gesture) => {
+            const tileProps = {
+              rearranging: props.rearranging,
+              onDragHandlePointerDown: gesture.onDragHandlePointerDown,
+              onResizeHandlePointerDown: gesture.onResizeHandlePointerDown,
+            };
 
-        <SectionDock modes={[props.settings.chores, props.settings.shopping]} pastShare={pastShare}>
-          <SectionPanel
-            title="Weekly To Do"
-            count={props.choresCount}
-            mode={props.settings.chores}
-            compact={props.choresCompact}
-            onOpen={props.onOpenChores}
-          >
-            {props.chores}
-          </SectionPanel>
+            if (placement.id === 'calendar') {
+              return (
+                <WidgetTile id="calendar" title="This Week" mode="on" {...tileProps}>
+                  {/* The ref goes on the element whose height the level is
+                      derived from — same rule as before, just re-pointed
+                      from .board__week to this tile's own content area. */}
+                  <div
+                    className="board__week"
+                    ref={weekRef}
+                    style={{ '--week-floor': `${weekFloor}px` } as CSSProperties}
+                  >
+                    <WeekGrid
+                      days={props.days}
+                      level={level}
+                      loading={props.loading}
+                      initialsFor={props.initialsFor}
+                      onEventPress={props.onEventPress}
+                      onEventLongPress={props.onEventLongPress}
+                      onAddDay={props.onAddDay}
+                      onAddMeal={props.onAddMeal}
+                      dragging={props.dragging}
+                      dragOverDate={props.dragOverDate}
+                      onOpenDay={props.onOpenDay}
+                      onPrevWeek={props.onPrevWeek}
+                      onNextWeek={props.onNextWeek}
+                    />
+                  </div>
+                </WidgetTile>
+              );
+            }
 
-          <SectionPanel
-            title="Shopping"
-            count={props.shoppingCount}
-            mode={props.settings.shopping}
-            compact={props.shoppingCompact}
-            onOpen={props.onOpenShopping}
-          >
-            {props.shopping}
-          </SectionPanel>
-        </SectionDock>
+            if (placement.id === 'todo') {
+              return (
+                <WidgetTile
+                  id="todo"
+                  title="Weekly To Do"
+                  count={props.choresCount}
+                  mode={props.settings.chores === 'off' ? 'off' : 'on'}
+                  onOpen={props.onOpenChores}
+                  {...tileProps}
+                >
+                  {props.chores}
+                </WidgetTile>
+              );
+            }
+
+            if (placement.id === 'shopping') {
+              return (
+                <WidgetTile
+                  id="shopping"
+                  title="Shopping"
+                  count={props.shoppingCount}
+                  mode={props.settings.shopping === 'off' ? 'off' : 'on'}
+                  onOpen={props.onOpenShopping}
+                  {...tileProps}
+                >
+                  {props.shopping}
+                </WidgetTile>
+              );
+            }
+
+            // 'home' arrives in Phase 2 — until HomeWidget exists, an
+            // unrecognized placement id renders nothing rather than
+            // guessing at content.
+            return null;
+          }}
+        />
       </div>
     </div>
   );

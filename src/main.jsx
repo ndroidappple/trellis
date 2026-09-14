@@ -9,11 +9,14 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
-// Phase 0 dev spike for the widget-home-screen plan — never linked from the
-// real app, only reachable by typing ?gooey-spike into the URL, and lazy so
-// its liquid-gooey import never ships in the real bundle's eager graph.
-const isGooeySpike = new URLSearchParams(window.location.search).has('gooey-spike')
+// Dev spikes for the widget-home-screen plan — never linked from the real
+// app, only reachable by typing a query param into the URL, and lazy so
+// neither ships in the real bundle's eager graph.
+const searchParams = new URLSearchParams(window.location.search)
+const isGooeySpike = searchParams.has('gooey-spike')
+const isBoardSpike = searchParams.has('board-spike')
 const GooeySpike = isGooeySpike ? lazy(() => import('./dev/gooey-spike.jsx')) : null
+const BoardSpike = isBoardSpike ? lazy(() => import('./dev/board-spike.jsx')) : null
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -21,6 +24,10 @@ createRoot(document.getElementById('root')).render(
       {isGooeySpike ? (
         <Suspense fallback={null}>
           <GooeySpike />
+        </Suspense>
+      ) : isBoardSpike ? (
+        <Suspense fallback={null}>
+          <BoardSpike />
         </Suspense>
       ) : (
         <App />

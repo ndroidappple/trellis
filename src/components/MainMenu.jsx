@@ -72,6 +72,7 @@ export default function MainMenu({
   onChores,
   onShopping,
   onHome,
+  onRearrangeWidgets,
   onSettings,
   onClose,
 }) {
@@ -165,6 +166,15 @@ export default function MainMenu({
 
         <div className="menu__group">
           <span className="menu__heading">Board</span>
+
+          {/* Enters the board's own "Rearrange widgets" mode (Wall.jsx's
+              `rearranging` state) rather than opening anything — the only
+              row here that changes what the board behind this dialog is
+              doing instead of navigating away from it. */}
+          <button className="menu__row" onClick={onRearrangeWidgets}>
+            <span className="menu__row-label">Rearrange widgets</span>
+            <span className="menu__row-meta">Move or resize what's on the board</span>
+          </button>
 
           {/* No argument here, unlike the two onHold rows above — this always
               lands on the root list. (Also why this is `() => onSettings()`

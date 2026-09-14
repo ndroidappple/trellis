@@ -1,0 +1,42 @@
+/* The widget-based home screen's layout container — replaces Board.tsx's
+   .board__body (.board__week + SectionDock). Column/row template, gap and
+   min-height are all set inline by WidgetGrid.tsx (they're derived from
+   GRID_CONFIG + the same numbers the drag/resize pixel math uses, so
+   keeping them in one place avoids the CSS and the JS silently drifting
+   apart on a tuning pass). */
+.widget-grid {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.widget-grid__cell {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* No slide animation between committed positions in Phase 1 — grid-column/
+   grid-row aren't interpolatable properties, so a smooth "glide into place"
+   needs the FLIP technique or a real physics library, and Phase 4 already
+   owns exactly that (liquid-gooey's Move effect). An instant snap on commit
+   is the honest mechanism-only behavior for this phase. */
+.widget-grid__cell[data-active='true'] {
+  z-index: 2;
+}
+
+.widget-grid__cell[data-active='true'] .widget-tile {
+  box-shadow: var(--raise-2);
+}
+
+/* Pure hit-test surface for useWidgetDrag's elementFromPoint lookup —
+   rendered only while a drag is active (see WidgetGrid.tsx), invisible and
+   on top of every tile so the pointer always finds a cell instead of
+   whatever tile happens to be underneath it. */
+.widget-grid__drop-cell {
+  z-index: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .widget-grid__cell { transition: none; }
+}

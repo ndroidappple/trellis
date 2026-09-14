@@ -49,6 +49,45 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
 }
 
+/* Same fixed-pill positioning as .banner above, and for the same reason —
+   it must not steal layout height, since useDetailLevel and the widget
+   grid's own floor are both calibrated against a full-height board. Neutral
+   rather than .banner's error-red border: entering "Rearrange widgets" is
+   not a failure state. */
+.rearrange-banner {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 8px 8px 8px 20px;
+  border-radius: 999px;
+
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
+  font-size: var(--size-min);
+  box-shadow: var(--raise-1);
+}
+
+.rearrange-banner__done {
+  flex: 0 0 auto;
+  min-height: var(--tap-min);
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--plaster);
+  font-family: var(--font-text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
 /* A sign-in failure is the only diagnosis available on a device with no
    devtools, so it has to wrap and stay selectable rather than run off the
    edge of the card. */
@@ -568,10 +607,6 @@ p  { margin: 0; font-size: 18px; line-height: 1.5; }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px 14px;
-}
-
-.section-dock[data-cols='1'] .shop-aisles--dense .shop-aisle__items {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 /* Tighter in the dock than on the page. Grouping costs vertical space that a

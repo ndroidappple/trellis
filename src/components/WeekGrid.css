@@ -238,11 +238,18 @@
   font-size: var(--size-dom-today-open);
 }
 
+/* The one place today's row picks up the amber accent — not the row's own
+   background (--today-face already does its job: warmer than an ordinary
+   row, not brighter, and recoloring the single largest surface on the board
+   is a bigger risk than this pass earns). A small, contained pill is the
+   accent; the row underneath stays exactly as tuned. */
 .day-row__badge {
   margin-top: 10px;
   font-size: 16px;
-  color: var(--ink-soft);
-  border: 1px solid var(--rule);
+  font-weight: 600;
+  color: var(--lit-deep);
+  background: var(--lit-tint);
+  border: none;
   border-radius: 999px;
   padding: 4px 12px;
 }

@@ -21,7 +21,7 @@ import { formatCents } from '../lib/cost'
  * page and the dock cannot drift into disagreeing about what is on the list.
  */
 
-export function ToDoSheet({ weekLabel, choresPanelProps, onClose }) {
+export function ToDoSheet({ weekLabel, choresPanelProps, completedTaskCount = 0, onClearCompleted, onClose }) {
   const { pendingCount = 0, choreCount = 0 } = choresPanelProps
 
   const subtitle =
@@ -30,7 +30,19 @@ export function ToDoSheet({ weekLabel, choresPanelProps, onClose }) {
       : `${pendingCount === 0 ? 'Nothing' : pendingCount} left · ${weekLabel}`
 
   return (
-    <Sheet title="Weekly To Do" subtitle={subtitle} onClose={onClose}>
+    <Sheet
+      title="Weekly To Do"
+      subtitle={subtitle}
+      onClose={onClose}
+      footer={
+        // Only a finished one-off errand is a candidate here — see
+        // clearCompletedTasks in Wall.jsx for why weekly and episodic chores
+        // are excluded rather than just quietly never matching.
+        <button className="ghost" onClick={onClearCompleted} disabled={completedTaskCount === 0}>
+          {completedTaskCount > 0 ? `Clear ${completedTaskCount} completed` : 'Nothing completed'}
+        </button>
+      }
+    >
       {/* The panel renders its own groups, palette and add row. On a page it
           is the same component with room to breathe rather than a second
           implementation that would drift. */}
@@ -52,6 +64,7 @@ export function ShoppingSheet({
   onRemove,
   onAddGroceries,
   onClearChecked,
+  onClearAll,
   onClose,
 }) {
   const remaining = items.filter((i) => !i.checked).length
@@ -68,6 +81,16 @@ export function ShoppingSheet({
       onClose={onClose}
       footer={
         <>
+          {/* The stronger of the two clears, so it sits first rather than
+              between "Clear ticked" and the constructive "Add" button —
+              grouping the two destructive actions together reads as one
+              decision ("clear something") rather than three unrelated ones.
+              Same nine-second undo as everything else here; unlike "Clear
+              ticked" this can remove items you haven't bought yet, which is
+              exactly why it's its own button instead of a mode on that one. */}
+          <button className="ghost" onClick={onClearAll} disabled={items.length === 0}>
+            {items.length > 0 ? 'Clear all' : 'List is empty'}
+          </button>
           <button className="ghost" onClick={onClearChecked} disabled={checked === 0}>
             {checked > 0 ? `Clear ${checked} ticked` : 'Nothing ticked'}
           </button>

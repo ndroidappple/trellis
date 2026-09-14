@@ -720,6 +720,47 @@ export default function Wall({ profile, people }) {
     })
   }
 
+  /**
+   * Every finished one-off, gone at once — the to-do equivalent of Shopping's
+   * "Clear ticked". Weekly and episodic chores are excluded on purpose, not
+   * just filtered out incidentally: a weekly chore's done-ness resets every
+   * Sunday and an episodic one has no done-ness to report at all (see
+   * choreIsDone), so neither is ever "finished" in the sense this button
+   * means. Only a completed 'once' chore is done forever, the same way a
+   * ticked shopping item is bought forever.
+   */
+  async function clearCompletedTasks() {
+    const done = chores.filter((c) => c.recurrence === 'once' && choreIsDone(c))
+    if (done.length === 0) return
+
+    setChores((cs) => cs.filter((c) => !done.some((d) => d.id === c.id)))
+
+    const { error: clearError } = await supabase
+      .from('chores')
+      .delete()
+      .in('id', done.map((c) => c.id))
+
+    if (clearError) {
+      setError(clearError.message)
+      return loadChores()
+    }
+
+    offerUndo(`Cleared ${done.length} ${done.length === 1 ? 'task' : 'tasks'}`, async () => {
+      const { error: undoError } = await supabase.from('chores').insert(
+        done.map((c) => ({
+          household_id: c.household_id,
+          title: c.title,
+          recurrence: c.recurrence,
+          sort_order: c.sort_order,
+          assignee_id: c.assignee_id ?? null,
+          completed_at: c.completed_at ?? null,
+        }))
+      )
+      if (undoError) setError(undoError.message)
+      loadChores()
+    })
+  }
+
   // -------------------------------------------------------------- shopping
 
   const loadShopping = useCallback(async () => {
@@ -813,6 +854,49 @@ export default function Wall({ profile, people }) {
     offerUndo(`Cleared ${done.length} ${done.length === 1 ? 'item' : 'items'}`, async () => {
       const { error: undoError } = await supabase.from('list_items').insert(
         done.map((i) => ({
+          household_id: i.household_id,
+          list: i.list,
+          body: i.body,
+          qty: i.qty,
+          category: i.category,
+          added_by: i.added_by,
+          checked: i.checked,
+          source: i.source,
+        }))
+      )
+      if (undoError) setError(undoError.message)
+      loadShopping()
+    })
+  }
+
+  /**
+   * The whole list, bought or not, gone at once — starting over rather than
+   * finishing a shop. A stronger action than "Clear ticked", which only ever
+   * removes what's already been bought and so never loses anything you still
+   * need; this one can, which is why it earns its own button rather than
+   * living behind a modifier on that one. Same nine-second undo as every
+   * other bulk clear in this app — the safety net is the undo, not a
+   * confirmation dialog, same as a swipe-to-delete row.
+   */
+  async function clearAllShopping() {
+    const all = shoppingItems
+    if (all.length === 0) return
+
+    setShoppingItems([])
+
+    const { error: clearError } = await supabase
+      .from('list_items')
+      .delete()
+      .in('id', all.map((i) => i.id))
+
+    if (clearError) {
+      setError(clearError.message)
+      return loadShopping()
+    }
+
+    offerUndo(`Cleared ${all.length} ${all.length === 1 ? 'item' : 'items'}`, async () => {
+      const { error: undoError } = await supabase.from('list_items').insert(
+        all.map((i) => ({
           household_id: i.household_id,
           list: i.list,
           body: i.body,
@@ -1626,6 +1710,10 @@ export default function Wall({ profile, people }) {
     [choreGroups]
   )
 
+  const completedTaskCount = chores.filter(
+    (c) => c.recurrence === 'once' && choreIsDone(c)
+  ).length
+
   const choresPanelProps = {
     loading: !booted,
     groups: choreGroups,
@@ -1725,6 +1813,8 @@ export default function Wall({ profile, people }) {
         <ToDoSheet
           weekLabel={weekLabel(anchor)}
           choresPanelProps={choresPanelProps}
+          completedTaskCount={completedTaskCount}
+          onClearCompleted={clearCompletedTasks}
           onClose={() => setSectionOpen(null)}
         />
       )}
@@ -1741,6 +1831,7 @@ export default function Wall({ profile, people }) {
           onRemove={removeShopping}
           onAddGroceries={addWeekGroceries}
           onClearChecked={clearCheckedShopping}
+          onClearAll={clearAllShopping}
           onClose={() => setSectionOpen(null)}
         />
       )}

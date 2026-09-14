@@ -1022,6 +1022,23 @@ component — but per-component blocks that also suppress an `:active`
 transform are still needed and still there, because a transform with no
 duration still snaps.
 
+**The `transitions-dev` skill** (`.claude/skills/transitions-dev/`, a symlink
+into `.agents/skills/transitions-dev/`) is installed for reference when a
+future ask wants a transition this codebase doesn't have yet — a modal
+open/close, a dropdown, a panel reveal. Its own `_root.css` ships a *separate*
+set of per-pattern tokens (`--modal-open-dur`, `--dropdown-ease`, …) — retarget
+a pulled snippet onto this codebase's four semantic tokens above rather than
+adding `_root.css` alongside them, or the app ends up with two motion scales
+that can drift apart. And several of the patterns it covers are already
+bespoke here, on purpose, documented where they live: the checklist tick is
+intentionally instant, not eased (`ChecklistRow.css`); the loading skeleton
+breathes slowly rather than shimmers, for the same burn-in reasoning as the
+screensaver (`Skeleton.css`); `CookMode`'s tap-zone press feedback is
+deliberately un-eased ("140ms of fade is 140ms of not knowing",
+`RecipeBook.css`); and the undo toast plus `SwipeAway`'s reveal are already
+hand-built and wired to `offerUndo` and specific px constants. Reach for the
+skill for a genuine gap, not to "improve" one of these.
+
 ## Chore recurrences
 
 Three recurrences, and the third exists because the first two could not

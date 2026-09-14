@@ -201,6 +201,13 @@ RLS is the real security boundary: every table's policies funnel through
 `current_household_id()`, which resolves via the caller's `profiles` row.
 No profile row = no access, even with a valid session.
 
+`002_event_sources.sql` added `source` / `external_id` / `read_only` to
+`events`, explicitly preparing it to hold read-only Google Calendar events
+alongside Trellis's own — its own comment names Google Calendar directly.
+Nobody built the sync or the read-only tap path; every current row is just
+`source = 'trellis'` from the column default. See Feature #19 in the
+backlog before starting that work — the schema is already there, waiting.
+
 `013_shopping_aisles.sql` gave `list_items` a `category` and a `qty`, and
 `staples` a `category`. Quantity used to live inside the item's text as a
 "×2" suffix, which made the label the source of truth for a number — so

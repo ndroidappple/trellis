@@ -3193,6 +3193,80 @@ devices to keep straight.
 
 ---
 
+# Feature #19 — Google Calendar, read-only
+
+**Priority:** Medium
+**Category:** Integrations / Calendar
+**Status:** Backlog — scoped, not started. The data model already exists.
+**Depends On:** Nothing structural.
+**Primary Goal:** Show Google Calendar events on the board and in the day
+view, merged with Trellis's own events, without ever writing back to Google.
+
+## 1. The database already expects this
+
+`supabase/migrations/002_event_sources.sql` — the fourth migration this
+project ever had — added `source`, `external_id`, and `read_only` to
+`events`, with a unique index on `(source, external_id)` to keep a re-sync
+from ever duplicating a row. Its own comment: *"Trellis events are created
+in the app and are editable. Google Calendar events (backlog) are owned by
+Google and are not. Adding these now means the grid can be built against
+both cases from the start."*
+
+Nobody built the other case. `grep`ing the whole app for `read_only`,
+`external_id`, or `events.source` turns up nothing — every current row gets
+`source = 'trellis'` from the column default, `read_only = false`, and no
+code anywhere has ever branched on either. The schema was prepared and then
+the feature it was prepared for never got built. This entry is that feature.
+
+## 2. What has to exist that doesn't yet
+
+- **A Google Cloud OAuth client**, requesting `calendar.readonly` only —
+  the minimum scope for "read and display," never write. This is the one
+  piece of this that isn't engineering: it's a Google Cloud Console setup
+  step only Nick can do, using his own Google account.
+- **A place to hold the refresh token.** Not in the client — a Supabase Edge
+  Function secret, or a small household-scoped table with RLS as tight as
+  `profiles`. The token is a credential, not app data.
+- **A sync job**, not a live fetch on render. A scheduled Edge Function
+  (Supabase Cron / `pg_cron`) pulling events on an interval and upserting
+  into `events` with `source = 'google'`, `external_id` set to Google's own
+  event id, `read_only = true`. Realtime then does the rest — the wall and
+  a phone pick up a synced event exactly the way they pick up a Trellis one
+  today, because it's the same table and the same subscription.
+- **A read-only tap path.** `handleEventPress` and `handleEventLongPress`
+  in `Wall.jsx` (currently ~1569 and ~1627) both route every event, no
+  exceptions, to `setEditing(ev)` — the same editable dialog a Trellis event
+  opens. That dialog's Save would silently do nothing Google ever sees, and
+  its Delete would remove the local copy only for the next sync to bring it
+  right back — both worse than doing nothing. A synced event needs its own
+  branch: at minimum, a read-only glance (title, time, "from Google
+  Calendar"); the full `EventEditor` should never open for one.
+
+## 3. What's genuinely undecided
+
+- **One Google account, or one per person?** The household is two people;
+  Google Calendar is inherently a personal credential. Merging just Nick's
+  calendar is the smaller build — one OAuth connection, one token. Letting
+  Ed connect his own too means the token storage and the sync job both need
+  to be per-profile, not per-household, and `source` needs to distinguish
+  whose event is whose (`google:nick` vs `google:ed`, or a real
+  `calendar_connections` table keyed by `profile_id` rather than overloading
+  the `source` string). This changes the schema, not just the UI, so it's
+  worth settling before writing the migration.
+- **Google's testing-mode token expiry.** While this OAuth app sits in
+  Google's "Testing" publishing status — which a two-person household app
+  has no real reason to leave, since "In production" for a calendar scope
+  usually still asks for Google's app-verification review — refresh tokens
+  expire after 7 days, meaning whoever connected their calendar re-consents
+  weekly. Worth confirming this is still current Google policy before the
+  sync job is built around assuming a long-lived token.
+- **Does a synced event ever get hidden or filtered** (a calendar full of
+  work meetings nobody wants to see on the kitchen wall), or is it all
+  Google sends, always shown? Not required for a first version, but worth
+  deciding before real use surfaces it as a complaint.
+
+---
+
 # Long-Term Trellis Direction
 
 The ultimate goal is not simply to have more modules.

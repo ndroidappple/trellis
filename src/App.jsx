@@ -209,6 +209,36 @@ function Household({ session }) {
     load()
   }, [session])
 
+  /**
+   * Settings → Household → Your name. `profiles_update_own` (001) already
+   * lets a signed-in user write their own row, so this needs no migration.
+   *
+   * Optimistic, with rollback on error — the same shape `Wall.jsx`'s
+   * `updateSetting` uses for board_settings. Unlike board_settings, `profiles`
+   * isn't on a realtime channel, so a rename here reaches this device
+   * immediately but won't reach the other device until its next reload —
+   * acceptable for a field that changes rarely, not worth a sixth realtime
+   * subscription to close.
+   */
+  async function onRenameSelf(name) {
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === profile.display_name) return
+    const previous = profile
+    setProfile((p) => ({ ...p, display_name: trimmed }))
+    setPeople((prev) => prev.map((p) => (p.id === profile.id ? { ...p, display_name: trimmed } : p)))
+
+    const { error: renameError } = await supabase
+      .from('profiles')
+      .update({ display_name: trimmed })
+      .eq('id', profile.id)
+
+    if (renameError) {
+      setProfile(previous)
+      setPeople((prev) => prev.map((p) => (p.id === profile.id ? { ...p, display_name: previous.display_name } : p)))
+      setError(renameError.message)
+    }
+  }
+
   if (error) {
     return (
       <Shell>
@@ -225,5 +255,5 @@ function Household({ session }) {
 
   if (!profile) return <Shell><p className="muted">Loading…</p></Shell>
 
-  return <Wall profile={profile} people={people} />
+  return <Wall profile={profile} people={people} onRenameSelf={onRenameSelf} />
 }

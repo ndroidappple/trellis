@@ -41,7 +41,8 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
 - `src/components/Wall.jsx` — the orchestrator. Owns all Supabase
   fetching/mutation (events, chores, shopping list, meal plan) and feeds
   it into the presentational `Board` component. Also defines the
-  `EventEditor`, `MealEditor`, and `SettingsPanel` dialogs inline.
+  `EventEditor` and `MealEditor` dialogs inline. Settings used to be a third
+  (`SettingsPanel`) but outgrew a dialog — see `SettingsSheet.jsx` below.
 - `src/components/Board.tsx` + `WeekGrid.tsx`, `EventChip.tsx`,
   `PersonBadge.tsx`, `ChecklistRow.tsx`, `SectionPanel.tsx` — the visual
   design system (see "UI redesign" below). Mostly TypeScript, transpiled
@@ -95,6 +96,14 @@ Repo: `github.com/ndroidappple/trellis`, local checkout at
 - `src/components/HomeSheet.jsx` + `src/lib/home.js` — Feature #18, lights
   and scenes. See "Home (lights and scenes)" below — in particular, this is
   a UI shell with no real device behind it yet.
+- `src/components/SettingsSheet.jsx` — Feature #20. A root list of four
+  categories (Board Layout, Display, Household, Accounts), each its own
+  drill-down `Sheet` page with a back control — see "Settings, full scale"
+  below. Replaced `SettingsPanel`, the `.card.dialog` popup this used to be.
+- `src/lib/flourishes.js` — the header aside picker's data (`FLOURISHES`,
+  `maxFlourishesFor`, `toFlourishIds`). Used by both `Wall.jsx`'s header and
+  `SettingsSheet.jsx`'s Board Layout page, which is why it's a `lib/` module
+  rather than living in either.
 - `src/components/Screensaver.jsx` + `src/hooks/useIdle.js` +
   `src/lib/screensaver.js` — Feature #5, first version. See "Ambient screen
   timeout" below.
@@ -275,26 +284,74 @@ reskin — `Wall.jsx` was rebuilt to feed real data into the new components.
   instead of negotiating a split of one shared column. First-guess numbers
   throughout, not yet checked on the actual dock — see the open item below.
 
-**Settings:** `Menu → Settings`, or long-press the board (~650ms). Also holds
-**Sleep now**, which drops straight into the ambient scene without waiting out
-the timeout; waking stays "any touch", exactly as a timed sleep does, so there
-is only ever one thing to know about getting the board back.
+## Settings, full scale (Feature #20)
 
-**Screen timeout is one row, not two.** `lib/screensaver.js` implements the
-household-default-plus-device-override model Feature #5 §8 asks for, and
-`timeoutMsFor` still honours a device pin — but only one control is surfaced,
-because a setting whose entire purpose is to describe a difference between
-devices should not appear before a second device does. Picking a value clears
-any device pin in the same action, so the visible control is always the one
-telling the truth. Split it back in two when the household has two screens. The
-long-press still works and is still undocumented in the UI; it stopped being
-the *only* way in when the menu arrived, which mattered because the dialog is
-where you undo switching a section off, and switching a section off used to
-hide its page. The dialog sets each
-section (To-Do, Shopping) to Full / Compact / Off. Persisted on
-`household.board_settings` (jsonb), synced via Supabase realtime so the
-wall and a phone agree. `SectionDock` computes 1 vs. 2 columns from
-whichever modes are active.
+`Menu → Settings`, or long-press the board (~650ms) — both still land on the
+same place, a root list of four categories rather than the single popup this
+used to be: **Board Layout** (To-Do / Shopping dock modes, header aside),
+**Display** (screen timeout, night mode, Sleep now), **Household** (weekly
+grocery budget, your name), **Accounts** (Google Calendar). Each opens its own
+full-screen `Sheet` with a back control to the root; `Done` closes from
+anywhere, not just the root, so leaving never means backing out level by
+level. `SettingsSheet.jsx` owns which category is showing — `Wall.jsx` only
+knows whether Settings is open at all, plus which category to start on, which
+is how the menu's hold-to-configure rows (below) jump straight to Board Layout
+instead of the root list they don't want. See the file's own doc comment for
+why this grew past a dialog: `Sheet.jsx` used to argue a full-screen takeover
+was theatre for a control this small, and that argument held until four more
+controls (below) made it not small any more.
+
+The long-press is still undocumented in the UI; it stopped being the *only*
+way in when the menu arrived, which mattered because Settings is where you
+undo switching a dock section off, and switching a section off used to hide
+its page. Board Layout sets each section (To-Do, Shopping) to Full / Compact /
+Off, persisted on `household.board_settings` (jsonb), synced via Supabase
+realtime so the wall and a phone agree. `SectionDock` computes 1 vs. 2 columns
+from whichever modes are active.
+
+**Screen timeout is two rows again.** `lib/screensaver.js`'s
+household-default-plus-device-override model (Feature #5 §8) was always
+built, but only the household row was surfaced — a setting whose entire
+purpose is to describe a difference between devices shouldn't appear before a
+second device does, and picking a household value used to silently clear any
+device pin in the same action, so there was only ever one control worth
+reading. The household now has an iPad plus two phones, so **This device** is
+back as its own row (Display), and — since both controls are visible now —
+neither silently clears the other; each does only what it says.
+
+**Night mode hours are a household setting, not two constants.**
+`NIGHT_FROM_HOUR`/`NIGHT_TO_HOUR` (22/6) in `lib/screensaver.js` are now just
+the defaults; `isNightAt(date, fromHour, toHour)` takes both, stored on
+`board_settings` as `nightFromHour`/`nightToHour`. Display's two hour steppers
+write them — hour-only, since that's all `isNightAt` reads. Handles both a
+wrapping window (the default, 10pm–6am) and a same-day one correctly; see the
+function's own comment for why the naive `h >= from || h < to` formula only
+covers the wrapping case.
+
+**Weekly grocery budget** (`household.weekly_budget_cents`) was previously
+editable only via a migration or the Supabase dashboard, despite driving the
+shopping-budget figure in `lib/cost.js` since Feature #15. Household →
+Weekly grocery budget writes it directly now, same optimistic-with-rollback
+shape as `updateSetting`. `loadSettings` (`Wall.jsx`) owns fetching it
+alongside `board_settings` — both live on the same household row and both
+change on the same realtime channel, so there's one fetch instead of two that
+could disagree; the separate `weekly_budget_cents` query that used to live in
+`loadMeals` is gone.
+
+**Your name** (`profiles.display_name`) was likewise dashboard-only.
+Household → Your name writes it via `onRenameSelf`, defined in `App.jsx`'s
+`Household` component (where `profile`/`people` already live) rather than in
+`Wall.jsx` — `profiles_update_own` (001) already permits a signed-in user to
+update their own row, so no migration or policy change was needed. Not on a
+realtime channel: a rename reaches the device that made it immediately, but
+reaches the other device only on its next reload. Each person can only rename
+themselves — there's no control for the other person's name, since RLS
+wouldn't allow writing it anyway.
+
+**Sleep now** lives in Display, with the timeout it short-circuits: it drops
+straight into the ambient scene without waiting out the timeout, and waking
+stays "any touch", exactly as a timed sleep does, so there is only ever one
+thing to know about getting the board back.
 
 The press tolerates 12px of drift (`LONG_PRESS_SLOP_PX`) and ignores
 presses that start on a control. Cancelling on any pointermove at all made

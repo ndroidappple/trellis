@@ -2670,6 +2670,7 @@ Ordered by what should be picked up next, not by feature number.
 | 11 | **#3 Themes** | Low | Personalization and visual delight |
 | 12 | **#8 In-app recipe editing + AI edit** | Low | Edit recipes on the wall; largely superseded by #7 |
 | — | **#15 Tier 0 — Tortilla Soup pricing** | **Nearly done** | 11 of 15 ingredients priced by hand 11 Sep; 4 pantry/spice rows still want `manual_cost_cents` — a five-minute cleanup, not worth a ranked slot |
+| — | **#20 Settings, full scale** | **Shipped** | Root list + drill-down; weekly budget, per-device timeout, night hours, your name all newly editable |
 | — | **#5 Ambient Screen Timeout** | **Shipped** | Pure ambient + drifting clock, night variant, per-device timeout — wall soak still open |
 | — | **#14 Depth, Phase 0** | **Shipped** | Elevation tokens proven on primary actions — see #14, Phase 1 above for what's left |
 | — | **#10 Main menu, cook-mode tap zones, meal slots** | **Shipped** | One front door; left/right stepping; four meal slots per day |
@@ -3264,6 +3265,91 @@ the feature it was prepared for never got built. This entry is that feature.
   work meetings nobody wants to see on the kitchen wall), or is it all
   Google sends, always shown? Not required for a first version, but worth
   deciding before real use surfaces it as a complaint.
+
+---
+
+# Feature #20 — Settings, full scale
+
+**Priority:** —
+**Category:** Board / Settings
+**Status:** Shipped
+**Depends On:** Nothing structural — no migration, no new RLS policy.
+**Primary Goal:** Turn Settings from a five-row `.card.dialog` popup into a
+full-screen surface with room to grow, and use that room for four controls
+that were previously reachable only via a migration or the Supabase
+dashboard.
+
+## 1. Why this grew past a popup
+
+Settings had been `SettingsPanel`, a small dialog holding two dock-mode
+pickers, a header-aside picker, one screen-timeout row, and Google Calendar —
+`Sheet.jsx`'s own docstring argued at the time that a full-screen takeover for
+a control this size would be theatre, and it was right. Nick asked for this to
+feel "full scale — think Apple Settings on iOS" and, explicitly, to grow what
+was adjustable rather than just re-skin what existed. Four candidates were
+already wired into the data model with no UI control:
+
+- **Weekly grocery budget** (`household.weekly_budget_cents`) — has driven
+  the shopping-budget figure since Feature #15, editable only by migration.
+- **Per-device screen timeout override** — `lib/screensaver.js` had the whole
+  model built; only the household-default row was ever surfaced, deliberately
+  parked until the household had a second screen. It now has three (the
+  iPad, two phones).
+- **Night mode hours** — `NIGHT_FROM_HOUR`/`NIGHT_TO_HOUR` were hardcoded
+  constants.
+- **Your name** (`profiles.display_name`) — dashboard-only, despite
+  `profiles_update_own` (001) already permitting a self-edit.
+
+Four new controls turned "a small popup" into a real settings surface, which
+is what made the full-screen argument correct this time rather than theatre.
+
+## 2. What shipped
+
+- **`SettingsSheet.jsx`** replaces `SettingsPanel`: a root list of four
+  categories (Board Layout, Display, Household, Accounts), each its own
+  `Sheet` page reached with a chevron-nav row and left with a back control —
+  `Sheet.jsx` gained an optional `onBack`/`backLabel` pair for this, its only
+  change. `Done` still closes from any depth, not just the root.
+- **The menu's hold-to-configure rows now land where they say they will.**
+  `Menu → (hold) Weekly To Do / Shopping` used to open the whole dialog at
+  its top; it opens straight to Board Layout now, via `initialCategory`.
+- **The four controls above**, all writing through the existing
+  `household`/`profiles` RLS policies with no schema change:
+  - Budget and night-mode hours live on the same `household` row
+    `board_settings` already does. `loadSettings` (`Wall.jsx`) now owns
+    fetching `weekly_budget_cents` alongside `board_settings` in one query —
+    it already ran on mount and on the household-realtime channel, so this
+    removed a second, unsynced fetch that used to live in `loadMeals`.
+  - `isNightAt(date, fromHour, toHour)` (`lib/screensaver.js`) takes the
+    bounds as arguments now; the old two-constant formula only handled a
+    window crossing midnight; a household picking a same-day window needed
+    the non-wrapping case too.
+  - Your name writes via `onRenameSelf`, added to `App.jsx`'s `Household`
+    component (where `profile`/`people` already live) rather than `Wall.jsx`.
+  - Screen timeout is two rows again (household default, "This device"), and
+    — now that both are visible — changing one no longer silently clears the
+    other, which is what made the single-row version safe in the first
+    place.
+- **`lib/flourishes.js`** — `FLOURISHES`/`maxFlourishesFor`/`toFlourishIds`
+  moved out of `Wall.jsx` into their own module, since Board Layout's header
+  aside picker needed them and Wall's header already did.
+
+## 3. What's still not here
+
+- **A rename doesn't reach the other device live.** Unlike `board_settings`,
+  `profiles` isn't on a realtime channel — a name change is visible on the
+  device that made it immediately, and on the other device at its next
+  reload. Not worth a sixth realtime subscription for a field that changes
+  rarely.
+- **No control edits the other person's name.** RLS (`profiles_update_own`)
+  only permits a self-edit, so there's nothing to build there without a
+  bigger policy change — and no request for one.
+- **Accounts is unchanged from Feature #19** — same `CalendarConnections`
+  component, just relocated. Real Google Calendar sync is still that
+  feature's own open work, not this one's.
+- **Night mode has no on/off switch**, only configurable hours. Turning it
+  off entirely would work against the reason it exists (light pollution,
+  burn-in), so it wasn't offered.
 
 ---
 

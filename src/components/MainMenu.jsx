@@ -138,7 +138,7 @@ export default function MainMenu({
             }
             hint="Hold to change where it shows"
             onClick={onChores}
-            onHold={onSettings}
+            onHold={() => onSettings('layout')}
           />
 
           <MenuRow
@@ -151,7 +151,7 @@ export default function MainMenu({
             }
             hint="Hold to change where it shows"
             onClick={onShopping}
-            onHold={onSettings}
+            onHold={() => onSettings('layout')}
           />
 
           {/* Lights and other household devices. Unlike To-Do and Shopping,
@@ -166,9 +166,13 @@ export default function MainMenu({
         <div className="menu__group">
           <span className="menu__heading">Board</span>
 
-          <button className="menu__row" onClick={onSettings}>
+          {/* No argument here, unlike the two onHold rows above — this always
+              lands on the root list. (Also why this is `() => onSettings()`
+              rather than `onClick={onSettings}`: a bare reference would hand
+              onSettings the click event as its category argument.) */}
+          <button className="menu__row" onClick={() => onSettings()}>
             <span className="menu__row-label">Settings</span>
-            <span className="menu__row-meta">Panels, header aside, screen timeout</span>
+            <span className="menu__row-meta">Board layout, display, household, accounts</span>
           </button>
         </div>
 

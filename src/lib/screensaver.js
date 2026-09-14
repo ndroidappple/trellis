@@ -92,7 +92,19 @@ export function timeoutMsFor(householdMin, deviceMin) {
 export const NIGHT_FROM_HOUR = 22
 export const NIGHT_TO_HOUR = 6
 
-export function isNightAt(date) {
+/**
+ * `fromHour`/`toHour` are a household setting now (Settings → Display →
+ * Night mode) — these two constants are just the defaults. `h >= from || h
+ * < to` only holds for a window that crosses midnight, which the default
+ * does; a household that instead picks a same-day window (say 1am-5am)
+ * needs the non-wrapping case, or the formula reads as "night" almost the
+ * entire day rather than those four hours. Equal bounds read as "never"
+ * rather than "always" — a zero-width window has nothing to declare, and
+ * "always" would leave someone who fat-fingers matching hours with a wall
+ * stuck permanently dim.
+ */
+export function isNightAt(date, fromHour = NIGHT_FROM_HOUR, toHour = NIGHT_TO_HOUR) {
   const h = date.getHours()
-  return h >= NIGHT_FROM_HOUR || h < NIGHT_TO_HOUR
+  if (fromHour === toHour) return false
+  return fromHour < toHour ? h >= fromHour && h < toHour : h >= fromHour || h < toHour
 }

@@ -1,0 +1,197 @@
+/*
+ * Settings, full scale (Feature #20). See SettingsSheet.jsx for the
+ * root-list/drill-down architecture; this is the visual layer.
+ */
+
+/* .settings-row is shared with ChoreSheet and MealEditor (see App.css,
+   "Settings dialog") — there it's a plain flex row inside an already-boxed
+   `.card`. Settings lives in a full `.sheet` instead, where nothing else
+   provides that box, so scoped to `.sheet` it gets one of its own, echoing
+   the card treatment `.sheet-row` already uses elsewhere in this file. Scoped
+   rather than changed in place, so ChoreSheet and MealEditor's dialogs are
+   untouched. */
+.sheet .settings-row {
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+/* --- Night mode's hour steppers ---
+   Same stepper-plus-AM/PM visual language as DateTimePicker's time field
+   (see its own CSS), redrawn in its own classes here rather than shared —
+   that field also carries minutes and a day picker this has no use for. */
+
+.settings-hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.settings-hours__sep {
+  color: var(--ink-faint);
+  font-size: 20px;
+  padding-bottom: 8px;
+}
+
+.settings-hour {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-hour__label {
+  font-size: 14px;
+  color: var(--ink-faint);
+}
+
+.settings-hour__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.settings-stepper span {
+  min-width: 30px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.settings-stepper button {
+  width: 34px;
+  min-height: 26px;
+  height: 26px;
+  padding: 0;
+  background: #fff;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-ampm {
+  min-height: 40px;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* --- Weekly budget / your name --- */
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-field__prefix {
+  color: var(--ink-soft);
+  font-size: 19px;
+}
+
+.settings-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 19px;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+}
+
+.settings-field input:focus {
+  outline: 2px solid var(--person-a);
+  outline-offset: 1px;
+}
+
+/* A commit, not a picker option — filled rather than the outline `.chip`s
+   around it use, and disabled until the draft actually differs from what's
+   saved, so there's nothing to write on an accidental tap. */
+.settings-save {
+  flex-shrink: 0;
+  background: var(--person-a);
+  color: var(--person-ink);
+  border: none;
+  border-radius: 8px;
+  padding: 0 18px;
+  min-height: var(--tap-min);
+  font-family: var(--font-text);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--dur-tap) var(--ease-standard);
+}
+
+.settings-save:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.settings-save:disabled {
+  background: var(--rule);
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+/* --- Sleep now ---
+   Quiet and full-width on purpose, same reasoning as the original dialog
+   version: it sits beside the timeout it short-circuits rather than in a
+   footer next to Done, and a ghost rather than a `.chip` so it doesn't read
+   as one option among a set. `.card button.settings-sleep` (App.css) doesn't
+   apply here — Settings isn't a `.card` any more — so this is its `.sheet`
+   equivalent. */
+.sheet .settings-sleep {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.sheet .settings-sleep:active:not(:disabled) {
+  background: var(--chip-face);
+  color: var(--ink);
+}
+
+.sheet .settings-sleep:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-save {
+    transition: none;
+  }
+  .settings-save:active:not(:disabled) {
+    transform: none;
+  }
+}

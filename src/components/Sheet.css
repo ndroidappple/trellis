@@ -69,6 +69,27 @@
   color: var(--ink-soft);
 }
 
+/* Sits above the title rather than beside "Done" — it answers a different
+   question (where does this page go back to) than Done does (leave
+   entirely), and the two shouldn't read as a pair of equal, opposite
+   actions the way Close/Sleep-now already taught this app not to do. */
+.sheet__back {
+  display: block;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0 0 2px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 17px;
+  min-height: 0;
+  cursor: pointer;
+}
+
+.sheet__back:active {
+  color: var(--ink);
+}
+
 .sheet__close {
   flex-shrink: 0;
   background: transparent;
@@ -261,6 +282,56 @@
 .sheet-row__meta {
   font-size: 17px;
   color: var(--ink-soft);
+}
+
+/* A row that opens another page rather than acting on itself — the
+   Settings root list. Label and current value share one line the way
+   SectionPanel's own head does (title left, count right), and the chevron
+   is the same glyph/pattern as `.section-panel__chevron`: the only tell
+   needed, because "tap the row" is already how every door in this app
+   works. */
+.sheet-row--nav {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Same idiom as `.sheet-row--primary span:first-child` above — the label is
+   whatever the caller put first, no dedicated class needed. */
+.sheet-row--nav span:first-child {
+  font-family: var(--font-display);
+  font-weight: 500;
+  min-width: 0;
+}
+
+/* Pushes itself and the chevron after it flush right, leaving the label
+   whatever room it needs on the left rather than splitting the row evenly
+   the way `justify-content: space-between` would with a third child. */
+.sheet-row--nav .sheet-row__meta {
+  margin-left: auto;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-row__chevron {
+  flex-shrink: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--ink-faint);
+  transition: transform var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard);
+}
+
+.sheet-row--nav:active .sheet-row__chevron {
+  transform: translateX(2px);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-row--nav:active .sheet-row__chevron {
+    transform: none;
+  }
 }
 
 .sheet__empty {

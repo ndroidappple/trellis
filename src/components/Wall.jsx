@@ -11,7 +11,7 @@ import {
   weekDays,
   weekLabel,
 } from '../lib/week'
-import { daysInYear, daysLeftInYear, dayOfYear, fiscalWeek, yearProgress } from '../lib/year'
+import { FLOURISHES, maxFlourishesFor, toFlourishIds } from '../lib/flourishes'
 import { groceryLines, weekCost } from '../lib/cost'
 import { parseCapture, priorityLabel } from '../lib/capture'
 import {
@@ -44,14 +44,15 @@ import RecipeBook, { CookMode, RecipeDetail } from './RecipeBook'
 import { ShoppingSheet, ToDoSheet } from './PanelSheets'
 import MainMenu from './MainMenu'
 import HomeSheet from './HomeSheet'
+import SettingsSheet from './SettingsSheet'
 import DateTimePicker from './DateTimePicker'
-import { googleCalendarConfigured, startGoogleCalendarConnect } from '../lib/googleCalendar'
 import Screensaver from './Screensaver'
 import { useIdle } from '../hooks/useIdle'
 import { clearCookProgress, readCookProgress, writeCookProgress } from '../lib/cookProgress'
 import {
   DEFAULT_TIMEOUT_MIN,
-  TIMEOUT_OPTIONS,
+  NIGHT_FROM_HOUR,
+  NIGHT_TO_HOUR,
   isNightAt,
   readDeviceTimeout,
   timeoutMsFor,
@@ -68,6 +69,11 @@ const DEFAULT_SETTINGS = {
   // blob as the panel modes, so it needed no migration — and any device may
   // override it locally, which is the whole argument in lib/screensaver.js.
   screensaverMin: DEFAULT_TIMEOUT_MIN,
+  // Settings → Display → Night mode. Also jsonb, also no migration — see the
+  // comment on isNightAt in lib/screensaver.js for why both bounds matter,
+  // not just the start hour.
+  nightFromHour: NIGHT_FROM_HOUR,
+  nightToHour: NIGHT_TO_HOUR,
 }
 
 /**
@@ -78,91 +84,11 @@ const DEFAULT_SETTINGS = {
 const UNDO_MS = 9000
 
 /**
- * Optional asides for the header's second line — the board having a bit of
- * character rather than telling you anything you need. Deliberately not
- * advertised: someone poking at the board finds them, someone reading the
- * week never notices they exist.
- *
- * Several can be on at once. Each therefore carries two renderings: alone it
- * can afford to spell itself out, but shown alongside others it shortens,
- * because the header shares a row with the sync state and the week arrows
- * and cannot grow sideways forever.
- *
- * 'off' is no longer an entry — an empty selection is off, which is what
- * unticking the last chip naturally produces.
- */
-const FLOURISHES = [
-  {
-    id: 'week',
-    label: 'Week',
-    render: (d) => `Week ${fiscalWeek(d)}`,
-    short: (d) => `Week ${fiscalWeek(d)}`,
-  },
-  {
-    id: 'progress',
-    label: 'Year %',
-    render: (d) => `${yearProgress(d)}% through ${d.getFullYear()}`,
-    short: (d) => `${yearProgress(d)}%`,
-  },
-  {
-    id: 'daysLeft',
-    label: 'Days left',
-    render: (d) => {
-      const n = daysLeftInYear(d)
-      return n === 0 ? 'Last day of the year' : `${n} days left in ${d.getFullYear()}`
-    },
-    short: (d) => {
-      const n = daysLeftInYear(d)
-      return n === 0 ? 'Last day' : `${n} left`
-    },
-  },
-  {
-    id: 'dayOfYear',
-    label: 'Day no.',
-    render: (d) => `Day ${dayOfYear(d)} of ${daysInYear(d.getFullYear())}`,
-    short: (d) => `Day ${dayOfYear(d)}`,
-  },
-]
-
-/**
- * How many asides fit depends on how wide the header actually is, which now
- * varies by orientation on the 11" iPad rather than being one fixed number:
- * portrait (834pt) is narrower than the 1024pt this was originally measured
- * against, landscape (1194pt) is wider. `maxFlourishesFor` below is the
- * orientation-aware version of what used to be a single constant.
- *
- * The header wraps rather than clips if either guess is wrong (see
- * .board__sub), so the failure mode is a slightly taller header, not the
- * silent amputation this layout is prone to.
- */
-function maxFlourishesFor(orientation) {
-  return orientation === 'landscape' ? 3 : 2
-}
-
-/**
  * How many chore titles the palette remembers. Eight is about what fits in
  * two wrapped rows of the panel without the buttons crowding out the list
  * they sit under.
  */
 const COMMON_CHORE_LIMIT = 8
-
-/**
- * Reads whatever is in board_settings as a list of valid ids.
- *
- * Households already have a bare string stored here from when this was a
- * single choice, so that has to keep working — a wall that dropped its
- * header aside on upgrade would be a puzzling little regression. Unknown
- * ids are dropped rather than rendered as blanks.
- */
-function toFlourishIds(value, max = maxFlourishesFor('portrait')) {
-  const known = (id) => FLOURISHES.some((f) => f.id === id)
-  const chosen = Array.isArray(value) ? value : value == null || value === 'off' ? [] : [value]
-  // Canonical order, not tap order: the header should not reshuffle itself
-  // because of the sequence someone happened to tick the chips in.
-  return FLOURISHES.filter((f) => chosen.includes(f.id) && known(f.id))
-    .map((f) => f.id)
-    .slice(0, max)
-}
 
 const MEAL_PLAN_QUERY = `
   id, on_date, slot, is_leftover,
@@ -213,7 +139,7 @@ const RECIPE_BOOK_QUERY = `
  * shopping panel's cart footer — this design has no dedicated meals section
  * or recipe picker, so meal planning stays read-only here for now.
  */
-export default function Wall({ profile, people }) {
+export default function Wall({ profile, people, onRenameSelf }) {
   const today = useToday()
   useVisualViewportHeight()
   const orientation = useOrientation()
@@ -270,6 +196,11 @@ export default function Wall({ profile, people }) {
   const [sectionOpen, setSectionOpen] = useState(null) // 'chores' | 'shopping' | null
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Which drill-down category Settings opens on — null is the root list.
+  // Lets a specific entry point (the menu's hold-to-configure) land straight
+  // on the category it promised rather than the root every caller used to
+  // share.
+  const [settingsCategory, setSettingsCategory] = useState(null)
   const [error, setError] = useState(null)
   const [undo, setUndo] = useState(null) // { message, run } while offered
   const [loaded, setLoaded] = useState({})
@@ -934,7 +865,11 @@ export default function Wall({ profile, people }) {
     const from = toDateInputValue(startOfWeek(anchor))
     const to = toDateInputValue(addDays(startOfWeek(anchor), 7))
 
-    const [planRes, recipeRes, stapleRes, hhRes] = await Promise.all([
+    // weekly_budget_cents used to be fetched here too, but it lives on the
+    // same household row board_settings does — loadSettings already owns
+    // that row (mount plus the household-settings-sync realtime channel), so
+    // fetching it a second time here just risked the two disagreeing.
+    const [planRes, recipeRes, stapleRes] = await Promise.all([
       supabase.from('meal_plan').select(MEAL_PLAN_QUERY).gte('on_date', from).lt('on_date', to),
       supabase
         .from('recipes')
@@ -944,10 +879,9 @@ export default function Wall({ profile, people }) {
       supabase
         .from('staples')
         .select('item, weekly_qty, included, manual_unit_cents, category, product:products ( pre_tax_cents, tax_rate_bps )'),
-      supabase.from('household').select('weekly_budget_cents').maybeSingle(),
     ])
 
-    const firstError = planRes.error || recipeRes.error || stapleRes.error || hhRes.error
+    const firstError = planRes.error || recipeRes.error || stapleRes.error
     markLoaded('meals')
     if (firstError) return setError(firstError.message)
 
@@ -955,7 +889,6 @@ export default function Wall({ profile, people }) {
     setMealPlan(planRes.data ?? [])
     setRecipes(recipeRes.data ?? [])
     setStaples(stapleRes.data ?? [])
-    if (hhRes.data) setBudget(hhRes.data.weekly_budget_cents)
     setLastSync(new Date())
   }, [anchor, markLoaded])
 
@@ -1228,13 +1161,24 @@ export default function Wall({ profile, people }) {
   // -------------------------------------------------------------- settings
   //
   // board_settings lives on the household row, so the wall and everyone's
-  // phone read the same layout. Opened with a long-press on the board
-  // rather than a header button — this is a kiosk, not a settings-heavy app.
+  // phone read the same layout. Opened with a long-press on the board or
+  // from the menu — Settings has grown past "a kiosk doesn't need a
+  // settings-heavy app" into its own full-screen room, see SettingsSheet.jsx.
+  //
+  // weekly_budget_cents rides along on the same select even though it isn't
+  // part of board_settings — it's a plain column on the same household row,
+  // and this function already runs on mount and on every change to that row
+  // (household-settings-sync below), so it's the natural single owner for
+  // both rather than giving budget its own fetch and its own staleness.
 
   const loadSettings = useCallback(async () => {
-    const { data, error } = await supabase.from('household').select('board_settings').maybeSingle()
+    const { data, error } = await supabase
+      .from('household')
+      .select('board_settings, weekly_budget_cents')
+      .maybeSingle()
     if (error) return setError(error.message)
     if (data?.board_settings) setSettings({ ...DEFAULT_SETTINGS, ...data.board_settings })
+    if (data?.weekly_budget_cents != null) setBudget(data.weekly_budget_cents)
   }, [])
 
   useEffect(() => {
@@ -1298,6 +1242,23 @@ export default function Wall({ profile, people }) {
     }
   }
 
+  // Settings → Household → Weekly grocery budget. Same optimistic-with-
+  // rollback shape as updateSetting, on the same household row — just a
+  // plain column instead of a jsonb key, so it's its own call rather than a
+  // patch through `next`.
+  async function updateBudget(cents) {
+    const previous = budget
+    setBudget(cents)
+    const { error } = await supabase
+      .from('household')
+      .update({ weekly_budget_cents: cents })
+      .eq('id', profile.household_id)
+    if (error) {
+      setError(error.message)
+      setBudget(previous)
+    }
+  }
+
   function setDeviceScreensaver(value) {
     writeDeviceTimeout(value)
     setDeviceTimeout(value)
@@ -1345,14 +1306,17 @@ export default function Wall({ profile, people }) {
    * minute timer running for weeks to answer nobody is exactly the kind of
    * thing that makes a wall device warm.
    */
-  const [night, setNight] = useState(() => isNightAt(new Date()))
+  const [night, setNight] = useState(() =>
+    isNightAt(new Date(), settings.nightFromHour, settings.nightToHour)
+  )
 
   useEffect(() => {
     if (!idle) return
-    setNight(isNightAt(new Date()))
-    const tick = setInterval(() => setNight(isNightAt(new Date())), 60_000)
+    const check = () => setNight(isNightAt(new Date(), settings.nightFromHour, settings.nightToHour))
+    check()
+    const tick = setInterval(check, 60_000)
     return () => clearInterval(tick)
-  }, [idle])
+  }, [idle, settings.nightFromHour, settings.nightToHour])
 
   function handleWake() {
     wake()
@@ -2006,8 +1970,9 @@ export default function Wall({ profile, people }) {
             setMenuOpen(false)
             setHomeOpen(true)
           }}
-          onSettings={() => {
+          onSettings={(category) => {
             setMenuOpen(false)
+            setSettingsCategory(category ?? null)
             setSettingsOpen(true)
           }}
           onClose={() => setMenuOpen(false)}
@@ -2118,11 +2083,14 @@ export default function Wall({ profile, people }) {
       )}
 
       {settingsOpen && (
-        <SettingsPanel
+        <SettingsSheet
           settings={settings}
           deviceTimeout={deviceTimeout}
           canSleep={screensaverAllowed}
+          budget={budget}
+          initialCategory={settingsCategory}
           onChange={updateSetting}
+          onBudgetChange={updateBudget}
           onDeviceTimeout={setDeviceScreensaver}
           onSleep={() => {
             // Close first, so the scene is not laid over a dialog the person
@@ -2131,7 +2099,13 @@ export default function Wall({ profile, people }) {
             sleep()
           }}
           onToggleFlourish={toggleFlourish}
-          onClose={() => setSettingsOpen(false)}
+          onRenameSelf={onRenameSelf}
+          onClose={() => {
+            setSettingsOpen(false)
+            // So the next open always starts at the root list, regardless of
+            // where this session ended up.
+            setSettingsCategory(null)
+          }}
           profile={profile}
           people={orderedPeople}
         />
@@ -2922,239 +2896,5 @@ function MealEditor({
         </div>
       </div>
     </div>
-  )
-}
-
-const MODE_LABELS = { full: 'Full', compact: 'Compact', off: 'Off' }
-const MODE_OPTIONS = ['full', 'compact', 'off']
-const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping' }
-
-function SettingsPanel({
-  settings,
-  deviceTimeout,
-  canSleep,
-  onChange,
-  onDeviceTimeout,
-  onSleep,
-  onToggleFlourish,
-  onClose,
-  profile,
-  people,
-}) {
-  const orientation = useOrientation()
-  const maxFlourishes = maxFlourishesFor(orientation)
-  const chosen = toFlourishIds(settings.flourish, maxFlourishes)
-  const atMax = chosen.length >= maxFlourishes
-
-  const householdMin = settings.screensaverMin ?? DEFAULT_TIMEOUT_MIN
-  const effectiveMin = deviceTimeout ?? householdMin
-
-  return (
-    <div className="scrim" onClick={onClose}>
-      <div className="card dialog" onClick={(e) => e.stopPropagation()}>
-        <h2>Board settings</h2>
-        <p className="muted">Menu → Settings, or hold anywhere on the board.</p>
-
-        {Object.keys(SECTION_LABELS).map((key) => (
-          <div key={key} className="settings-row">
-            <span className="settings-row__label">{SECTION_LABELS[key]}</span>
-            <div className="chips">
-              {MODE_OPTIONS.map((opt) => (
-                <button
-                  key={opt}
-                  className={settings[key] === opt ? 'chip on' : 'chip'}
-                  onClick={() => onChange(key, opt)}
-                >
-                  {MODE_LABELS[opt]}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        {/* The header line cycles these on tap too. This is here so the set
-            is discoverable once you've found the settings at all, rather
-            than only by tapping the header repeatedly and guessing. */}
-        <div className="settings-row">
-          <span className="settings-row__label">Header aside</span>
-          <div className="chips">
-            {FLOURISHES.map((f) => {
-              const on = chosen.includes(f.id)
-              return (
-                <button
-                  key={f.id}
-                  className={on ? 'chip on' : 'chip'}
-                  // Full is the reason a chip is unavailable, so it says so
-                  // by going quiet rather than by rejecting the tap. Nothing
-                  // has to be un-picked first to see what is pickable.
-                  disabled={!on && atMax}
-                  onClick={() => onToggleFlourish(f.id)}
-                >
-                  {f.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <p className="settings-row__hint">
-          {atMax
-            ? `Showing ${maxFlourishes} — untick one to swap it out. Together they use their short forms.`
-            : `Pick up to ${maxFlourishes}. Two or more switch to short forms so the header still fits.`}
-        </p>
-
-        {/*
-          One row, not two.
-          
-          There were two: a household default and a per-device override, which
-          is what Feature #5 §8 asks for and is genuinely the right shape
-          *eventually* — the wall hangs in a room and wants to fade out, while
-          a phone already has an idle behaviour and it is called locking.
-          
-          But "Screen timeout" above "This device" made you read both rows and
-          work out which one was winning before you could answer a question
-          with one obvious answer, and it did that to serve a household that
-          currently has one screen in it. A setting whose whole purpose is to
-          describe a difference should not appear before the difference does.
-          
-          `timeoutMsFor` still prefers a device override if one exists, and
-          `readDeviceTimeout` still reads it — the model is intact and tested,
-          it simply has no control until there is a second device to disagree
-          with. When there is, this row splits back into two.
-        */}
-        <div className="settings-row">
-          <span className="settings-row__label">Screen timeout</span>
-          <div className="chips">
-            {TIMEOUT_OPTIONS.map((o) => (
-              <button
-                key={o.value}
-                className={effectiveMin === o.value ? 'chip on' : 'chip'}
-                aria-pressed={effectiveMin === o.value}
-                onClick={() => {
-                  // Clear any device pin at the same time, so this one control
-                  // is always the one telling the truth. Without it a value
-                  // left over from the two-row version would silently outrank
-                  // whatever you picked here.
-                  onDeviceTimeout(null)
-                  onChange('screensaverMin', o.value)
-                }}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <p className="settings-row__hint">
-          {effectiveMin === 'never'
-            ? 'The board stays on until you send it to sleep.'
-            : `The board fades to the ambient scene after ${effectiveMin} minutes, and darkens after 10pm. Any touch brings it back.`}
-        </p>
-
-        {/*
-          Sleep on demand, for when the room wants the screen off now rather
-          than in ten minutes.
-
-          It sits with the timeout it short-circuits, not in the footer beside
-          Close. Those were two equal-weight ghost buttons in a `.actions` row,
-          where each one is `flex: 1` — so the control that blanks the board
-          and the control that dismisses the dialog were the same size, the
-          same colour and touching. On a wall you reach for from arm's length
-          that is a mis-tap waiting to happen, and the two do entirely
-          different things.
-
-          Disabled rather than hidden when the scene cannot run, because the
-          reason is worth reading: a control that silently does nothing teaches
-          people the setting is broken.
-        */}
-        <CalendarConnections profile={profile} people={people} />
-
-        <button className="settings-sleep" onClick={onSleep} disabled={!canSleep}>
-          Sleep now
-        </button>
-
-        {!canSleep && (
-          <p className="settings-row__hint">
-            Unavailable while the board is offline or showing an error — those
-            have to stay on screen.
-          </p>
-        )}
-
-        <div className="actions">
-          <button className="ghost" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Feature #19. One row per household member — each connects their own
- * Google Calendar independently, since the household decided both people
- * should be able to, not just whoever set this up. Reads
- * calendar_connection_status() (016_google_calendar.sql) rather than the
- * calendar_connections table directly — that RPC is the only thing
- * allowed to say "connected", never the refresh token itself.
- */
-function CalendarConnections({ profile, people }) {
-  const [status, setStatus] = useState(null)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    supabase.rpc('calendar_connection_status').then(({ data, error: rpcError }) => {
-      if (cancelled) return
-      if (rpcError) setError(rpcError.message)
-      else setStatus(data ?? [])
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const configured = googleCalendarConfigured()
-
-  return (
-    <>
-      {/* Hints live as siblings after .settings-row, never nested inside it
-          — that row is a flex space-between (label left, controls right),
-          and a multi-line hint nested in it gets squeezed into that same
-          narrow right-hand column instead of spanning full width below.
-          "Screen timeout" above already gets this right; this used to not. */}
-      <div className="settings-row">
-        <span className="settings-row__label">Google Calendar</span>
-        <div className="calendar-connections">
-          {people.map((p) => {
-            const connection = status?.find((c) => c.profile_id === p.id)
-            return (
-              <div key={p.id} className="calendar-connections__row">
-                <span>{p.display_name}</span>
-                {connection ? (
-                  <span className="settings-row__hint">Connected</span>
-                ) : (
-                  <button
-                    className="chip"
-                    disabled={!configured || p.id !== profile.id}
-                    onClick={() => startGoogleCalendarConnect(p.id, profile.household_id)}
-                  >
-                    Connect
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {error && <p className="error">{error}</p>}
-      {!configured && (
-        <p className="settings-row__hint">
-          Not set up yet — needs a Google Cloud OAuth client (see Feature #19
-          in the backlog) before this does anything.
-        </p>
-      )}
-    </>
   )
 }

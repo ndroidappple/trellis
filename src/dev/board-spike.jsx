@@ -1,17 +1,19 @@
 import { useState } from 'react'
 import { Board } from '../components/Board'
-import { defaultLayout } from '../hooks/useWidgetGrid'
+import { defaultLayout, firstFreeSlot, GRID_CONFIG, MIN_CELL_SPAN } from '../hooks/useWidgetGrid'
+import { useMockHomeState } from '../hooks/useMockHomeState'
 import '../components/Board.css'
 
 /**
- * Phase 1 verification harness — NOT shipped UI. Mounts <Board> directly
+ * Widget-grid verification harness — NOT shipped UI. Mounts <Board> directly
  * with fake data, bypassing Wall.jsx/App.jsx/Supabase entirely (the real
  * app needs an emailed 8-digit sign-in code, which isn't something this
  * can drive). Reachable only via ?board-spike, same pattern as
- * ./gooey-spike.jsx. Exists to verify the widget-grid MECHANISM (layout,
- * drag, resize, orientation switching) in isolation from real data —
- * ChoresPanel/ShoppingPanel/WeekGrid content itself is unchanged code, not
- * what Phase 1 touched.
+ * ./gooey-spike.jsx. Built for Phase 1 to verify the widget-grid MECHANISM
+ * (layout, drag, resize, orientation switching) in isolation from real
+ * data; extended in Phase 2 with a "Home: on/off" button exercising
+ * updateHomeSetting's firstFreeSlot insertion logic the same way Settings'
+ * Board Layout row does in the real app.
  */
 
 function fakeDays() {
@@ -74,7 +76,30 @@ export default function BoardSpike() {
     landscape: defaultLayout('landscape'),
   })
   const [rearranging, setRearranging] = useState(false)
+  const [homeMode, setHomeMode] = useState('off')
   const days = useState(fakeDays)[0]
+  const homeState = useMockHomeState()
+
+  // Mirrors Wall.jsx's updateHomeSetting: turning Home on searches both
+  // orientations for room via firstFreeSlot and inserts a placement if one
+  // isn't already there — Home ships with no default placement (see
+  // defaultLayout's own comment), so this is the only place one exists.
+  function toggleHome() {
+    const next = homeMode === 'off' ? 'on' : 'off'
+    if (next === 'on') {
+      setLayout((prev) => {
+        const updated = { ...prev }
+        for (const orientation of ['portrait', 'landscape']) {
+          const forOrientation = prev[orientation]
+          if (forOrientation.some((p) => p.id === 'home')) continue
+          const slot = firstFreeSlot(forOrientation, MIN_CELL_SPAN[orientation].home, GRID_CONFIG[orientation])
+          if (slot) updated[orientation] = [...forOrientation, { id: 'home', ...slot }]
+        }
+        return updated
+      })
+    }
+    setHomeMode(next)
+  }
 
   return (
     <div style={{ position: 'relative' }}>
@@ -97,6 +122,7 @@ export default function BoardSpike() {
             — resize the browser window (or use devtools' device toolbar) to
             exercise portrait vs. landscape, same as the real app. */}
         <button onClick={() => setRearranging((v) => !v)}>{rearranging ? 'Stop rearrange' : 'Rearrange'}</button>
+        <button onClick={toggleHome}>Home: {homeMode}</button>
         <button onClick={() => console.log('layout', JSON.stringify(layout, null, 2))}>log layout</button>
       </div>
       <div className="board-wrapper">
@@ -106,11 +132,14 @@ export default function BoardSpike() {
           syncLabel="Live"
           syncState="live"
           days={days}
-          settings={{ chores: 'full', shopping: 'full' }}
+          settings={{ chores: 'full', shopping: 'full', home: homeMode }}
           chores={<FakePanel label="Chore" rows={['Dishes', 'Trash', 'Laundry', 'Vacuum']} />}
           choresCount="2 of 4 done"
           shopping={<FakePanel label="Item" rows={['Milk', 'Eggs', 'Bread']} />}
           shoppingCount="3 to buy"
+          homeDevices={homeState.devices}
+          onToggleHome={homeState.toggle}
+          onRunHomeScene={homeState.runScene}
           widgetLayout={layout}
           rearranging={rearranging}
           onCommitWidgetLayout={(orientation, next) =>

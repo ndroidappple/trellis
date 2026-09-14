@@ -247,6 +247,26 @@ p.board__sub {
   min-height: 0;
 }
 
+/* Phone-class devices (useViewportClass.js) get this instead of WidgetGrid
+   — a plain scrollable column, since there's no grid position/size to
+   honor on a screen this small. Each widget tile keeps its own natural
+   height (WidgetTile has no fixed height outside the grid's cell sizing),
+   so the stack scrolls as a whole rather than any one tile clipping. */
+.board__body-phone-stack {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+}
+
+.board__body-phone-stack .widget-tile {
+  height: auto;
+  min-height: 200px;
+}
+
 .board__week {
   flex: 1 1 auto;
   display: flex;

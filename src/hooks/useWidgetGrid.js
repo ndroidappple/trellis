@@ -75,7 +75,10 @@ export const MIN_CELL_SPAN = {
   },
 }
 
-const WIDGET_ORDER = ['calendar', 'todo', 'shopping', 'home']
+/** Canonical widget priority order — used both by `defaultLayout` below and
+    by the phone-class single-column stack (`Board.tsx`), which has no grid
+    coordinates to sort by and needs this instead. */
+export const WIDGET_ORDER = ['calendar', 'todo', 'shopping', 'home']
 
 /**
  * A sensible starting arrangement — reproduces today's board shape (week
@@ -212,6 +215,36 @@ export function tryResize(layout, id, { w, h }, gridConfig, minSpan) {
 
 function replace(layout, id, next) {
   return layout.map((p) => (p.id === id ? next : p))
+}
+
+/**
+ * The first cell (reading order: row-major, top-to-bottom then
+ * left-to-right) where a `minSpan`-sized rect fits — in bounds, no
+ * collision with `layout`. Returns `null` if nothing fits anywhere.
+ *
+ * This is Phase 2's answer to "where does a widget that has no default
+ * placement go the first time someone turns it on" (Home, specifically —
+ * see the widget-home-screen plan's Phase 2 section). `defaultLayout`
+ * above deliberately never places Home, and growing `GRID_CONFIG` or
+ * narrowing To-Do/Shopping's default width to make room for it both carry
+ * real, documented costs (see the plan). A scan for the first empty slot
+ * that already fits `minSpan` sidesteps both: nothing about the grid's
+ * size or any other widget's placement changes, so a household whose
+ * three widgets already fill the grid simply finds no room until they
+ * free some themselves — an honest "not yet", not a silent failure (the
+ * caller is expected to surface that, not this function).
+ */
+export function firstFreeSlot(layout, minSpan, gridConfig) {
+  const w = minSpan?.w ?? 1
+  const h = minSpan?.h ?? 1
+  for (let y = 0; y <= gridConfig.rows - h; y++) {
+    for (let x = 0; x <= gridConfig.cols - w; x++) {
+      const candidate = { x, y, w, h }
+      if (findCollision(layout, null, candidate)) continue
+      return candidate
+    }
+  }
+  return null
 }
 
 /**

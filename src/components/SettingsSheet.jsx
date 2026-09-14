@@ -35,6 +35,7 @@ export default function SettingsSheet({
   canSleep,
   budget,
   initialCategory,
+  homeUnplaced,
   onChange,
   onBudgetChange,
   onDeviceTimeout,
@@ -62,6 +63,7 @@ export default function SettingsSheet({
         <BoardLayoutCategory
           settings={settings}
           onChange={onChange}
+          homeUnplaced={homeUnplaced}
           chosen={chosenFlourishes}
           atMax={atMax}
           maxFlourishes={maxFlourishes}
@@ -155,7 +157,10 @@ const MODE_LABELS = { full: 'Full', compact: 'Compact', off: 'Off' }
 const MODE_OPTIONS = ['full', 'compact', 'off']
 const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping' }
 
-function BoardLayoutCategory({ settings, onChange, chosen, atMax, maxFlourishes, onToggleFlourish }) {
+const HOME_MODE_LABELS = { on: 'On', off: 'Off' }
+const HOME_MODE_OPTIONS = ['on', 'off']
+
+function BoardLayoutCategory({ settings, onChange, homeUnplaced, chosen, atMax, maxFlourishes, onToggleFlourish }) {
   return (
     <div className="sheet__section">
       {Object.keys(SECTION_LABELS).map((key) => (
@@ -174,6 +179,29 @@ function BoardLayoutCategory({ settings, onChange, chosen, atMax, maxFlourishes,
           </div>
         </div>
       ))}
+
+      {/* Two chips, not three — Home has no Full/Compact *setting* the way
+          To-Do/Shopping do above; its small/large content split is
+          automatic (see HomeWidget.jsx), not chosen. */}
+      <div className="settings-row">
+        <span className="settings-row__label">Home</span>
+        <div className="chips">
+          {HOME_MODE_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              className={(settings.home ?? 'off') === opt ? 'chip on' : 'chip'}
+              onClick={() => onChange('home', opt)}
+            >
+              {HOME_MODE_LABELS[opt]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {homeUnplaced && (
+        <p className="settings-row__hint">
+          No room for it yet — free up space in Rearrange widgets and it'll appear.
+        </p>
+      )}
 
       {/* The header line cycles these on tap too. This is here so the set is
           discoverable once you've found settings at all, rather than only by

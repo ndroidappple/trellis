@@ -1,10 +1,12 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { useDetailLevel, weightedRowsFor, weekFloorFor } from '../hooks/useDetailLevel';
 import { useOrientation } from '../hooks/useOrientation';
+import { useViewportClass } from '../hooks/useViewportClass';
 import { WeekGrid, type DayData } from './WeekGrid';
 import { WidgetGrid, type Placement } from './WidgetGrid';
 import { WidgetTile } from './WidgetTile';
-import { MIN_CELL_SPAN } from '../hooks/useWidgetGrid';
+import HomeWidget from './HomeWidget';
+import { MIN_CELL_SPAN, WIDGET_ORDER } from '../hooks/useWidgetGrid';
 import type { Person } from './PersonBadge';
 import './Board.css';
 
@@ -13,9 +15,30 @@ import './Board.css';
     this phase reads (see the renderTile switch below). */
 export type SectionMode = 'full' | 'compact' | 'off';
 
+/** Home has no Full/Compact *setting* the way To-Do/Shopping do — its
+    small/large split is automatic (see HomeWidget.jsx), not chosen — so it
+    gets its own, genuinely binary type rather than overloading
+    `SectionMode`'s three-state meaning for a widget that only has two. */
+export type HomeMode = 'on' | 'off';
+
 export interface SectionSettings {
   chores: SectionMode;
   shopping: SectionMode;
+  home: HomeMode;
+}
+
+/** Matches `lib/home.js`'s device shape — kept loose since that module is
+    plain JS with no types of its own and this codebase has no
+    tsconfig/type-checking (see CLAUDE.md: esbuild strips syntax only). */
+export interface HomeDeviceLike {
+  id: string;
+  name: string;
+  room: string;
+  icon: string;
+  dimmable: boolean;
+  on: boolean;
+  bright: number;
+  pending?: boolean;
 }
 
 export interface WidgetLayoutByOrientation {
@@ -51,6 +74,13 @@ interface Props {
   choresCount?: string;
   shopping: ReactNode;
   shoppingCount?: string;
+  /** Raw device data + handlers, not a pre-rendered ReactNode like
+      `chores`/`shopping` above — HomeWidget's small/large content split is
+      decided here, from the widget's own grid cell span, so Board needs
+      the data itself rather than something already rendered one way. */
+  homeDevices?: HomeDeviceLike[];
+  onToggleHome?: (id: string) => void;
+  onRunHomeScene?: (scene: { id: string; name: string; icon: string }) => void;
   onPrevWeek?: () => void;
   onNextWeek?: () => void;
   onEventPress?: (id: string) => void;
@@ -84,9 +114,22 @@ interface Props {
   onCommitWidgetLayout?: (orientation: 'portrait' | 'landscape', next: Placement[]) => void;
 }
 
+/** Synthetic — phones ignore grid position/size entirely (see
+    useViewportClass.js's own doc comment for why), so these numbers are
+    never used for real layout. They exist only so `renderTile`'s `home`
+    branch, shared between the wall grid and the phone stack, picks its
+    "large" content variant on phone (well above the 10-cell threshold). */
+const PHONE_HOME_SIZE = { w: 4, h: 4 };
+
+const NOOP_GESTURE = {
+  onDragHandlePointerDown: () => {},
+  onResizeHandlePointerDown: () => {},
+};
+
 export function Board(props: Props) {
   const [weekRef, level] = useDetailLevel(weightedRowsFor(props.days));
   const orientation = useOrientation();
+  const viewportClass = useViewportClass();
 
   const flourishes = props.flourishes ?? [];
   const cycleable = (props.flourishCycleable ?? true) && !!props.onCycleFlourish;
@@ -109,6 +152,118 @@ export function Board(props: Props) {
       ))}
     </>
   );
+
+  /**
+   * Shared by the wall's drag/resize `WidgetGrid` and the phone's fixed
+   * stack below — hoisted out of the JSX so both call sites use the exact
+   * same per-widget content, and a widget can never render differently
+   * depending on which container happens to host it. `WidgetTile` itself
+   * never reads `placement.x`/`.y` (only `WidgetGrid`'s own cell wrapper
+   * does), so this works unmodified for the phone stack's synthetic
+   * placements too.
+   */
+  function renderTile(
+    placement: Placement,
+    gesture: { onDragHandlePointerDown: (e: any) => void; onResizeHandlePointerDown: (e: any) => void }
+  ) {
+    const tileProps = {
+      // Rearranging is a wall-grid concept — there's nothing to drag or
+      // resize under the phone stack, so a phone never shows grip/resize
+      // chrome even if this household's `rearranging` state happens to be
+      // true from another device's menu action.
+      rearranging: viewportClass === 'wall' && props.rearranging,
+      onDragHandlePointerDown: gesture.onDragHandlePointerDown,
+      onResizeHandlePointerDown: gesture.onResizeHandlePointerDown,
+    };
+
+    if (placement.id === 'calendar') {
+      return (
+        <WidgetTile id="calendar" title="This Week" mode="on" {...tileProps}>
+          {/* The ref goes on the element whose height the level is
+              derived from — same rule as before, just re-pointed
+              from .board__week to this tile's own content area. */}
+          <div
+            className="board__week"
+            ref={weekRef}
+            style={{ '--week-floor': `${weekFloor}px` } as CSSProperties}
+          >
+            <WeekGrid
+              days={props.days}
+              level={level}
+              loading={props.loading}
+              initialsFor={props.initialsFor}
+              onEventPress={props.onEventPress}
+              onEventLongPress={props.onEventLongPress}
+              onAddDay={props.onAddDay}
+              onAddMeal={props.onAddMeal}
+              dragging={props.dragging}
+              dragOverDate={props.dragOverDate}
+              onOpenDay={props.onOpenDay}
+              onPrevWeek={props.onPrevWeek}
+              onNextWeek={props.onNextWeek}
+            />
+          </div>
+        </WidgetTile>
+      );
+    }
+
+    if (placement.id === 'todo') {
+      return (
+        <WidgetTile
+          id="todo"
+          title="Weekly To Do"
+          count={props.choresCount}
+          mode={props.settings.chores === 'off' ? 'off' : 'on'}
+          onOpen={props.onOpenChores}
+          {...tileProps}
+        >
+          {props.chores}
+        </WidgetTile>
+      );
+    }
+
+    if (placement.id === 'shopping') {
+      return (
+        <WidgetTile
+          id="shopping"
+          title="Shopping"
+          count={props.shoppingCount}
+          mode={props.settings.shopping === 'off' ? 'off' : 'on'}
+          onOpen={props.onOpenShopping}
+          {...tileProps}
+        >
+          {props.shopping}
+        </WidgetTile>
+      );
+    }
+
+    if (placement.id === 'home') {
+      // Grid cell span decides small vs. large content — see HomeWidget.jsx's
+      // own doc comment for why this is a simple threshold here rather than
+      // a new generalized measurement hook (that's Phase 3's job). The phone
+      // stack's synthetic PHONE_HOME_SIZE clears this threshold on purpose.
+      const size = placement.w * placement.h >= 10 ? 'large' : 'small';
+      return (
+        <WidgetTile
+          id="home"
+          title="Home"
+          mode={props.settings.home === 'off' ? 'off' : 'on'}
+          onOpen={props.onOpenHome}
+          {...tileProps}
+        >
+          <HomeWidget
+            devices={props.homeDevices ?? []}
+            size={size}
+            onToggle={props.onToggleHome}
+            onRunScene={props.onRunHomeScene}
+            onOpenHome={props.onOpenHome}
+          />
+        </WidgetTile>
+      );
+    }
+
+    return null;
+  }
 
   return (
     <div className="board" data-detail={level} data-orientation={orientation}>
@@ -210,88 +365,33 @@ export function Board(props: Props) {
         (`props.widgetLayout`), which Wall.jsx already resolved from the
         household default plus any per-device override before this ever
         renders.
+
+        Phones get a different container entirely (`useViewportClass.js`) —
+        a fixed single-column stack, not the drag/resize grid: a phone-sized
+        screen genuinely cannot host the same layout as the wall, not just a
+        smaller version of it, so there's no drag/resize/position concept to
+        offer there at all. Both containers call the exact same `renderTile`
+        above, so a widget's content can never differ between them.
       */}
       <div className="board__body">
-        <WidgetGrid
-          orientation={orientation}
-          layout={props.widgetLayout[orientation]}
-          rearranging={!!props.rearranging}
-          onCommitLayout={(next) => props.onCommitWidgetLayout?.(orientation, next)}
-          minSpans={MIN_CELL_SPAN[orientation]}
-          renderTile={(placement, gesture) => {
-            const tileProps = {
-              rearranging: props.rearranging,
-              onDragHandlePointerDown: gesture.onDragHandlePointerDown,
-              onResizeHandlePointerDown: gesture.onResizeHandlePointerDown,
-            };
-
-            if (placement.id === 'calendar') {
-              return (
-                <WidgetTile id="calendar" title="This Week" mode="on" {...tileProps}>
-                  {/* The ref goes on the element whose height the level is
-                      derived from — same rule as before, just re-pointed
-                      from .board__week to this tile's own content area. */}
-                  <div
-                    className="board__week"
-                    ref={weekRef}
-                    style={{ '--week-floor': `${weekFloor}px` } as CSSProperties}
-                  >
-                    <WeekGrid
-                      days={props.days}
-                      level={level}
-                      loading={props.loading}
-                      initialsFor={props.initialsFor}
-                      onEventPress={props.onEventPress}
-                      onEventLongPress={props.onEventLongPress}
-                      onAddDay={props.onAddDay}
-                      onAddMeal={props.onAddMeal}
-                      dragging={props.dragging}
-                      dragOverDate={props.dragOverDate}
-                      onOpenDay={props.onOpenDay}
-                      onPrevWeek={props.onPrevWeek}
-                      onNextWeek={props.onNextWeek}
-                    />
-                  </div>
-                </WidgetTile>
-              );
-            }
-
-            if (placement.id === 'todo') {
-              return (
-                <WidgetTile
-                  id="todo"
-                  title="Weekly To Do"
-                  count={props.choresCount}
-                  mode={props.settings.chores === 'off' ? 'off' : 'on'}
-                  onOpen={props.onOpenChores}
-                  {...tileProps}
-                >
-                  {props.chores}
-                </WidgetTile>
-              );
-            }
-
-            if (placement.id === 'shopping') {
-              return (
-                <WidgetTile
-                  id="shopping"
-                  title="Shopping"
-                  count={props.shoppingCount}
-                  mode={props.settings.shopping === 'off' ? 'off' : 'on'}
-                  onOpen={props.onOpenShopping}
-                  {...tileProps}
-                >
-                  {props.shopping}
-                </WidgetTile>
-              );
-            }
-
-            // 'home' arrives in Phase 2 — until HomeWidget exists, an
-            // unrecognized placement id renders nothing rather than
-            // guessing at content.
-            return null;
-          }}
-        />
+        {viewportClass === 'phone' ? (
+          <div className="board__body-phone-stack">
+            {WIDGET_ORDER.map((id) => (
+              <Fragment key={id}>
+                {renderTile({ id, x: 0, y: 0, ...PHONE_HOME_SIZE }, NOOP_GESTURE)}
+              </Fragment>
+            ))}
+          </div>
+        ) : (
+          <WidgetGrid
+            orientation={orientation}
+            layout={props.widgetLayout[orientation]}
+            rearranging={!!props.rearranging}
+            onCommitLayout={(next) => props.onCommitWidgetLayout?.(orientation, next)}
+            minSpans={MIN_CELL_SPAN[orientation]}
+            renderTile={renderTile}
+          />
+        )}
       </div>
     </div>
   );

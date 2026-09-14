@@ -155,13 +155,22 @@ export default function MainMenu({
             onHold={() => onSettings('layout')}
           />
 
-          {/* Lights and other household devices. Unlike To-Do and Shopping,
-              this has no board-level setting behind it yet — it isn't a
-              dock section, so there's nothing to hold for — see Feature #18. */}
-          <button className="menu__row" onClick={onHome}>
-            <span className="menu__row-label">Home</span>
-            <span className="menu__row-meta">Lights and scenes</span>
-          </button>
+          {/* Lights and other household devices — a board-level setting now
+              too (Phase 2 of the widget-home-screen plan gave it a widget
+              on the grid, alongside To-Do/Shopping above), so it gets the
+              same "hidden on the board" meta and hold-to-configure hint. */}
+          <MenuRow
+            label="Home"
+            meta={
+              <>
+                Lights and scenes
+                {sections?.home !== 'on' && ' · hidden on the board'}
+              </>
+            }
+            hint="Hold to change where it shows"
+            onClick={onHome}
+            onHold={() => onSettings('layout')}
+          />
         </div>
 
         <div className="menu__group">

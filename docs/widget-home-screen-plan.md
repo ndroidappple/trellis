@@ -1,8 +1,9 @@
 # Widget-based home screen (Board redesign) + `liquid-gooey`
 
-**Status:** Phase 0 (de-risking spike) and Phase 1 (widget-grid mechanism)
-are built and verified — see `worktree-widget-home-screen` branch,
-commits `f1e983b` and `42ae7c0`. Phases 2–5 below are not started.
+**Status:** Phase 0 (de-risking spike), Phase 1 (widget-grid mechanism) and
+Phase 2 (Home-hub-controls widget, plus the phone-stack wiring Phase 1 left
+unfinished) are built and verified in a browser — see
+`worktree-widget-home-screen` branch. Phases 3–5 below are not started.
 
 ## Context
 
@@ -175,43 +176,98 @@ during the original mouse-driven verification — worth remembering for
 Phase 2 onward: mouse testing rules things in, it doesn't rule touch-specific
 issues out.
 
-**Not yet wired, worth knowing before Phase 2:** `useViewportClass.js`
-exists but nothing calls it yet — Board.tsx and WidgetGrid always render the
+**Wired in Phase 2** (was unfinished Phase 1 scope): `useViewportClass.js`
+existed but nothing called it — Board.tsx and WidgetGrid always rendered the
 full draggable grid regardless of viewport size, so a phone visiting the
-board today gets the same drag/resize grid as the iPad (undersized cells,
-not the intended fixed single-column stack). Wiring this up is unfinished
-Phase 1 scope, not a Phase 2 item — do it before or alongside Phase 2.
+board got the same drag/resize grid as the iPad (undersized cells, not the
+intended fixed single-column stack). `Board.tsx` now branches on it; see
+Phase 2's own section for what shipped and how it was verified.
 
-### Phase 2 — Home-hub-controls widget — NOT STARTED
+### Phase 2 — Home-hub-controls widget — DONE
 - New `HomeWidget.jsx`/`.css`, reusing `src/lib/home.js` as-is (`ROOMS`,
-  `INITIAL_DEVICES`, `SCENES`, `applyScene`, `groupByRoom`, `summaryFor`) —
-  no new data layer, per the user's explicit choice to keep this a UI shell.
-- **One real design decision worth flagging explicitly**: today
-  `HomeSheet.jsx` owns its mock device state locally and resets to
-  `INITIAL_DEVICES` every time the sheet opens — fine for an occasional
-  room, but wrong once Home is a persistently-mounted widget (toggling a
-  light on the widget, then opening the full Home room, would show it reset
-  back to defaults — a more visible inconsistency than today's already-known
-  "no persistence" gap). This plan hoists that mock state up into `Wall.jsx`
-  (or a small `useMockHomeState.js`) so the widget and the full sheet agree
-  within a session. Still 100% local `useState`, zero backend — just lifted
-  one level so the two views of the same fake data can't disagree.
-- Small tile: glance-only (`summaryFor` — "3 of 11 on" — plus maybe a "run
-  last scene" action). Large tile: scene row + a capped device grid
-  (`groupByRoom`, first N devices, "+N more → open Home"). Reuses
-  `useLongPress` for tap-toggle/hold-to-dim exactly as `HomeTile` does today.
-- Extract `Icon`/`ICON_PATHS` out of `HomeSheet.jsx` into a shared
-  `src/components/homeIcons.jsx` so both components use the same SVG data.
+  `SCENES`, `applyScene`, `groupByRoom`, `summaryFor`) — no new data layer,
+  per the user's explicit choice to keep this a UI shell.
+- **The device-state design decision this section originally flagged is
+  built**: `src/hooks/useMockHomeState.js` holds `devices` + `toggle`/
+  `setBrightness`/`runScene` (moved out of `HomeSheet.jsx` unchanged),
+  called once in `Wall.jsx`, passed as props to both `HomeSheet` and
+  `HomeWidget`. Still 100% local `useState`, zero backend — just lifted one
+  level so the widget and the full sheet can't disagree within a session.
+- **Home ships with no default grid position, deliberately** — tracing the
+  actual numbers (`MIN_CELL_SPAN`, `GRID_CONFIG`) found no placement free of
+  a real cost: growing `GRID_CONFIG`'s rows (this section's original guess)
+  would worsen the whole plan's most-repeated unverified risk (the board's
+  minimum-height floor, still unchecked on real hardware); narrowing To-
+  Do/Shopping's default width to free a column collides with the overflow
+  stopgap noted below (their content still always renders "full" regardless
+  of tile size — that's Phase 3's fix, not landed). So the *default*
+  household layout is byte-for-byte unchanged by this phase — `defaultLayout()`
+  still never places `home`. What's new: `useWidgetGrid.js`'s
+  `firstFreeSlot(layout, minSpan, gridConfig)`, a pure reading-order scan for
+  the first cell a widget's `minSpan` fits without colliding — this is what
+  runs the moment someone actually turns Home on (`Wall.jsx`'s
+  `updateHomeSetting`), searching both orientations independently against
+  whichever layout source `commitWidgetLayout` would use (device override or
+  household default). Verified in the browser both ways: on the shipped
+  default layout (fully packed, both orientations) it correctly finds
+  nothing and inserts nothing; after freeing a column by hand it correctly
+  finds the cell and the widget renders there. If neither orientation has
+  room, `settings.home` still flips to `'on'` and Settings' Board Layout page
+  shows an honest "No room for it yet" hint (`homeUnplaced` in `Wall.jsx`,
+  computed from `resolvedWidgetLayout`) rather than failing silently.
+- Turning Home **off** never deletes its placement, only its visibility
+  (`WidgetTile`'s `mode`) — same "off hides, doesn't forget" semantics
+  To-Do/Shopping already have, verified by toggling off/on in the same
+  session and confirming the widget reappeared where it was.
+- Small tile: `summaryFor` only ("N of M on"). Large tile: scene row + a
+  capped device grid (`groupByRoom`, first 6 devices, "+N more" opening the
+  full room). **Size is a `w * h >= 10` threshold on the widget's own grid
+  cell span, computed in `Board.tsx` and passed down as a plain `size` prop**
+  — not a new generalized measurement hook. `useWidgetSizeTier.ts` (Phase 3,
+  below) is for generalizing To-Do/Shopping's existing full/compact
+  *setting* into something measured; Home had no legacy setting to preserve,
+  so this simpler mechanism was enough and doesn't block Phase 3.
+- **Tap toggles a device (same as `HomeTile`'s existing gesture); hold opens
+  the full Home sheet, not a dimmer scrim inline on the tile.** A deliberate
+  choice, not a shortcut: matches this app's own "Hold a thing to manage it"
+  table (hold always reaches *the* management surface for an object, not a
+  miniature copy of it), and avoids a second copy of `HomeSheet`'s
+  scrim+`Dimmer` markup that would need to stay in sync with the original.
+- Extracted `Icon`/`ICON_PATHS` out of `HomeSheet.jsx` into
+  `src/components/homeIcons.jsx` so both components render the same SVG
+  data — `ICON_PATHS` itself stays module-private (only `Icon` is imported
+  elsewhere), which also satisfies oxlint's Fast Refresh rule about a file
+  exporting both a component and a non-component binding.
 - Reuses the existing `--lit`/`--lit-deep`/`--lit-tint` tokens as-is.
 - Stays explicitly a UI shell: only the widget's position/on-off-in-grid
-  state syncs via `board_settings.widgetLayout` like every other widget —
-  device/scene content itself has zero Supabase/RLS/realtime. Worth a code
-  comment at that seam so a future reader doesn't mistake the asymmetry
-  (position synced, content not) for something unfinished.
-- `useWidgetGrid.js` already has `home` entries in `MIN_CELL_SPAN`, but
-  `defaultLayout()` deliberately never places one (see its own comment) —
-  Phase 2 owns designing where Home actually fits, quite possibly by growing
-  `GRID_CONFIG`'s row count rather than reusing the placeholder numbers.
+  state syncs via `board_settings.widgetLayout`/`.home` like every other
+  widget — device/scene content itself has zero Supabase/RLS/realtime.
+- **Settings → Board Layout gets a "Home" row — two chips (On/Off), not
+  three.** Home has no Full/Compact *setting* the way To-Do/Shopping do;
+  its small/large split above is automatic, not chosen, so a third chip
+  would have had nothing to mean. `MainMenu.jsx`'s Home row, previously a
+  plain button with a comment explaining it had no board-level setting to
+  hold for, now matches Weekly To Do/Shopping exactly (`· hidden on the
+  board`, "Hold to change where it shows").
+- **This phase also finished Phase 1's own leftover item**: `useViewportClass`
+  (built then, never consumed) is now read in `Board.tsx`. A phone-class
+  viewport renders a fixed single-column stack (`.board__body-phone-stack`,
+  new CSS) instead of `WidgetGrid` — no drag, no resize, no grid coordinates,
+  ordered by `WIDGET_ORDER` (now exported from `useWidgetGrid.js` rather than
+  module-private). Both containers call the exact same hoisted `renderTile`
+  function, so a widget's content can never differ between them. Verified in
+  a browser by forcing the branch: all four widgets render in order, the
+  stack scrolls (content taller than viewport), and an `'off'` widget is
+  correctly absent from the stack too, same as the grid.
+- **Real-hardware verification is still outstanding** — everything above was
+  checked in a browser (a dev-only `?board-spike` harness extended with a
+  "Home: on/off" button exercising the same `firstFreeSlot` logic
+  `updateHomeSetting` uses, real auth being unreachable in that session — see
+  Phase 0's own note), not on the 11" iPad. The automation environment used
+  couldn't be resized below roughly 700×749 regardless of window-resize
+  calls, so the phone-stack branch was verified by temporarily forcing
+  `viewportClass` rather than a genuine narrow viewport — worth a real
+  narrow-window and real-phone check before trusting it further.
 
 ### Phase 3 — `ChoresPanel`/`ShoppingPanel` tile-shaping — NOT STARTED
 Today's `mode: 'full'|'compact'` is a **setting**, not a measurement — once a
@@ -330,19 +386,29 @@ Non-negotiable rules, restated as engineering constraints, not suggestions:
 `src/lib/widgetLayout.js`; `src/dev/gooey-spike.jsx`, `src/dev/board-spike.jsx`
 (both throwaway dev harnesses, query-param gated, lazy-loaded).
 
-**New (Phase 2–5, not yet built):** `useWidgetSizeTier.ts`,
-`usePrefersReducedMotion.js`, `useMockHomeState.js`;
-`HomeWidget.jsx`+`.css`, `homeIcons.jsx`; `useWidgetGrid.test.js`.
+**New (Phase 2, shipped):** `src/hooks/useMockHomeState.js`;
+`src/components/HomeWidget.jsx`+`.css`, `homeIcons.jsx`. Added a
+`firstFreeSlot` export (and exported the previously module-private
+`WIDGET_ORDER`) to the existing `useWidgetGrid.js` rather than a new file.
+
+**New (Phase 3–5, not yet built):** `useWidgetSizeTier.ts`,
+`usePrefersReducedMotion.js`; `useWidgetGrid.test.js`.
 
 **Substantially rewritten (done):** `Board.tsx` (`.board__body` →
-`<WidgetGrid>`, header untouched), `SectionPanel.tsx`/`.css` (deleted,
-replaced by `WidgetTile`), `Wall.jsx` (new `widgetLayout` state extending
-`DEFAULT_SETTINGS`, new props into `Board`), `MainMenu.jsx` (new "Rearrange
-widgets" row).
+`<WidgetGrid>`, header untouched; Phase 2 added the `home` renderTile
+branch, hoisted `renderTile` to a plain function, and added the
+`useViewportClass`-gated phone-stack branch), `SectionPanel.tsx`/`.css`
+(deleted, replaced by `WidgetTile`), `Wall.jsx` (new `widgetLayout` state
+extending `DEFAULT_SETTINGS`, new props into `Board`; Phase 2 added
+`homeState`/`updateHomeSetting`/`homeUnplaced`), `MainMenu.jsx` ("Rearrange
+widgets" row from Phase 1; Phase 2 made the Home row a full `MenuRow`),
+`HomeSheet.jsx` (Phase 2: device state hoisted out to `useMockHomeState`,
+`Icon` imported from the new `homeIcons.jsx` instead of defined locally),
+`SettingsSheet.jsx` (Phase 2: Home on/off row + "no room yet" hint in
+`BoardLayoutCategory`).
 
 **Substantially rewritten (not yet done):** `ChoresPanel.jsx`/
-`ShoppingPanel.jsx` (new `'micro'` tier + tile-shape CSS — Phase 3),
-`HomeSheet.jsx` (device state hoisted out — Phase 2).
+`ShoppingPanel.jsx` (new `'micro'` tier + tile-shape CSS — Phase 3).
 
 **Lightly touched:** `useDetailLevel.ts` (unchanged internally, ref
 re-pointed — done), `Sheet.jsx` (untouched until Phase 4's morph needs a

@@ -1,0 +1,137 @@
+/* Feature #18's board presence (Phase 2 of the widget-home-screen plan).
+   Lives inside a WidgetTile's body, which already provides padding/overflow
+   handling — see WidgetTile.css. */
+
+.home-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* ---------- small: glance only ---------- */
+.home-widget--small {
+  justify-content: center;
+}
+
+.home-widget__summary {
+  margin: 0;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 20px;
+  color: var(--ink);
+}
+
+/* ---------- large: scenes + capped device grid ---------- */
+.home-widget__scenes {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.home-widget__scenes::-webkit-scrollbar { display: none; }
+
+.home-widget__scene {
+  flex: 0 0 auto;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: grid;
+  place-items: center;
+  background: var(--chip-face);
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.home-widget__scene svg { width: 18px; height: 18px; }
+.home-widget__scene:active { background: var(--row-face); }
+
+.home-widget__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.home-widget__tile {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--rule);
+  background: var(--row-face);
+  border-radius: var(--radius-panel);
+  padding: 10px 8px;
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: var(--font-text);
+  transition: transform var(--dur-tap) var(--ease-standard), background var(--dur-state) var(--ease-standard);
+  touch-action: manipulation;
+}
+
+.home-widget__tile:active { transform: scale(0.96); }
+.home-widget__tile.on { background: var(--slat-face); box-shadow: var(--lift); }
+
+/* Same "light filling a room" idea as HomeSheet's own tile fill, restyled
+   onto --lit/--lit-deep rather than inventing a parallel scale. */
+.home-widget__tile-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, var(--lit-deep), var(--lit));
+  opacity: 0.2;
+  transition: height 0.35s cubic-bezier(0.3, 0.8, 0.4, 1), opacity var(--dur-state) var(--ease-standard);
+  pointer-events: none;
+}
+.home-widget__tile.on .home-widget__tile-fill { opacity: 0.26; }
+
+.home-widget__tile-icon {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+}
+.home-widget__tile.on .home-widget__tile-icon { color: var(--lit-deep); }
+.home-widget__tile-icon svg { width: 16px; height: 16px; }
+
+.home-widget__tile-name {
+  position: relative;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--ink-soft);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.home-widget__tile.on .home-widget__tile-name { color: var(--ink); }
+
+.home-widget__more {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  padding: 4px 0 0;
+  color: var(--ink-soft);
+  font: 600 13px/1 var(--font-text);
+  text-align: left;
+  cursor: pointer;
+}
+.home-widget__more:active { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .home-widget__tile,
+  .home-widget__tile-fill {
+    transition: none;
+  }
+}

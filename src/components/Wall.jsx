@@ -59,8 +59,9 @@ import {
   writeDeviceTimeout,
 } from '../lib/screensaver'
 import { DEFAULT_SLOT, MEAL_SLOTS, bySlot, mealMeta, nextFreeSlot, slotLabel } from '../lib/meals'
-import { defaultLayout, sanitizeLayout, GRID_CONFIG, MIN_CELL_SPAN } from '../hooks/useWidgetGrid'
+import { defaultLayout, sanitizeLayout, firstFreeSlot, GRID_CONFIG, MIN_CELL_SPAN } from '../hooks/useWidgetGrid'
 import { readDeviceLayoutOverride, writeDeviceLayoutOverride } from '../lib/widgetLayout'
+import { useMockHomeState } from '../hooks/useMockHomeState'
 import './Sheet.css'
 
 // The household's starting widget arrangement — same shape `updateSetting`
@@ -75,6 +76,12 @@ const DEFAULT_WIDGET_LAYOUT = {
 const DEFAULT_SETTINGS = {
   chores: 'full',
   shopping: 'full',
+  // Off by default and, unlike chores/shopping, ships with no default grid
+  // placement either (see defaultLayout's own comment in useWidgetGrid.js)
+  // — the board's appearance doesn't change for an existing household when
+  // this phase ships. Turning it on searches for room via firstFreeSlot;
+  // see updateHomeSetting below.
+  home: 'off',
   flourish: ['week'],
   // The household's default idle timeout, in minutes. Lives in the same jsonb
   // blob as the panel modes, so it needed no migration — and any device may
@@ -181,6 +188,10 @@ export default function Wall({ profile, people, onRenameSelf }) {
   const [reschedulingChore, setReschedulingChore] = useState(null)
   const [bookOpen, setBookOpen] = useState(false)
   const [homeOpen, setHomeOpen] = useState(false)
+  // Feature #18's mock device state — lifted here (not owned by HomeSheet)
+  // so the board's HomeWidget tile and the full Home room read and write
+  // the same devices within a session. See useMockHomeState.js.
+  const homeState = useMockHomeState()
   const [bookRecipes, setBookRecipes] = useState([])
   const [bookLoading, setBookLoading] = useState(false)
   const [recipeOpen, setRecipeOpen] = useState(null) // a recipe id, or null
@@ -1263,6 +1274,67 @@ export default function Wall({ profile, people, onRenameSelf }) {
   }
 
   /**
+   * Settings → Board Layout's Home row. Unlike `updateSetting`, this can
+   * touch two things at once (`settings.home` and, the first time Home is
+   * turned on, `settings.widgetLayout`) — both writes have to land in one
+   * combined `setSettings`/Supabase update, not two calls in a row, because
+   * two synchronous `updateSetting` calls would each read the same
+   * pre-update `settings` and the second would silently clobber the
+   * first's change (classic stale-closure double-write).
+   *
+   * Turning Home **off** never removes its placement, only its visibility
+   * — same "off hides, doesn't forget" semantics chores/shopping already
+   * have, so a later re-enable remembers where it was.
+   *
+   * Turning Home **on** searches both orientations for room via
+   * `firstFreeSlot`, using whichever layout source `commitWidgetLayout`
+   * would (a pinned device override, else the household default) — Home
+   * ships with no default placement of its own (see `defaultLayout`'s own
+   * comment in useWidgetGrid.js), so this is the only place a placement for
+   * it is ever invented. If neither orientation has room, `settings.home`
+   * still flips to 'on' — the toggle describes intent, not a guarantee —
+   * and `homeUnplaced` below is what tells Settings to say so honestly
+   * instead of failing silently.
+   */
+  async function updateHomeSetting(mode) {
+    let widgetLayoutPatch = null
+
+    if (mode === 'on') {
+      const base = deviceWidgetLayout ?? settings.widgetLayout ?? DEFAULT_WIDGET_LAYOUT
+      const nextLayout = { ...base }
+      for (const orientation of ['portrait', 'landscape']) {
+        const layoutForOrientation = base[orientation] ?? []
+        if (layoutForOrientation.some((p) => p.id === 'home')) continue
+        const slot = firstFreeSlot(layoutForOrientation, MIN_CELL_SPAN[orientation].home, GRID_CONFIG[orientation])
+        if (slot) nextLayout[orientation] = [...layoutForOrientation, { id: 'home', ...slot }]
+      }
+
+      if (nextLayout.portrait !== base.portrait || nextLayout.landscape !== base.landscape) {
+        if (deviceWidgetLayout) {
+          // A device-local override lives outside `settings` entirely, so
+          // writing it here carries no risk of clobbering the `home` write
+          // below — they're different state, different stores.
+          setDeviceWidgetLayout(nextLayout)
+          writeDeviceLayoutOverride(nextLayout)
+        } else {
+          widgetLayoutPatch = nextLayout
+        }
+      }
+    }
+
+    const next = { ...settings, home: mode, ...(widgetLayoutPatch ? { widgetLayout: widgetLayoutPatch } : {}) }
+    setSettings(next)
+    const { error } = await supabase
+      .from('household')
+      .update({ board_settings: next })
+      .eq('id', profile.household_id)
+    if (error) {
+      setError(error.message)
+      loadSettings()
+    }
+  }
+
+  /**
    * The layout Board actually renders: a per-device override if this
    * screen has pinned one, otherwise the household default — sanitized
    * against the live GRID_CONFIG/MIN_CELL_SPAN on every read (not just on
@@ -1280,6 +1352,14 @@ export default function Wall({ profile, people, onRenameSelf }) {
       landscape: sanitizeLayout(source.landscape, GRID_CONFIG.landscape, MIN_CELL_SPAN.landscape),
     }
   }, [deviceWidgetLayout, settings.widgetLayout])
+
+  // Settings' honest "no room yet" hint (see updateHomeSetting above) —
+  // true when Home is switched on but couldn't find space in at least one
+  // orientation, so turning it on did something less than it promised.
+  const homeUnplaced =
+    settings.home === 'on' &&
+    (!resolvedWidgetLayout.portrait.some((p) => p.id === 'home') ||
+      !resolvedWidgetLayout.landscape.some((p) => p.id === 'home'))
 
   // Board hands back only the orientation that actually changed — this
   // patches just that key so a drag/resize on the wall's current
@@ -1847,6 +1927,9 @@ export default function Wall({ profile, people, onRenameSelf }) {
         }
         shopping={<ShoppingPanel mode="full" {...shoppingPanelProps} />}
         shoppingCount={booted ? `${shoppingRemaining} to buy` : undefined}
+        homeDevices={homeState.devices}
+        onToggleHome={homeState.toggle}
+        onRunHomeScene={homeState.runScene}
         widgetLayout={resolvedWidgetLayout}
         rearranging={rearranging}
         onCommitWidgetLayout={commitWidgetLayout}
@@ -2054,7 +2137,15 @@ export default function Wall({ profile, people, onRenameSelf }) {
           opens the book and cook mode in the same breath, and for one round
           trip there is a recipe id and no recipe yet. Without the guard that
           gap renders as eighteen recipes you did not ask for. */}
-      {homeOpen && <HomeSheet onClose={() => setHomeOpen(false)} />}
+      {homeOpen && (
+        <HomeSheet
+          devices={homeState.devices}
+          onToggle={homeState.toggle}
+          onSetBrightness={homeState.setBrightness}
+          onRunScene={homeState.runScene}
+          onClose={() => setHomeOpen(false)}
+        />
+      )}
 
       {bookOpen && !openRecipe && !cooking && (
         <RecipeBook
@@ -2156,7 +2247,8 @@ export default function Wall({ profile, people, onRenameSelf }) {
           canSleep={screensaverAllowed}
           budget={budget}
           initialCategory={settingsCategory}
-          onChange={updateSetting}
+          homeUnplaced={homeUnplaced}
+          onChange={(key, mode) => (key === 'home' ? updateHomeSetting(mode) : updateSetting(key, mode))}
           onBudgetChange={updateBudget}
           onDeviceTimeout={setDeviceScreensaver}
           onSleep={() => {

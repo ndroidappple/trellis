@@ -6,11 +6,19 @@ unfinished), Phase 3 (`ChoresPanel`/`ShoppingPanel` tile-shaping) and Phase 4
 steps 1–2 (drag-lift/settle + snap-back, resize bend feedback) are built — see
 `worktree-widget-home-screen` branch. Phase 4 proceeded on `liquid-gooey`
 without ever getting the real-iPad go/no-go Phase 0 was meant to produce —
-accepted explicitly, not silently. Each phase passed `npm run build` and
-`npm run lint`; interactive checks (resize/settings behavior, actual gesture
-feel) still need a signed-in session against the live household account,
-which an automated pass doesn't attempt — see each phase's own note. Phase 4
-steps 3–4 and Phase 5 below are not started.
+accepted explicitly, not silently.
+
+**The real 11" iPad finally arrived in the loop** (see "Real-hardware
+findings" under Phase 4 below) — the first genuine hardware data this whole
+feature has had, after every phase saying it was still missing. It found the
+bottom edge of the grid clipped in both orientations and no way to make
+Calendar smaller, which reframed continuous free-drag resize into iOS-style
+discrete size presets (see Phase 4's own section — this wasn't a new
+numbered phase, it revised Phase 4's resize mechanism in place before steps
+3–4 were ever attempted). Each phase passed `npm run build`/`npm run lint`;
+interactive checks needing a signed-in session against the live household
+account are noted per-phase where they haven't been attempted. Phase 4 steps
+3–4 and Phase 5 below are not started.
 
 ## Context
 
@@ -348,8 +356,12 @@ fallback available at every step:
    tile in `effect="move"`; an invalid drop (Phase 1's reject-and-snap-back)
    animates back rather than snapping instantly. Most contained, started
    here as planned.
-2. **Resize-handle feedback — DONE.** `effect="bend"` on the actively-resized
-   tile.
+2. **Resize-handle feedback — DONE, then REVISED.** Originally shipped as
+   `effect="bend"` on the actively-dragged resize handle. Real hardware
+   feedback (see "Real-hardware findings" below) reframed resize entirely
+   before step 3 was ever attempted: it's no longer a drag gesture at all.
+   Bend still exists, now only for the brief settle when a picked size
+   arrives — see the revised "How steps 1–2 actually work" below.
 3. **Widget → full-room morph** (the literal "shared-element" idea, highest
    value and highest risk) — replace `Sheet.jsx`'s flat fade+rise for the
    specific path of opening a widget's full room, morphing the tile's bounds
@@ -380,10 +392,14 @@ gesturing tile) and layers a small, self-contained mechanism on top:
   real CSS transition (`var(--dur-move)`/`var(--ease-standard)`), animating
   from whatever was actually last painted — no separate "reject" vs.
   "commit" code path, both just settle to zero from wherever they were.
-- **Resize**: an explicit pixel `width`/`height` override (base committed
-  size + raw pointer delta, clamped to the tile's `minSpan` in pixels) rides
-  on top of the grid-track size the same way; same CSS-transition settle on
-  release.
+- **Resize** (revised — see "Real-hardware findings" below): no longer a
+  live drag at all. Picking a size from the long-press menu commits
+  instantly (`gridColumn`/`gridRow` jump to the new span, like any grid
+  change), and only the brief *settle* — the visual footprint easing from
+  whatever was last painted to the new committed pixel size — rides on top,
+  same CSS-transition mechanism as drag's settle. `effect="bend"` now only
+  ever appears during that settle window, never during a live gesture,
+  since there isn't one anymore.
 - **`<Liquid>`/`<Liquid.Item effect="move"/"bend">` is genuinely mounted**
   around the gesturing tile's content for the gesture's duration (satisfying
   "interaction-triggered only" structurally — every other tile never
@@ -403,13 +419,17 @@ gesturing tile) and layers a small, self-contained mechanism on top:
   decorative part, the tile still moves smoothly regardless. Worth revisiting
   with real `liquid-gooey` source access (not just the README) if the visual
   result on real hardware reads as two mechanisms fighting rather than one.
-- **No changes to `useWidgetResize.js`** — Bend's own internal
-  measurement loop is what supplies velocity, per its README; only
-  `WidgetGrid.tsx`'s render layer changed. `useWidgetDrag.js` gained one
-  addition: `startDrag` now captures the grab offset (pointer position
-  minus the tile's own rect, found via the grip's nearest
-  `.widget-grid__cell` ancestor) so the tile tracks from where it was
-  actually grabbed.
+- **`useWidgetResize.js` is deleted** (see "Real-hardware findings" below —
+  it existed only to drive the live resize drag, which no longer exists).
+  At the time this bullet was first written it hadn't been touched at
+  all — Bend's own internal measurement loop supplied velocity straight
+  from the live pixel size `WidgetGrid.tsx` was already computing, per its
+  README — which is exactly why deleting the hook cleanly didn't touch
+  Bend's own usage, only what feeds it. `useWidgetDrag.js` gained one
+  addition, unaffected by the revision: `startDrag` now captures the grab
+  offset (pointer position minus the tile's own rect, found via the grip's
+  nearest `.widget-grid__cell` ancestor) so the tile tracks from where it
+  was actually grabbed.
 - **`SETTLE_MS` (220ms, matching `--dur-move`) is a JS timeout**, not a DOM
   `transitionend` listener — third-party spring/animation engines aren't
   guaranteed to fire a standard transition event, so a timeout is the
@@ -440,6 +460,94 @@ Non-negotiable rules, restated as engineering constraints, not suggestions:
   own `transition` prop. Add `usePrefersReducedMotion.js` and gate every
   `Liquid.Item` call site on it — verify end-to-end in Phase 5, not just at
   the hook.
+
+### Real-hardware findings and the sizing-model revision
+
+The real 11" iPad, signed in for the first time, immediately surfaced three
+things — the first genuine hardware data anywhere in this feature's history:
+
+1. **The bottom edge of the widget grid was clipped, in both orientations.**
+   Root cause: `WidgetGrid.tsx` set `.widget-grid`'s `min-height` to fit
+   *all* of `GRID_CONFIG`'s nominal rows at `ROW_MIN_PX` each — 16 rows in
+   portrait, 10 in landscape — unconditionally, regardless of what was
+   actually placed. `.board` wraps everything in `overflow: hidden` with a
+   fixed viewport height, so when the real available space (after the
+   header and safe-area insets) came in under that blanket reservation, the
+   excess was silently clipped. This is the same "reserve the worst case,
+   not what's needed" bug class CLAUDE.md already documents once (the
+   day-row min-height incident) — recurring here in a new spot, and
+   confirming what the plan's own comments had only been able to flag as a
+   landscape risk actually hits portrait too.
+2. **A blur near the top of the screen** — checked every stylesheet in this
+   app for `blur`/`backdrop-filter`: there is none, and `liquid-gooey`'s own
+   blur only ever applies mid-gesture, never at rest. Ruled out as
+   something Trellis adds; almost certainly iPadOS's own chrome from a
+   newer OS version. Nothing changed here.
+3. **"This Week" had exactly one mandatory size and could not get smaller.**
+   The complaint that reframed the whole resize model: build widget sizing
+   like iOS Home Screen widgets — a short, named list of sizes per widget,
+   chosen from a menu, not a continuously dragged range.
+
+**The fix for (1) and (3) turned out to be the same change.** `SIZE_PRESETS`
+(`useWidgetGrid.js`) replaces the old `MIN_CELL_SPAN` (any span at or above
+a floor) with a short list of exact `{w, h}` spans per widget per
+orientation — reusing render tiers that already existed: To-Do/Shopping's
+ids are literally `ChoresPanel`/`ShoppingPanel`'s own `'micro'|'compact'|
+'full'` mode strings (Phase 3), Home's are its existing `'small'|'large'`
+size prop values, and Calendar gained a genuinely smaller `'medium'` preset
+alongside its old size (now called `'large'`) — the literal fix for
+complaint 3. `useWidgetSizeTier.ts` (Phase 3's measured hook) is retired:
+which preset is selected is now a direct fact, read via `presetIdFor`, not
+something a `ResizeObserver` infers.
+
+Resizing changed from a continuous drag to **long-press the tile → a small
+size menu (`WidgetSizeMenu.tsx`) naming the options → tap one to commit**,
+independent of "Rearrange widgets" mode (that mode still exists, but only
+for repositioning now — see `WidgetTile.tsx`'s own note on why long-press
+and the drag grip can't share a gesture while rearranging). An option that
+wouldn't fit at the tile's current position is shown disabled rather than
+omitted, via a non-destructive `tryResize` check per option — same "the
+reason a chip is unavailable is that it goes quiet" pattern
+`SettingsSheet.jsx`'s flourish picker already uses. This is what retired
+the live resize-drag gesture and `useWidgetResize.js` along with it (see
+above).
+
+For (1) specifically: `WidgetGrid.tsx`'s rendered `gridTemplateRows`/
+`gridTemplateColumns`/min-height now come from a new `occupiedExtent`
+helper — the current layout's actual `Math.max(y + h)` / `Math.max(x + w)`
+— instead of `GRID_CONFIG`'s nominal row/column count. `GRID_CONFIG` itself
+is untouched and still governs the outer bounds any placement is checked
+against; only what gets *rendered* changed.
+
+**One important thing this does NOT yet fix, worth being explicit about:**
+every widget's largest preset was deliberately set to reproduce its old
+default placement exactly (see `SIZE_PRESETS`'s own comment — "this changes
+what sizes exist, not what a household already looking at the board sees
+today"), and `defaultLayout` still places everything at its largest preset
+by default. Working the actual numbers: portrait's default arrangement
+occupies rows 0–11 (Calendar) and 11–16 (To-Do/Shopping) = 16 rows total,
+exactly `GRID_CONFIG.portrait.rows`; landscape's is 0–10 (Calendar) and
+0–10 (dock, split across columns) = 10 rows, exactly
+`GRID_CONFIG.landscape.rows`. **`occupiedExtent` only reduces the reserved
+height below `GRID_CONFIG`'s nominal count when something is actually
+smaller than that count — a household that hasn't turned anything off or
+resized anything down (i.e., anyone still on the stock default layout)
+gets zero benefit from this fix on its own.** It only becomes real for a
+default household once a widget is turned off, or once someone actually
+picks a smaller preset for something.
+
+Concretely, this means the clipping this session actually saw may well
+still reproduce on an untouched default board. **The next real-hardware
+test that actually settles this**: on the iPad, long-press "This Week" and
+pick Medium. If the clipping goes away, `SIZE_PRESETS`'s numbers are
+basically right and the fix is complete as shipped. If it's still clipped
+even at Medium, `ROW_MIN_PX`/`GRID_CONFIG`'s base numbers are themselves
+miscalibrated against the real device's real available height — a
+different, more fundamental fix than anything presets can offer, and
+independent of whether any particular widget is big or small. Whichever
+way that test comes back is the actual, final piece of real-hardware data
+this feature needs before this can be called done — every number here is
+still first-guess otherwise.
 
 ### Phase 5 — Testing, hardening, final hardware verification — NOT STARTED
 - **vitest**, introduced here for real, closing a gap the project's own docs
@@ -500,25 +608,42 @@ Non-negotiable rules, restated as engineering constraints, not suggestions:
 ## Concrete file list
 
 **New (Phase 0–1, shipped):** `src/hooks/useWidgetGrid.js`,
-`useWidgetDrag.js`, `useWidgetResize.js`, `useViewportClass.js`;
+`useWidgetDrag.js`, `useViewportClass.js`;
 `src/components/WidgetGrid.tsx`+`.css`, `WidgetTile.tsx`+`.css`;
 `src/lib/widgetLayout.js`; `src/dev/gooey-spike.jsx`, `src/dev/board-spike.jsx`
 (both throwaway dev harnesses, query-param gated, lazy-loaded).
+`useWidgetResize.js` also shipped here but is now deleted — see the sizing-
+model revision below.
 
 **New (Phase 2, shipped):** `src/hooks/useMockHomeState.js`;
 `src/components/HomeWidget.jsx`+`.css`, `homeIcons.jsx`. Added a
 `firstFreeSlot` export (and exported the previously module-private
 `WIDGET_ORDER`) to the existing `useWidgetGrid.js` rather than a new file.
 
-**New (Phase 3, shipped):** `src/hooks/useWidgetSizeTier.ts`;
-`src/components/PanelContent.css` (not in the original file list — restores
-`SectionPanel.css`'s deleted base panel-content rules, a prerequisite this
-phase found rather than planned for; see Phase 3's own notes above).
+**New (Phase 3, shipped):** `src/components/PanelContent.css` (not in the
+original file list — restores `SectionPanel.css`'s deleted base panel-
+content rules, a prerequisite this phase found rather than planned for; see
+Phase 3's own notes above). `useWidgetSizeTier.ts` also shipped here but is
+now deleted — see below.
 
 **New (Phase 4 steps 1–2, shipped):** `src/hooks/usePrefersReducedMotion.js`
 (promoted from the one-off copy already in `gooey-spike.jsx`). Added a
 `cellToPixel` export (the inverse of the existing `pixelDeltaToCellDelta`) to
 `useWidgetGrid.js` rather than a new file.
+
+**New (the sizing-model revision, shipped, driven by real-hardware
+feedback — see that section above):** `src/components/WidgetSizeMenu.tsx`
++`.css` (the long-press size picker). Added `SIZE_PRESETS`, `presetsFor`,
+`minSpanFor`, `defaultPresetFor`, `presetIdFor`, and `occupiedExtent` to
+`useWidgetGrid.js`, replacing `MIN_CELL_SPAN`.
+
+**Deleted (the sizing-model revision):** `src/hooks/useWidgetResize.js`
+(the live resize-drag gesture it drove no longer exists — resize is a
+picked preset, not a drag, and Bend's velocity-measurement loop now only
+ever sees the settle animation, not a live gesture), `src/hooks/
+useWidgetSizeTier.ts` (Phase 3's measured-tier hook — which preset is
+selected is a direct fact now, read via `presetIdFor`, not something
+inferred from a `ResizeObserver`).
 
 **New (Phase 4 steps 3–5, not yet built):** `useWidgetGrid.test.js`.
 
@@ -529,19 +654,26 @@ branch, hoisted `renderTile` to a plain function, and added the
 (deleted, replaced by `WidgetTile`), `Wall.jsx` (new `widgetLayout` state
 extending `DEFAULT_SETTINGS`, new props into `Board`; Phase 2 added
 `homeState`/`updateHomeSetting`/`homeUnplaced`), `MainMenu.jsx` ("Rearrange
-widgets" row from Phase 1; Phase 2 made the Home row a full `MenuRow`),
-`HomeSheet.jsx` (Phase 2: device state hoisted out to `useMockHomeState`,
-`Icon` imported from the new `homeIcons.jsx` instead of defined locally),
-`SettingsSheet.jsx` (Phase 2: Home on/off row + "no room yet" hint in
-`BoardLayoutCategory`; Phase 3: collapsed `BoardLayoutCategory`'s three
-sections to one shared on/off chip row, removing the Full/Compact choice —
-see Phase 3's notes above), `ChoresPanel.jsx`/`ShoppingPanel.jsx` (Phase 3:
-new `'micro'` render + loading-skeleton branches, default `mode = 'full'`,
-import the new `PanelContent.css`), `WidgetGrid.tsx`/`.css` (Phase 4: the
-drag-settle/resize-bend mechanism described in Phase 4's own notes above —
-`settle` state, the per-tile transform/size-override branch, `<Liquid>`
-mounted in observe mode), `useWidgetDrag.js` (Phase 4: `startDrag` now
-captures a grab offset).
+widgets" row from Phase 1; Phase 2 made the Home row a full `MenuRow`; the
+sizing-model revision reworded its meta text now that the mode only moves
+widgets, not resizes them), `HomeSheet.jsx` (Phase 2: device state hoisted
+out to `useMockHomeState`, `Icon` imported from the new `homeIcons.jsx`
+instead of defined locally), `SettingsSheet.jsx` (Phase 2: Home on/off row
++ "no room yet" hint in `BoardLayoutCategory`; Phase 3: collapsed
+`BoardLayoutCategory`'s three sections to one shared on/off chip row,
+removing the Full/Compact choice — see Phase 3's notes above),
+`ChoresPanel.jsx`/`ShoppingPanel.jsx` (Phase 3: new `'micro'` render +
+loading-skeleton branches, default `mode = 'full'`, import the new
+`PanelContent.css` — untouched by the sizing-model revision beyond that,
+since their preset ids already are their mode strings), `WidgetGrid.tsx`/
+`.css` (Phase 4: the drag-settle mechanism described in Phase 4's own notes
+above; the sizing-model revision removed the live resize-drag path
+entirely, added `occupiedExtent`-based grid sizing and the size-menu
+state/wiring), `WidgetTile.tsx`/`.css` (the sizing-model revision: removed
+the resize grip, added `useLongPress` wiring for the size menu on both head
+variants — including the plain, no-`onOpen` head Calendar uses, which
+didn't exist as a gesture target before), `useWidgetDrag.js` (Phase 4:
+`startDrag` now captures a grab offset).
 
 **Lightly touched:** `useDetailLevel.ts` (unchanged internally, ref
 re-pointed — done), `Sheet.jsx` (untouched until Phase 4's morph needs a

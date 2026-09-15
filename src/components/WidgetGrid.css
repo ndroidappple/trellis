@@ -30,13 +30,13 @@
   min-height: 0;
 }
 
-/* Phase 4 (steps 1-2): drag lift/settle and resize bend feedback. The
-   gesturing tile stays a normal grid item (gridColumn/gridRow, set inline
-   from WidgetGrid.tsx, are untouched during a gesture) — only an added
-   transform (drag) or an explicit pixel width/height (resize) rides on
-   top, so this never needs FLIP-style position-scheme switching or any
-   pointer-events mutation on an ancestor, which is what broke real touch
-   here once already (see WidgetGrid.tsx's own comment on that). */
+/* Drag lift/settle, and a picked size settling in. The gesturing tile
+   stays a normal grid item (gridColumn/gridRow, set inline from
+   WidgetGrid.tsx, are untouched throughout) — only an added transform
+   (drag) or an explicit pixel width/height (a just-picked preset arriving)
+   rides on top, so this never needs FLIP-style position-scheme switching
+   or any pointer-events mutation on an ancestor, which is what broke real
+   touch here once already (see WidgetGrid.tsx's own comment on that). */
 .widget-grid__cell[data-active='true'] {
   z-index: 2;
 }

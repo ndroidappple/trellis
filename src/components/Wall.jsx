@@ -59,7 +59,7 @@ import {
   writeDeviceTimeout,
 } from '../lib/screensaver'
 import { DEFAULT_SLOT, MEAL_SLOTS, bySlot, mealMeta, nextFreeSlot, slotLabel } from '../lib/meals'
-import { defaultLayout, sanitizeLayout, firstFreeSlot, GRID_CONFIG, MIN_CELL_SPAN } from '../hooks/useWidgetGrid'
+import { defaultLayout, sanitizeLayout, firstFreeSlot, GRID_CONFIG, minSpanFor } from '../hooks/useWidgetGrid'
 import { readDeviceLayoutOverride, writeDeviceLayoutOverride } from '../lib/widgetLayout'
 import { useMockHomeState } from '../hooks/useMockHomeState'
 import './Sheet.css'
@@ -1211,10 +1211,10 @@ export default function Wall({ profile, people, onRenameSelf }) {
     if (data?.board_settings) {
       const merged = { ...DEFAULT_SETTINGS, ...data.board_settings }
       // Pre-Phase 3 rows may still hold 'full'/'compact' from the old
-      // stored Full/Compact setting — size is measured now (see
-      // useWidgetSizeTier), so anything but 'off' just means the section is
-      // on. No migration needed, same defensive-read shape sanitizeLayout
-      // already uses for a stored widget layout.
+      // stored Full/Compact setting — size is a chosen preset now (see
+      // presetIdFor in useWidgetGrid.js), so anything but 'off' just means
+      // the section is on. No migration needed, same defensive-read shape
+      // sanitizeLayout already uses for a stored widget layout.
       merged.chores = merged.chores === 'off' ? 'off' : 'on'
       merged.shopping = merged.shopping === 'off' ? 'off' : 'on'
       setSettings(merged)
@@ -1315,7 +1315,7 @@ export default function Wall({ profile, people, onRenameSelf }) {
       for (const orientation of ['portrait', 'landscape']) {
         const layoutForOrientation = base[orientation] ?? []
         if (layoutForOrientation.some((p) => p.id === 'home')) continue
-        const slot = firstFreeSlot(layoutForOrientation, MIN_CELL_SPAN[orientation].home, GRID_CONFIG[orientation])
+        const slot = firstFreeSlot(layoutForOrientation, minSpanFor(orientation, 'home'), GRID_CONFIG[orientation])
         if (slot) nextLayout[orientation] = [...layoutForOrientation, { id: 'home', ...slot }]
       }
 
@@ -1347,19 +1347,21 @@ export default function Wall({ profile, people, onRenameSelf }) {
   /**
    * The layout Board actually renders: a per-device override if this
    * screen has pinned one, otherwise the household default — sanitized
-   * against the live GRID_CONFIG/MIN_CELL_SPAN on every read (not just on
-   * write), since a layout saved before a grid-tuning pass could otherwise
-   * describe a widget that no longer fits. sanitizeLayout only drops what
-   * doesn't fit rather than inventing a placement for it, so a widget type
+   * against the live GRID_CONFIG/SIZE_PRESETS on every read (not just on
+   * write), since a layout saved before a grid-tuning pass, or from before
+   * this file's move to discrete size presets, could otherwise describe a
+   * widget at a span that no longer corresponds to anything selectable.
+   * sanitizeLayout snaps anything that isn't an exact preset match to its
+   * nearest one and only drops what still doesn't fit, so a widget type
    * this household's saved layout has never heard of (Home, before Phase 2
-   * exists) is simply absent until something writes a real position for it
+   * existed) is simply absent until something writes a real position for it
    * — expected today, not a bug.
    */
   const resolvedWidgetLayout = useMemo(() => {
     const source = deviceWidgetLayout ?? settings.widgetLayout ?? DEFAULT_WIDGET_LAYOUT
     return {
-      portrait: sanitizeLayout(source.portrait, GRID_CONFIG.portrait, MIN_CELL_SPAN.portrait),
-      landscape: sanitizeLayout(source.landscape, GRID_CONFIG.landscape, MIN_CELL_SPAN.landscape),
+      portrait: sanitizeLayout(source.portrait, GRID_CONFIG.portrait, 'portrait'),
+      landscape: sanitizeLayout(source.landscape, GRID_CONFIG.landscape, 'landscape'),
     }
   }, [deviceWidgetLayout, settings.widgetLayout])
 

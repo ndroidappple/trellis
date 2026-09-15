@@ -1,21 +1,21 @@
 import { cloneElement, Fragment, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { useDetailLevel, weightedRowsFor, weekFloorFor } from '../hooks/useDetailLevel';
-import { useWidgetSizeTier } from '../hooks/useWidgetSizeTier';
 import { useOrientation } from '../hooks/useOrientation';
 import { useViewportClass } from '../hooks/useViewportClass';
 import { WeekGrid, type DayData } from './WeekGrid';
 import { WidgetGrid, WIDGET_GAP_PX, type Placement } from './WidgetGrid';
 import { WidgetTile } from './WidgetTile';
 import HomeWidget from './HomeWidget';
-import { MIN_CELL_SPAN, ROW_MIN_PX, WIDGET_ORDER } from '../hooks/useWidgetGrid';
+import { minSpanFor, presetIdFor, ROW_MIN_PX, WIDGET_ORDER } from '../hooks/useWidgetGrid';
 import type { Person } from './PersonBadge';
 import './Board.css';
 
 /** On/off only, same shape as `HomeMode` — Full/Compact used to be a stored
-    *setting* here, but once a widget can be dragged to any size that stops
-    meaning anything: `useWidgetSizeTier` now decides full/compact/micro from
-    the tile's own measured content area (see renderTile below), and Settings
-    only ever offers on/off for these three sections. */
+    *setting* here, but once a widget's size is a small list of chosen
+    presets rather than an open range, that stops meaning anything:
+    `presetIdFor` (see renderTile below) reads which preset is selected
+    directly, nothing is measured, and Settings only ever offers on/off for
+    these three sections. */
 export type SectionMode = 'on' | 'off';
 
 /** Home has no Full/Compact *setting* the way To-Do/Shopping do — its
@@ -120,30 +120,38 @@ interface Props {
 /** Synthetic — phones ignore grid position/size entirely (see
     useViewportClass.js's own doc comment for why), so these numbers are
     never used for real layout. They exist only so `renderTile`'s `home`
-    branch, shared between the wall grid and the phone stack, picks its
-    "large" content variant on phone (well above the 10-cell threshold). */
-const PHONE_HOME_SIZE = { w: 4, h: 4 };
+    branch, shared between the wall grid and the phone stack, picks Home's
+    "large" preset on phone — the exact {w, h} of that preset (identical in
+    both orientations), not just something above an old area threshold. */
+const PHONE_HOME_SIZE = { w: 2, h: 5 };
+
+/** Board.tsx is the only place that knows every widget's display title —
+    WidgetGrid otherwise only ever sees ids, but its size menu needs a
+    human name to show. */
+const WIDGET_TITLES: Record<string, string> = {
+  calendar: 'This Week',
+  todo: 'Weekly To Do',
+  shopping: 'Shopping',
+  home: 'Home',
+};
 
 const NOOP_GESTURE = {
   onDragHandlePointerDown: () => {},
-  onResizeHandlePointerDown: () => {},
+  onLongPress: () => {},
 };
 
 export function Board(props: Props) {
   const [weekRef, level] = useDetailLevel(weightedRowsFor(props.days));
-  const [todoRef, todoTier] = useWidgetSizeTier();
-  const [shoppingRef, shoppingTier] = useWidgetSizeTier();
   const orientation = useOrientation();
   const viewportClass = useViewportClass();
 
-  // Same role as weekFloor below, for the two widgets whose content now
-  // adapts to a measured size instead of a stored setting — this is the
-  // "must not regress" min-height floor the widget-home-screen plan calls
-  // out by name, so a dragged-small tile's body never silently clips below
-  // the grid's own declared minimum.
-  const todoShoppingFloor =
-    MIN_CELL_SPAN[orientation].todo.h * ROW_MIN_PX +
-    (MIN_CELL_SPAN[orientation].todo.h - 1) * WIDGET_GAP_PX;
+  // Same role as weekFloor below, for the two widgets whose content is now
+  // chosen from a preset rather than measured or stored as a setting —
+  // this is the "must not regress" min-height floor the widget-home-screen
+  // plan calls out by name, so even the smallest preset's tile body never
+  // silently clips below the grid's own declared minimum.
+  const todoFloorH = minSpanFor(orientation, 'todo').h;
+  const todoShoppingFloor = todoFloorH * ROW_MIN_PX + (todoFloorH - 1) * WIDGET_GAP_PX;
 
   const flourishes = props.flourishes ?? [];
   const cycleable = (props.flourishCycleable ?? true) && !!props.onCycleFlourish;
@@ -178,16 +186,18 @@ export function Board(props: Props) {
    */
   function renderTile(
     placement: Placement,
-    gesture: { onDragHandlePointerDown: (e: any) => void; onResizeHandlePointerDown: (e: any) => void }
+    gesture: { onDragHandlePointerDown: (e: any) => void; onLongPress: () => void }
   ) {
     const tileProps = {
-      // Rearranging is a wall-grid concept — there's nothing to drag or
-      // resize under the phone stack, so a phone never shows grip/resize
-      // chrome even if this household's `rearranging` state happens to be
-      // true from another device's menu action.
+      // Rearranging is a wall-grid concept — there's nothing to drag under
+      // the phone stack, so a phone never shows grip chrome even if this
+      // household's `rearranging` state happens to be true from another
+      // device's menu action. The size menu (onLongPress) has no grid to
+      // act on there either, which is why the phone stack calls renderTile
+      // with NOOP_GESTURE rather than a real one.
       rearranging: viewportClass === 'wall' && props.rearranging,
       onDragHandlePointerDown: gesture.onDragHandlePointerDown,
-      onResizeHandlePointerDown: gesture.onResizeHandlePointerDown,
+      onLongPress: gesture.onLongPress,
     };
 
     if (placement.id === 'calendar') {
@@ -222,6 +232,12 @@ export function Board(props: Props) {
     }
 
     if (placement.id === 'todo') {
+      // The selected preset IS the render mode now — SIZE_PRESETS.todo's
+      // ids are literally ChoresPanel's own 'micro'|'compact'|'full', not a
+      // separate thing mapped to one. props.chores was already instantiated
+      // by Wall.jsx with its own default mode before this component ever
+      // ran, so that has to be overridden here rather than set once.
+      const mode = presetIdFor(orientation, 'todo', placement) ?? 'full';
       return (
         <WidgetTile
           id="todo"
@@ -231,20 +247,15 @@ export function Board(props: Props) {
           onOpen={props.onOpenChores}
           {...tileProps}
         >
-          {/* Measured here, not inside WidgetTile — same reasoning as
-              board__week above: the ref needs to sit on the element whose
-              size the tier is derived from, and props.chores was already
-              instantiated by Wall.jsx with its own default mode before this
-              component ever ran, so that has to be overridden rather than
-              set once. */}
-          <div className="board__widget-measure" ref={todoRef} style={{ minHeight: todoShoppingFloor }}>
-            {cloneElement(props.chores as ReactElement, { mode: todoTier })}
+          <div className="board__widget-measure" style={{ minHeight: todoShoppingFloor }}>
+            {cloneElement(props.chores as ReactElement, { mode })}
           </div>
         </WidgetTile>
       );
     }
 
     if (placement.id === 'shopping') {
+      const mode = presetIdFor(orientation, 'shopping', placement) ?? 'full';
       return (
         <WidgetTile
           id="shopping"
@@ -254,19 +265,20 @@ export function Board(props: Props) {
           onOpen={props.onOpenShopping}
           {...tileProps}
         >
-          <div className="board__widget-measure" ref={shoppingRef} style={{ minHeight: todoShoppingFloor }}>
-            {cloneElement(props.shopping as ReactElement, { mode: shoppingTier })}
+          <div className="board__widget-measure" style={{ minHeight: todoShoppingFloor }}>
+            {cloneElement(props.shopping as ReactElement, { mode })}
           </div>
         </WidgetTile>
       );
     }
 
     if (placement.id === 'home') {
-      // Grid cell span decides small vs. large content — see HomeWidget.jsx's
-      // own doc comment for why this is a simple threshold here rather than
-      // a new generalized measurement hook (that's Phase 3's job). The phone
-      // stack's synthetic PHONE_HOME_SIZE clears this threshold on purpose.
-      const size = placement.w * placement.h >= 10 ? 'large' : 'small';
+      // Grid cell span decides small vs. large content — the selected
+      // preset id IS HomeWidget's own 'small'|'large' size prop, an exact
+      // match rather than an area threshold (see SIZE_PRESETS.home). The
+      // phone stack's synthetic PHONE_HOME_SIZE is the 'large' preset's
+      // exact {w, h} for the same reason.
+      const size = presetIdFor(orientation, 'home', placement) ?? 'small';
       return (
         <WidgetTile
           id="home"
@@ -412,7 +424,7 @@ export function Board(props: Props) {
             layout={props.widgetLayout[orientation]}
             rearranging={!!props.rearranging}
             onCommitLayout={(next) => props.onCommitWidgetLayout?.(orientation, next)}
-            minSpans={MIN_CELL_SPAN[orientation]}
+            widgetTitles={WIDGET_TITLES}
             renderTile={renderTile}
           />
         )}

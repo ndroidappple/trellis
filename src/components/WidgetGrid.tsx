@@ -10,18 +10,28 @@ import {
 } from 'react';
 import { Liquid } from 'liquid-gooey';
 import { useWidgetDrag } from '../hooks/useWidgetDrag';
-import { useWidgetResize } from '../hooks/useWidgetResize';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
-import { GRID_CONFIG, ROW_MIN_PX, tryMove, tryResize, pixelDeltaToCellDelta, cellToPixel } from '../hooks/useWidgetGrid';
+import {
+  GRID_CONFIG,
+  ROW_MIN_PX,
+  tryMove,
+  tryResize,
+  occupiedExtent,
+  presetsFor,
+  presetIdFor,
+  cellToPixel,
+} from '../hooks/useWidgetGrid';
+import { WidgetSizeMenu } from './WidgetSizeMenu';
 import './WidgetGrid.css';
 
 /**
- * How long the settle animation (drag snap-back/arrival, resize clamp) runs
- * — matched to tokens.css's --dur-move, the token this app already uses for
- * "a thing moved: reorder, sink" (see CLAUDE.md's Motion section). Kept as
- * a real number here (not read from the CSS var) only because a JS timeout
- * needs a number to schedule against; the animation ITSELF reads the token
- * directly so the two can't drift in the value that actually paints.
+ * How long the settle animation (drag snap-back/arrival, a newly-picked
+ * size arriving) runs — matched to tokens.css's --dur-move, the token this
+ * app already uses for "a thing moved: reorder, sink" (see CLAUDE.md's
+ * Motion section). Kept as a real number here (not read from the CSS var)
+ * only because a JS timeout needs a number to schedule against; the
+ * animation ITSELF reads the token directly so the two can't drift in the
+ * value that actually paints.
  */
 const SETTLE_MS = 220;
 
@@ -42,17 +52,21 @@ interface Props {
   layout: Placement[];
   rearranging: boolean;
   onCommitLayout: (next: Placement[]) => void;
-  minSpans: Record<string, { w: number; h: number }>;
+  /** Board.tsx already knows each widget's display title (it's what
+      renderTile passes WidgetTile) — handed in separately since the size
+      menu needs a human title and WidgetGrid otherwise only ever sees
+      widget ids. */
+  widgetTitles: Record<string, string>;
   renderTile: (
     placement: Placement,
     gesture: {
       onDragHandlePointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => void;
-      onResizeHandlePointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => void;
+      onLongPress: () => void;
     }
   ) => ReactNode;
 }
 
-export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, minSpans, renderTile }: Props) {
+export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, widgetTitles, renderTile }: Props) {
   const gridConfig = GRID_CONFIG[orientation];
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -70,6 +84,13 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
     return () => ro.disconnect();
   }, []);
 
+  // Real hardware (the actual 11" iPad) found the grid was reserving space
+  // for its full nominal row/column count regardless of what was actually
+  // placed, which is what was clipping the bottom edge in both
+  // orientations. cellSizePx still divides by the nominal GRID_CONFIG (the
+  // outer bounds every placement is checked against), but the RENDERED
+  // template below uses occupiedExtent instead, so the container is never
+  // taller/wider than what's actually there.
   const cellSizePx = useMemo(
     () => ({
       w: Math.max(1, (containerSize.width - (gridConfig.cols - 1) * WIDGET_GAP_PX) / gridConfig.cols),
@@ -79,32 +100,27 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
     [containerSize.width, containerSize.height, gridConfig.cols, gridConfig.rows]
   );
 
-  // Latest values in refs so the drag/resize callbacks stay referentially
-  // stable — otherwise every pointermove (which updates `drag`'s x/y and
-  // re-renders this component) would hand useWidgetDrag/useWidgetResize a
-  // new callback identity, tearing down and re-adding their window
-  // listeners on every tick of the gesture instead of once per gesture.
-  // Synced in an effect rather than written directly during render (a ref
-  // is only ever read later, from an event handler, so there's no need for
-  // it to be current before paint — a plain effect is enough, and reading
-  // or writing `.current` during render itself is the thing to avoid).
+  // Latest values in refs so the drag callback stays referentially stable
+  // — otherwise every pointermove (which updates `drag`'s x/y and
+  // re-renders this component) would hand useWidgetDrag a new callback
+  // identity, tearing down and re-adding its window listeners on every
+  // tick of the gesture instead of once per gesture. Synced in an effect
+  // rather than written directly during render (a ref is only ever read
+  // later, from an event handler, so there's no need for it to be current
+  // before paint — a plain effect is enough, and reading or writing
+  // `.current` during render itself is the thing to avoid).
   const layoutRef = useRef(layout);
-  const cellSizePxRef = useRef(cellSizePx);
-  const minSpansRef = useRef(minSpans);
   useEffect(() => {
     layoutRef.current = layout;
-    cellSizePxRef.current = cellSizePx;
-    minSpansRef.current = minSpans;
-  }, [layout, cellSizePx, minSpans]);
+  }, [layout]);
 
   const reducedMotion = usePrefersReducedMotion();
 
-  // Which tile, if any, is mid-settle after a drag/resize just ended — the
-  // brief animated leg from wherever the gesture left it to its final
-  // committed (or reverted) place. `null` at rest, which is also every
-  // frame while reducedMotion is on: nothing here ever sets it in that
-  // case, so <Liquid> never mounts and the tile renders exactly as it did
-  // before Phase 4 touched this file.
+  // Which tile, if any, is mid-settle after a drag ended or a size was just
+  // picked — the brief animated leg from wherever it was to its final
+  // place. `null` at rest, which is also every frame while reducedMotion is
+  // on: nothing here ever sets it in that case, so <Liquid> never mounts
+  // and the tile renders exactly as it did before this mechanism existed.
   const [settle, setSettle] = useState<{ id: string; kind: 'drag' | 'resize' } | null>(null);
   const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -137,54 +153,49 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
     [gridConfig, onCommitLayout, beginSettle]
   );
 
-  const handleResizeCommit = useCallback(
-    (widgetId: string, dxPx: number, dyPx: number) => {
-      const current = layoutRef.current.find((p) => p.id === widgetId);
-      if (!current) return;
-      const { dx, dy } = pixelDeltaToCellDelta(dxPx, dyPx, cellSizePxRef.current);
-      const result = tryResize(
-        layoutRef.current,
-        widgetId,
-        { w: current.w + dx, h: current.h + dy },
-        gridConfig,
-        minSpansRef.current[widgetId]
-      );
-      if (result.ok) onCommitLayout(result.layout);
-      beginSettle(widgetId, 'resize');
+  const { drag, startDrag } = useWidgetDrag(handleDrop);
+
+  // Which widget's size menu (if any) is open — a long press on the tile's
+  // own head (WidgetTile), not gated behind "Rearrange widgets" the way
+  // repositioning still is (see WidgetTile.tsx's own note on why the two
+  // can't share a gesture during rearranging). WidgetTile's own long-press
+  // is already disabled while rearranging, so this can only be non-null
+  // there if another device just turned rearranging on via realtime sync
+  // mid-menu — rendering nothing in that case (below) is enough; there's no
+  // need to also clear the id itself.
+  const [sizeMenuForId, setSizeMenuForId] = useState<string | null>(null);
+  const sizeMenuFor = rearranging ? null : sizeMenuForId;
+
+  const handlePickSize = useCallback(
+    (widgetId: string, w: number, h: number) => {
+      const result = tryResize(layoutRef.current, widgetId, { w, h }, gridConfig);
+      if (result.ok) {
+        onCommitLayout(result.layout);
+        beginSettle(widgetId, 'resize');
+      }
+      setSizeMenuForId(null);
     },
     [gridConfig, onCommitLayout, beginSettle]
   );
 
-  const { drag, startDrag } = useWidgetDrag(handleDrop);
-  const { resize, startResize } = useWidgetResize(handleResizeCommit);
-
   // The layout actually rendered this frame: `layout` at rest, or a live
-  // candidate while a drag/resize is in flight — computed with the exact
-  // same tryMove/tryResize the eventual commit uses, so the preview and the
-  // committed result can never disagree about what's valid.
+  // drag candidate — computed with the exact same tryMove the eventual
+  // commit uses, so the preview and the committed result can never
+  // disagree about what's valid. Sizing (occupiedExtent below) reads the
+  // committed `layout`, not this — the container's own footprint staying
+  // still while a drag is in flight is deliberate, not an oversight.
   const previewLayout = useMemo(() => {
     if (drag && drag.overCell) {
       const result = tryMove(layout, drag.widgetId, { x: drag.overCell.col, y: drag.overCell.row }, gridConfig);
       return result.ok ? result.layout : layout;
     }
-    if (resize) {
-      const current = layout.find((p) => p.id === resize.widgetId);
-      if (current) {
-        const { dx, dy } = pixelDeltaToCellDelta(resize.dx, resize.dy, cellSizePx);
-        const result = tryResize(
-          layout,
-          resize.widgetId,
-          { w: current.w + dx, h: current.h + dy },
-          gridConfig,
-          minSpans[resize.widgetId]
-        );
-        return result.ok ? result.layout : layout;
-      }
-    }
     return layout;
-  }, [layout, drag, resize, gridConfig, cellSizePx, minSpans]);
+  }, [layout, drag, gridConfig]);
 
-  const gridFloorPx = gridConfig.rows * ROW_MIN_PX + (gridConfig.rows - 1) * WIDGET_GAP_PX;
+  const extent = occupiedExtent(layout, gridConfig);
+  const gridFloorPx = extent.rows * ROW_MIN_PX + (extent.rows - 1) * WIDGET_GAP_PX;
+
+  const menuWidget = sizeMenuFor ? previewLayout.find((p) => p.id === sizeMenuFor) : undefined;
 
   return (
     <div
@@ -194,25 +205,24 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
       data-rearranging={rearranging ? 'true' : undefined}
       style={{
         minHeight: gridFloorPx,
-        gridTemplateColumns: `repeat(${gridConfig.cols}, 1fr)`,
-        gridTemplateRows: `repeat(${gridConfig.rows}, minmax(${ROW_MIN_PX}px, 1fr))`,
+        gridTemplateColumns: `repeat(${extent.cols}, 1fr)`,
+        gridTemplateRows: `repeat(${extent.rows}, minmax(${ROW_MIN_PX}px, 1fr))`,
         gap: WIDGET_GAP_PX,
       }}
     >
       {previewLayout.map((placement) => {
         const isDragging = !reducedMotion && drag?.widgetId === placement.id;
-        const isResizing = !reducedMotion && resize?.widgetId === placement.id;
-        const isSettlingDrag = !reducedMotion && !isDragging && !isResizing && settle?.id === placement.id && settle.kind === 'drag';
-        const isSettlingResize = !reducedMotion && !isDragging && !isResizing && settle?.id === placement.id && settle.kind === 'resize';
-        const gesturing = isDragging || isResizing || isSettlingDrag || isSettlingResize;
+        const isSettlingDrag = !reducedMotion && !isDragging && settle?.id === placement.id && settle.kind === 'drag';
+        const isSettlingResize = !reducedMotion && !isDragging && settle?.id === placement.id && settle.kind === 'resize';
+        const gesturing = isDragging || isSettlingDrag || isSettlingResize;
 
         // Grid placement never changes for the gesturing tile itself — only
         // an ADDITIONAL transform (drag) or an explicit pixel size
-        // override (resize) rides on top of it, so the tile never leaves
-        // CSS Grid flow and never touches `position`/`pointer-events` on
-        // any ancestor mid-gesture (see the WebKit note this replaced,
-        // still true: that's the one thing that broke real touch here once
-        // already).
+        // (a just-picked size settling in) rides on top of it, so the tile
+        // never leaves CSS Grid flow and never touches `position`/
+        // `pointer-events` on any ancestor mid-gesture (see the WebKit note
+        // this replaced, still true: that's the one thing that broke real
+        // touch here once already).
         const cellStyle: CSSProperties = {
           gridColumn: `${placement.x + 1} / span ${placement.w}`,
           gridRow: `${placement.y + 1} / span ${placement.h}`,
@@ -239,25 +249,22 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
           cellStyle.transition = isDragging ? 'none' : 'transform var(--dur-move) var(--ease-standard)';
         }
 
-        if (isResizing || isSettlingResize) {
-          const committed = cellToPixel(placement, cellSizePx);
-          if (isResizing) {
-            const minSpan = minSpans[placement.id];
-            const minWidth = minSpan ? minSpan.w * cellSizePx.w + (minSpan.w - 1) * cellSizePx.gap : 0;
-            const minHeight = minSpan ? minSpan.h * cellSizePx.h + (minSpan.h - 1) * cellSizePx.gap : 0;
-            cellStyle.width = Math.max(minWidth, committed.width + resize!.dx);
-            cellStyle.height = Math.max(minHeight, committed.height + resize!.dy);
-            cellStyle.transition = 'none';
-          } else {
-            cellStyle.width = committed.width;
-            cellStyle.height = committed.height;
-            cellStyle.transition = 'width var(--dur-move) var(--ease-standard), height var(--dur-move) var(--ease-standard)';
-          }
+        if (isSettlingResize) {
+          // A size just picked from the menu already committed its new
+          // gridColumn/gridRow span above (instant, like any grid change)
+          // — this only smooths the *visual* footprint from whatever was
+          // last painted to that new size, the same computed-value
+          // transition technique the browser already handles for a
+          // measured-height collapse.
+          const target = cellToPixel(placement, cellSizePx);
+          cellStyle.width = target.width;
+          cellStyle.height = target.height;
+          cellStyle.transition = 'width var(--dur-move) var(--ease-standard), height var(--dur-move) var(--ease-standard)';
         }
 
         const tileContent = renderTile(placement, {
           onDragHandlePointerDown: (e) => startDrag(placement.id, e),
-          onResizeHandlePointerDown: (e) => startResize(placement.id, e),
+          onLongPress: () => setSizeMenuForId(placement.id),
         });
 
         return (
@@ -286,13 +293,13 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
               // this already-moving child's measured rect) purely for the
               // gooey visual it's actually here for.
               <Liquid
-                blur={isResizing || isSettlingResize ? 6 : 8}
-                contrast={isResizing || isSettlingResize ? 18 : 20}
+                blur={isSettlingResize ? 6 : 8}
+                contrast={isSettlingResize ? 18 : 20}
                 fill="var(--slat-face)"
                 shadow="var(--lift)"
               >
                 <Liquid.Item
-                  effect={isResizing || isSettlingResize ? 'bend' : 'move'}
+                  effect={isSettlingResize ? 'bend' : 'move'}
                   move={{ springiness: 0.5, trail: 0.5 }}
                   bend={{ vertical: 0.6, horizontal: 0.35 }}
                 >
@@ -324,6 +331,22 @@ export function WidgetGrid({ orientation, layout, rearranging, onCommitLayout, m
             />
           );
         })}
+
+      {sizeMenuFor && menuWidget && (
+        <WidgetSizeMenu
+          title={widgetTitles[sizeMenuFor] ?? sizeMenuFor}
+          presets={presetsFor(orientation, sizeMenuFor)}
+          currentId={presetIdFor(orientation, sizeMenuFor, menuWidget)}
+          disabledIds={presetsFor(orientation, sizeMenuFor)
+            .filter((p) => !tryResize(layout, sizeMenuFor, { w: p.w, h: p.h }, gridConfig).ok)
+            .map((p) => p.id)}
+          onPick={(presetId) => {
+            const preset = presetsFor(orientation, sizeMenuFor).find((p) => p.id === presetId);
+            if (preset) handlePickSize(sizeMenuFor, preset.w, preset.h);
+          }}
+          onClose={() => setSizeMenuForId(null)}
+        />
+      )}
     </div>
   );
 }

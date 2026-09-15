@@ -72,6 +72,17 @@
 
 .widget-tile__open h2 { flex: 0 1 auto; min-width: 0; }
 
+/* Calendar's case: no onOpen button, but still needs somewhere for the
+   size-menu long press to live — same flex layout .widget-tile__open would
+   have given h2/count as direct children of .widget-tile__head, just on a
+   plain div instead of a button since there's nothing to click here. */
+.widget-tile__head-plain {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+}
+
 .widget-tile__chevron {
   flex-shrink: 0;
   font-size: 24px;
@@ -100,8 +111,7 @@
   pointer-events: none;
 }
 
-.widget-tile__grip,
-.widget-tile__resize {
+.widget-tile__grip {
   min-width: var(--tap-min);
   min-height: var(--tap-min);
   border: none;
@@ -116,25 +126,8 @@
   flex: 0 0 auto;
 }
 
-.widget-tile__grip:active,
-.widget-tile__resize:active {
+.widget-tile__grip:active {
   background: var(--chip-face);
-}
-
-.widget-tile__resize {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: var(--tap-min);
-  height: var(--tap-min);
-  border-radius: 50%;
-}
-
-.widget-tile__resize span {
-  width: 12px;
-  height: 12px;
-  border-right: 2px solid var(--ink-soft);
-  border-bottom: 2px solid var(--ink-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {

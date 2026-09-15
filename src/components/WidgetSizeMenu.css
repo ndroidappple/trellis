@@ -1,0 +1,94 @@
+/* Much smaller than .menu (MainMenu.css) on purpose — this is one decision
+   with 2-3 answers, not an index of the whole app. Shares .scrim (App.css)
+   for the backdrop rather than redefining it. */
+.size-menu {
+  background: var(--slat-face);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  box-shadow: var(--lift);
+  padding: 24px;
+  width: min(360px, 100%);
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.size-menu__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 24px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.size-menu__hint {
+  margin: -10px 0 0;
+  font-size: var(--size-min);
+  color: var(--ink-soft);
+}
+
+.size-menu__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.size-menu__option {
+  min-height: var(--tap-min);
+  padding: 12px 16px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--row-face);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 19px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-tap) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
+}
+
+.size-menu__option:active {
+  transform: scale(0.99);
+  background: var(--today-face);
+}
+
+/* Filled means recorded, same rule as everywhere else in this app — the
+   currently-selected size is a fact, not a suggestion. */
+.size-menu__option.is-current {
+  background: var(--ink);
+  color: var(--plaster);
+}
+
+.size-menu__option:disabled {
+  background: none;
+  border-color: var(--rule);
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.size-menu__close {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 17px;
+  padding: 8px 16px;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.size-menu__close:active {
+  background: var(--chip-face);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .size-menu__option:active {
+    transform: none;
+  }
+}

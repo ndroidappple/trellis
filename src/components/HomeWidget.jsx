@@ -11,12 +11,11 @@ import './HomeWidget.css'
  * the call sites *inside* its own body (the "+N more" row and a device
  * hold — see below).
  *
- * `size` is handed down from `Board.tsx`, computed from the widget's own
- * grid cell span — not a new generalized measurement hook. That's
- * `useWidgetSizeTier.ts`'s job (Phase 3), for generalizing To-Do/Shopping's
- * existing full/compact *setting* into something measured; Home has no
- * legacy setting to preserve, so a simple threshold on already-known cell
- * span is enough here and doesn't block Phase 3's later work.
+ * `size` is handed down from `Board.tsx`, an exact match against
+ * `SIZE_PRESETS.home` for the widget's own grid cell span (`presetIdFor`) —
+ * Home's `'small'|'large'` preset ids are literally this prop's values, no
+ * separate mapping. Chosen from the size menu (long-press the tile), same
+ * as every other widget now.
  */
 
 /** First N devices shown in the large tile before "+N more" takes over —

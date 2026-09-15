@@ -182,7 +182,7 @@ export default function MainMenu({
               doing instead of navigating away from it. */}
           <button className="menu__row" onClick={onRearrangeWidgets}>
             <span className="menu__row-label">Rearrange widgets</span>
-            <span className="menu__row-meta">Move or resize what's on the board</span>
+            <span className="menu__row-meta">Move what's on the board</span>
           </button>
 
           {/* No argument here, unlike the two onHold rows above — this always

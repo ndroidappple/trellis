@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Board } from '../components/Board'
-import { defaultLayout, firstFreeSlot, GRID_CONFIG, MIN_CELL_SPAN } from '../hooks/useWidgetGrid'
+import { defaultLayout, firstFreeSlot, GRID_CONFIG, minSpanFor } from '../hooks/useWidgetGrid'
 import { useMockHomeState } from '../hooks/useMockHomeState'
 import '../components/Board.css'
 
@@ -92,7 +92,7 @@ export default function BoardSpike() {
         for (const orientation of ['portrait', 'landscape']) {
           const forOrientation = prev[orientation]
           if (forOrientation.some((p) => p.id === 'home')) continue
-          const slot = firstFreeSlot(forOrientation, MIN_CELL_SPAN[orientation].home, GRID_CONFIG[orientation])
+          const slot = firstFreeSlot(forOrientation, minSpanFor(orientation, 'home'), GRID_CONFIG[orientation])
           if (slot) updated[orientation] = [...forOrientation, { id: 'home', ...slot }]
         }
         return updated

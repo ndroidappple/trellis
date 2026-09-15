@@ -154,11 +154,12 @@ function hourLabel(h) {
 }
 
 /* On/off only, for all three sections — Full/Compact used to be a stored
-   *setting* for To-Do/Shopping here, but once a widget can be dragged to any
-   size that stops meaning anything: useWidgetSizeTier now decides
-   full/compact/micro from the tile's own measured content area (see
-   Board.tsx), the same way Home's small/large split has always been
-   automatic rather than chosen. All three sections are symmetric now. */
+   *setting* for To-Do/Shopping here, but once a widget's size is a small
+   list of presets you pick (long-press the tile) rather than a setting you
+   choose here, this stops meaning anything: presetIdFor (see Board.tsx)
+   reads which preset is selected directly, the same way Home's small/large
+   split has always been chosen rather than a Settings option. All three
+   sections are symmetric now. */
 const SECTION_MODE_LABELS = { on: 'On', off: 'Off' }
 const SECTION_MODE_OPTIONS = ['on', 'off']
 const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping', home: 'Home' }

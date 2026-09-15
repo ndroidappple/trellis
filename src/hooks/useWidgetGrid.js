@@ -52,27 +52,108 @@ export const GRID_CONFIG = {
 }
 
 /**
- * Minimum cell span per widget type, in the same units as a placement's
- * {w, h}. Calendar's floor is deliberately generous — see the plan's "Content
- * migration" section: getting this wrong reproduces the week grid's own
- * documented min-height bug class, now shared across every widget competing
- * for the same scarce vertical budget instead of one known sibling. Its `h`
- * here is exactly what GRID_CONFIG was solved against above — the two are
- * not independent numbers and must be changed together.
+ * Real hardware (the actual 11" iPad, first time this feature has had it)
+ * found two things a continuous free-drag resize couldn't get right: the
+ * grid always reserved height for its full nominal row count regardless of
+ * what was actually placed (see occupiedExtent below, the fix), and there
+ * was no way to make Calendar smaller than one mandatory size at all. Both
+ * pointed the same direction — iOS Home Screen widgets' own model: a short,
+ * named list of sizes per widget, not an open range. `SIZE_PRESETS`
+ * replaces the old `MIN_CELL_SPAN` (any span at or above a floor) with
+ * "one of exactly these spans."
+ *
+ * Every widget's *last* entry reproduces its old MIN_CELL_SPAN-era default
+ * placement exactly (see `defaultLayout` below) — this changes what sizes
+ * exist, not what a household already looking at the board sees today.
+ * Ordered smallest to largest; `defaultLayout`/`firstFreeSlot` read the
+ * first/last entries by that convention rather than a separate "which one
+ * is smallest" lookup.
+ *
+ * Each `id` is deliberately the exact string the widget's own content
+ * already renders on: To-Do/Shopping's `id`s are `ChoresPanel`/
+ * `ShoppingPanel`'s own `mode` values (`'micro'|'compact'|'full'`, from
+ * Phase 3 — a preset IS the mode now, not something mapped to one), and
+ * Home's are its existing `size` prop values (`'small'|'large'`). Calendar
+ * has no such string to reuse (its content reads its own measured
+ * `useDetailLevel`, untouched by this), so its ids are just descriptive.
+ * `label` is the separate, human-facing name shown in the size menu.
+ *
+ * Numbers are first-guess, same status as this file's other unmeasured
+ * constants (ROW_MIN_PX, GRID_CONFIG) — now that real hardware is finally
+ * reachable, these are the ones to tune against it first.
  */
-export const MIN_CELL_SPAN = {
+export const SIZE_PRESETS = {
   portrait: {
-    calendar: { w: 4, h: 10 },
-    todo: { w: 1, h: 3 },
-    shopping: { w: 1, h: 3 },
-    home: { w: 1, h: 3 },
+    calendar: [
+      { id: 'medium', label: 'Medium', w: 4, h: 7 },
+      { id: 'large', label: 'Large', w: 4, h: 11 },
+    ],
+    todo: [
+      { id: 'micro', label: 'Small', w: 1, h: 3 },
+      { id: 'compact', label: 'Medium', w: 2, h: 4 },
+      { id: 'full', label: 'Large', w: 2, h: 5 },
+    ],
+    shopping: [
+      { id: 'micro', label: 'Small', w: 1, h: 3 },
+      { id: 'compact', label: 'Medium', w: 2, h: 4 },
+      { id: 'full', label: 'Large', w: 2, h: 5 },
+    ],
+    home: [
+      { id: 'small', label: 'Small', w: 1, h: 3 },
+      { id: 'large', label: 'Large', w: 2, h: 5 },
+    ],
   },
   landscape: {
-    calendar: { w: 4, h: 10 },
-    todo: { w: 1, h: 3 },
-    shopping: { w: 1, h: 3 },
-    home: { w: 1, h: 3 },
+    calendar: [
+      { id: 'medium', label: 'Medium', w: 4, h: 7 },
+      { id: 'large', label: 'Large', w: 4, h: 10 },
+    ],
+    todo: [
+      { id: 'micro', label: 'Small', w: 1, h: 3 },
+      { id: 'compact', label: 'Medium', w: 2, h: 4 },
+      { id: 'full', label: 'Large', w: 2, h: 5 },
+    ],
+    shopping: [
+      { id: 'micro', label: 'Small', w: 1, h: 3 },
+      { id: 'compact', label: 'Medium', w: 2, h: 4 },
+      { id: 'full', label: 'Large', w: 2, h: 5 },
+    ],
+    home: [
+      { id: 'small', label: 'Small', w: 1, h: 3 },
+      { id: 'large', label: 'Large', w: 2, h: 5 },
+    ],
   },
+}
+
+/** This widget's presets for this orientation, or `[]` for an unknown id
+    rather than throwing — a caller iterating presets should just see
+    nothing to offer. */
+export function presetsFor(orientation, widgetId) {
+  return SIZE_PRESETS[orientation]?.[widgetId] ?? []
+}
+
+/** The smallest defined preset's {w, h} — this is what used to be
+    `MIN_CELL_SPAN`: the floor `firstFreeSlot` and the min-height-floor
+    discipline (`Board.tsx`) still need, now read off the presets table
+    itself rather than kept as a separate, driftable number. */
+export function minSpanFor(orientation, widgetId) {
+  const presets = presetsFor(orientation, widgetId)
+  return presets[0] ?? { w: 1, h: 1 }
+}
+
+/** The default preset's {id, w, h} for a widget's first placement —
+    every widget's largest preset except Home, which has always started
+    small (see firstFreeSlot's use in Board.tsx/Wall.jsx) and still does. */
+export function defaultPresetFor(orientation, widgetId) {
+  const presets = presetsFor(orientation, widgetId)
+  if (presets.length === 0) return { id: null, w: 1, h: 1 }
+  return widgetId === 'home' ? presets[0] : presets[presets.length - 1]
+}
+
+/** Which preset (if any) a placement's current {w, h} matches exactly. */
+export function presetIdFor(orientation, widgetId, placement) {
+  const presets = presetsFor(orientation, widgetId)
+  return presets.find((p) => p.w === placement.w && p.h === placement.h)?.id ?? null
 }
 
 /** Canonical widget priority order — used both by `defaultLayout` below and
@@ -93,59 +174,36 @@ export function defaultLayout(orientation, enabledIds = ['calendar', 'todo', 'sh
   const gridConfig = GRID_CONFIG[orientation]
 
   // Reproduces today's board shape (week on top-or-beside, To-Do/Shopping
-  // sharing the rest) so Phase 1 reads as a continuation of the current
-  // layout, not a reset. Home has no slot here on purpose — Phase 1 never
-  // enables it, and Phase 2 owns designing where a 4th widget actually fits
-  // (very possibly by growing GRID_CONFIG's row count, not just reusing
-  // these numbers) rather than inheriting placeholder coordinates nobody
-  // has validated against real content.
+  // sharing the rest) so this reads as a continuation of the current
+  // layout, not a reset — every widget's default preset (see
+  // defaultPresetFor) was chosen to exactly match the rect it used to be
+  // hardcoded to here. Home has no slot here on purpose: it has no default
+  // placement at all until firstFreeSlot places it the first time someone
+  // turns it on (see Board.tsx/Wall.jsx).
   const placements = []
   if (orientation === 'landscape') {
     // Week and dock as separate full-height columns, same shape as today's
     // landscape board (Board.tsx: "each gets its own full-height column
     // instead of negotiating a split of one shared column").
-    //
-    // Calendar sits at exactly its own minCellSpan here (4, 10) — no slack,
-    // on purpose, unlike portrait below. It's a real, known limitation: in
-    // this arrangement Calendar's resize grip has nowhere legal to go
-    // (already at the grid's row maximum, and every column it could grow
-    // into is claimed by the dock). Giving it slack would mean either
-    // growing GRID_CONFIG.landscape.rows — which raises the whole grid's
-    // floor (rows * ROW_MIN_PX + gaps) and risks the exact tight-margin
-    // failure Feature #17 already hit once in landscape (fits by "roughly
-    // 6px" in its own known worst case) — or narrowing the dock's default
-    // width toward its own minCellSpan.w (1), which would make To-Do/
-    // Shopping visibly cramped by default (their content still always
-    // renders "full" until Phase 3's size tiers exist). Neither is a change
-    // to make on a guess; it wants the real landscape measurement Phase 5
-    // owns, or a fresh look once Phase 2 adds Home and the whole
-    // arrangement gets redesigned anyway.
-    if (ids.includes('calendar')) placements.push(rect('calendar', 0, 0, 4, 10))
-    if (ids.includes('todo')) placements.push(rect('todo', 4, 0, 2, 5))
-    if (ids.includes('shopping')) placements.push(rect('shopping', 4, 5, 2, 5))
+    if (ids.includes('calendar')) placements.push(presetRect('calendar', 0, 0, orientation))
+    if (ids.includes('todo')) placements.push(presetRect('todo', 4, 0, orientation))
+    if (ids.includes('shopping')) placements.push(presetRect('shopping', 4, 5, orientation))
   } else {
     // Week on top, dock sharing the row budget underneath — today's
-    // portrait shape. Calendar gets 1 row of slack above its own
-    // minCellSpan.h (11, not 10) so its resize grip actually has somewhere
-    // to go — width has none to give (already at the grid's 4-column max)
-    // and won't without growing GRID_CONFIG itself. The dock gives up
-    // exactly that one row (6 -> 5 each), landing well above its own
-    // minCellSpan.h (3), so nothing there gets visibly cramped by it. This
-    // is safe in a way the landscape case isn't: it only grows the row
-    // *portrait already has plenty of* (16 total, vs. landscape's tight
-    // 10), so it can't reproduce Feature #17's landscape-specific risk.
-    if (ids.includes('calendar')) placements.push(rect('calendar', 0, 0, 4, 11))
-    if (ids.includes('todo')) placements.push(rect('todo', 0, 11, 2, 5))
-    if (ids.includes('shopping')) placements.push(rect('shopping', 2, 11, 2, 5))
+    // portrait shape.
+    if (ids.includes('calendar')) placements.push(presetRect('calendar', 0, 0, orientation))
+    if (ids.includes('todo')) placements.push(presetRect('todo', 0, 11, orientation))
+    if (ids.includes('shopping')) placements.push(presetRect('shopping', 2, 11, orientation))
   }
 
-  // Defensive, not decorative: catches a future WIDGET_ORDER/default-rect
-  // edit that drifts out of sync with GRID_CONFIG before it ships, rather
-  // than silently rendering a widget partly off-grid.
+  // Defensive, not decorative: catches a future preset/default-origin edit
+  // that drifts out of sync with GRID_CONFIG before it ships, rather than
+  // silently rendering a widget partly off-grid.
   return placements.filter((p) => isWithinBounds(p, gridConfig))
 }
 
-function rect(id, x, y, w, h) {
+function presetRect(id, x, y, orientation) {
+  const { w, h } = defaultPresetFor(orientation, id)
   return { id, x, y, w, h }
 }
 
@@ -194,18 +252,19 @@ export function tryMove(layout, id, { x, y }, gridConfig) {
 }
 
 /**
- * Attempt to resize `id` to a new {w, h}, anchored at its current origin.
- * Clamped to `minCellSpan` before anything else runs — a resize can never
- * produce a widget smaller than its own content can honestly show (see
- * `useWidgetSizeTier` for the Phase 3 corollary once a tile's size varies).
+ * Attempt to set `id` to an exact new {w, h} (one of its SIZE_PRESETS
+ * entries, chosen from the size menu), anchored at its current origin. No
+ * clamping — presets are already valid sizes in the abstract, so this only
+ * ever answers the one question left: does that exact size fit *here*,
+ * right now. A caller can call this without committing (ignore the result
+ * layout, read only `.ok`) to decide whether to offer or disable a preset
+ * in the size menu before anyone taps it.
  */
-export function tryResize(layout, id, { w, h }, gridConfig, minSpan) {
+export function tryResize(layout, id, { w, h }, gridConfig) {
   const current = layout.find((p) => p.id === id)
   if (!current) return { ok: false, layout, reason: 'not-found' }
 
-  const clampedW = Math.max(minSpan?.w ?? 1, w)
-  const clampedH = Math.max(minSpan?.h ?? 1, h)
-  const candidate = { ...current, w: clampedW, h: clampedH }
+  const candidate = { ...current, w, h }
 
   if (!isWithinBounds(candidate, gridConfig)) return { ok: false, layout, reason: 'out-of-bounds' }
   if (findCollision(layout, id, candidate)) return { ok: false, layout, reason: 'collision' }
@@ -247,32 +306,60 @@ export function firstFreeSlot(layout, minSpan, gridConfig) {
   return null
 }
 
+/** The preset closest to an arbitrary {w, h} — by total cell-count
+    difference, ties broken toward the smaller option. Used by
+    sanitizeLayout to resolve a persisted span left over from the old
+    continuous-resize model (or a future grid retune) to a real preset,
+    rather than clamping it to a floor that may no longer correspond to
+    anything selectable. */
+function nearestPreset(orientation, widgetId, w, h) {
+  const presets = presetsFor(orientation, widgetId)
+  if (presets.length === 0) return { w: 1, h: 1 }
+  return presets.reduce((best, p) => {
+    const dist = Math.abs(p.w - w) + Math.abs(p.h - h)
+    const bestDist = Math.abs(best.w - w) + Math.abs(best.h - h)
+    return dist < bestDist ? p : best
+  })
+}
+
 /**
- * Validates a whole layout against a grid config + per-widget minimums —
- * used when loading a persisted layout (household default or a device
- * override) that may have been saved against a different grid size than the
- * one currently rendering (e.g. `GRID_CONFIG` tuned after real-hardware
- * verification). Drops anything that no longer fits rather than crashing;
- * callers should fall back to `defaultLayout` for anything dropped.
+ * Validates a whole layout against a grid config + each widget's
+ * SIZE_PRESETS — used when loading a persisted layout (household default or
+ * a device override) that may predate this file's move to discrete presets,
+ * or have been saved against a different GRID_CONFIG than the one currently
+ * rendering. Snaps anything that isn't an exact preset match to its nearest
+ * one rather than clamping to a floor that may no longer be selectable, and
+ * drops anything that still doesn't fit; callers should fall back to
+ * `defaultLayout` for anything dropped.
  */
-export function sanitizeLayout(layout, gridConfig, minSpans) {
+export function sanitizeLayout(layout, gridConfig, orientation) {
   const kept = []
   for (const placement of layout ?? []) {
-    const minSpan = minSpans?.[placement.id]
-    // Clamp size to the grid's own bounds BEFORE clamping origin — a
-    // straight Math.max against minSpan alone can leave w/h bigger than the
-    // grid itself (e.g. a layout saved against a larger GRID_CONFIG than
-    // the one now rendering), which would make isWithinBounds reject the
-    // rect below no matter where clampOrigin puts its corner, and the
-    // widget would silently vanish instead of shrinking to fit.
-    const w = Math.min(gridConfig.cols, Math.max(minSpan?.w ?? 1, placement.w))
-    const h = Math.min(gridConfig.rows, Math.max(minSpan?.h ?? 1, placement.h))
+    const { w, h } = nearestPreset(orientation, placement.id, placement.w, placement.h)
     const candidate = clampOrigin({ ...placement, w, h }, gridConfig)
     if (!isWithinBounds(candidate, gridConfig)) continue
     if (findCollision(kept, placement.id, candidate)) continue
     kept.push(candidate)
   }
   return kept
+}
+
+/**
+ * How many rows/cols the CURRENT layout actually occupies — the fix for
+ * the real-hardware clipping bug: the grid used to reserve GRID_CONFIG's
+ * full nominal row count unconditionally (rows * ROW_MIN_PX, regardless of
+ * what was placed), which on the real 11" iPad exceeded the space actually
+ * left after the header and safe-area insets in BOTH orientations, and
+ * .board's overflow:hidden silently clipped the excess. Bounded above by
+ * GRID_CONFIG itself (every placement is already bounds-checked against it,
+ * so this can never exceed it) and below by 1, so an empty board still
+ * renders a sane minimum rather than collapsing to nothing.
+ */
+export function occupiedExtent(layout, gridConfig) {
+  if (!layout || layout.length === 0) return { cols: 1, rows: 1 }
+  const rows = Math.min(gridConfig.rows, Math.max(...layout.map((p) => p.y + p.h)))
+  const cols = Math.min(gridConfig.cols, Math.max(...layout.map((p) => p.x + p.w)))
+  return { cols: Math.max(1, cols), rows: Math.max(1, rows) }
 }
 
 /** Pointer-pixel delta -> cell delta, given a measured cell size (+ gap). */

@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * dimensions or content.
  */
 export function useWidgetDrag(onDrop) {
-  const [drag, setDrag] = useState(null) // { widgetId, x, y, overCell }
+  const [drag, setDrag] = useState(null) // { widgetId, x, y, overCell, grabOffset }
   const widgetId = useRef(null)
   const active = drag !== null
 
@@ -29,7 +29,20 @@ export function useWidgetDrag(onDrop) {
 
     widgetId.current = id
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    setDrag({ widgetId: id, x: event.clientX, y: event.clientY, overCell: null })
+
+    // Where inside the tile it was actually grabbed, not the tile's
+    // top-left corner — Phase 4's continuous drag rendering (WidgetGrid.tsx)
+    // subtracts this from the live pointer position so the tile tracks the
+    // finger from where it was picked up. Measured off the nearest grid
+    // cell wrapper, since the grip button itself is a small fraction of the
+    // tile — grabbing an edge shouldn't make the whole tile jump under it.
+    const cellEl = event.currentTarget.closest?.('.widget-grid__cell')
+    const rect = cellEl?.getBoundingClientRect()
+    const grabOffset = rect
+      ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      : { x: 0, y: 0 }
+
+    setDrag({ widgetId: id, x: event.clientX, y: event.clientY, overCell: null, grabOffset })
   }, [])
 
   useEffect(() => {

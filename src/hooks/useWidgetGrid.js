@@ -281,3 +281,22 @@ export function pixelDeltaToCellDelta(dxPx, dyPx, cellSizePx) {
   const stepY = cellSizePx.h + cellSizePx.gap
   return { dx: Math.round(dxPx / stepX), dy: Math.round(dyPx / stepY) }
 }
+
+/**
+ * The inverse of pixelDeltaToCellDelta — a placement's cell rect -> real
+ * pixel box within the grid container, given the same measured cell size.
+ * Phase 4's job, not Phase 1's: this is what lets the one actively
+ * dragged/resized tile render at a continuous pixel position/size instead
+ * of the grid's own discrete column/row placement, which is what
+ * liquid-gooey's Move/Bend effects need to have something to animate.
+ */
+export function cellToPixel(placement, cellSizePx) {
+  const stepX = cellSizePx.w + cellSizePx.gap
+  const stepY = cellSizePx.h + cellSizePx.gap
+  return {
+    left: placement.x * stepX,
+    top: placement.y * stepY,
+    width: placement.w * cellSizePx.w + (placement.w - 1) * cellSizePx.gap,
+    height: placement.h * cellSizePx.h + (placement.h - 1) * cellSizePx.gap,
+  }
+}

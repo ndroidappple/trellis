@@ -2,12 +2,15 @@
 
 **Status:** Phase 0 (de-risking spike), Phase 1 (widget-grid mechanism),
 Phase 2 (Home-hub-controls widget, plus the phone-stack wiring Phase 1 left
-unfinished) and Phase 3 (`ChoresPanel`/`ShoppingPanel` tile-shaping) are built
-— see `worktree-widget-home-screen` branch. Phase 3 passed `npm run build` and
-`npm run lint` and was smoke-tested in a browser (app boots with no console
-errors); the interactive resize/settings check below still needs a signed-in
-session, which an automated pass doesn't attempt against the live household
-account — see Phase 3's own note. Phases 4–5 below are not started.
+unfinished), Phase 3 (`ChoresPanel`/`ShoppingPanel` tile-shaping) and Phase 4
+steps 1–2 (drag-lift/settle + snap-back, resize bend feedback) are built — see
+`worktree-widget-home-screen` branch. Phase 4 proceeded on `liquid-gooey`
+without ever getting the real-iPad go/no-go Phase 0 was meant to produce —
+accepted explicitly, not silently. Each phase passed `npm run build` and
+`npm run lint`; interactive checks (resize/settings behavior, actual gesture
+feel) still need a signed-in session against the live household account,
+which an automated pass doesn't attempt — see each phase's own note. Phase 4
+steps 3–4 and Phase 5 below are not started.
 
 ## Context
 
@@ -338,24 +341,91 @@ anticipate:**
   which this pass didn't attempt. `npm run build`/`npm run lint` are clean
   and the app boots with no console errors.
 
-### Phase 4 — `liquid-gooey` polish (only if Phase 0 said go) — NOT STARTED
+### Phase 4 — `liquid-gooey` polish (only if Phase 0 said go) — STEPS 1–2 DONE
 Attempted in this order, each shippable independently, CSS-transition
 fallback available at every step:
-1. **Drag-lift/settle + invalid-drop snap-back** — wrap the dragged tile in
-   `effect="move"`; an invalid drop (Phase 1's reject-and-snap-back) animates
-   back via `bouncy` transition. Most contained, start here.
-2. **Resize-handle feedback** — `effect="bend"` tied to pointer velocity
-   while actively resizing.
+1. **Drag-lift/settle + invalid-drop snap-back — DONE.** Wraps the dragged
+   tile in `effect="move"`; an invalid drop (Phase 1's reject-and-snap-back)
+   animates back rather than snapping instantly. Most contained, started
+   here as planned.
+2. **Resize-handle feedback — DONE.** `effect="bend"` on the actively-resized
+   tile.
 3. **Widget → full-room morph** (the literal "shared-element" idea, highest
    value and highest risk) — replace `Sheet.jsx`'s flat fade+rise for the
    specific path of opening a widget's full room, morphing the tile's bounds
    into the sheet's. Real, unproven reconciliation between in-grid
    coordinates and the sheet's fixed full-viewport space. Attempt only after
    1–2 ship and read well; keep `Sheet.jsx`'s existing transition as the
-   permanent fallback, not a temporary one.
+   permanent fallback, not a temporary one. **Not started** — steps 1–2 have
+   only been smoke-tested (build/lint/dev-server boot, plus the standalone
+   `?gooey-spike` demo), not actually seen dragged/resized by a person yet,
+   so "ship and read well" isn't satisfied.
 4. **Home tile on/off toggle** — thematically the best fit (light "filling"
    the tile) but the most frequently tapped, most exposed surface. Attempt
-   last, only if hardware profiling still shows headroom after 1–3.
+   last, only if hardware profiling still shows headroom after 1–3. **Not
+   started** — no hardware profiling has happened at all (still the same gap
+   Phase 0 flagged), so this step's own stated precondition can't be met yet.
+
+**How steps 1–2 actually work, and one thing worth knowing if this needs
+revisiting:** the plan above reads as "wrap the tile in Liquid and let it
+animate the position" — what got built instead keeps the tile in normal CSS
+Grid placement at all times (`gridColumn`/`gridRow` never change for the
+gesturing tile) and layers a small, self-contained mechanism on top:
+
+- **Drag**: an additional `transform: translate(x, y)` equal to the gap
+  between the raw pointer position and wherever the grid has already
+  snapped the tile to. Recomputed every frame, so the discrete grid jump
+  and this residual cancel out and the tile visually tracks the finger
+  continuously; on release the same transform relaxes to `(0, 0)` via a
+  real CSS transition (`var(--dur-move)`/`var(--ease-standard)`), animating
+  from whatever was actually last painted — no separate "reject" vs.
+  "commit" code path, both just settle to zero from wherever they were.
+- **Resize**: an explicit pixel `width`/`height` override (base committed
+  size + raw pointer delta, clamped to the tile's `minSpan` in pixels) rides
+  on top of the grid-track size the same way; same CSS-transition settle on
+  release.
+- **`<Liquid>`/`<Liquid.Item effect="move"/"bend">` is genuinely mounted**
+  around the gesturing tile's content for the gesture's duration (satisfying
+  "interaction-triggered only" structurally — every other tile never
+  touches the library at all) — but in **`observe` mode, no `x`/`y` passed
+  to it**. The actual motion guarantee comes from this app's own
+  transform/transition above, not from Liquid's `x`/`y`-driven positioning
+  API the spike demo uses. This was a deliberate risk call: this codebase
+  has no visibility into `liquid-gooey`'s internals beyond its README's
+  prop tables and the one working spike demo, and that demo's own pattern
+  (binding a child's rigid `transform` directly to the same un-smoothed
+  value passed to `Liquid.Item`'s `x`/`y`) doesn't settle whether the
+  library actually smooths rigid content position/size itself, or only
+  animates its own decorative blob/goo shape around content the caller is
+  already positioning. Driving the real motion independently, with Liquid
+  layered on as an observer, is correct either way — if the library does
+  more than that, the two mechanisms simply agree; if it does only the
+  decorative part, the tile still moves smoothly regardless. Worth revisiting
+  with real `liquid-gooey` source access (not just the README) if the visual
+  result on real hardware reads as two mechanisms fighting rather than one.
+- **No changes to `useWidgetResize.js`** — Bend's own internal
+  measurement loop is what supplies velocity, per its README; only
+  `WidgetGrid.tsx`'s render layer changed. `useWidgetDrag.js` gained one
+  addition: `startDrag` now captures the grab offset (pointer position
+  minus the tile's own rect, found via the grip's nearest
+  `.widget-grid__cell` ancestor) so the tile tracks from where it was
+  actually grabbed.
+- **`SETTLE_MS` (220ms, matching `--dur-move`) is a JS timeout**, not a DOM
+  `transitionend` listener — third-party spring/animation engines aren't
+  guaranteed to fire a standard transition event, so a timeout is the
+  reliable signal that actually unmounts `<Liquid>` "the instant it ends,"
+  per this phase's own non-negotiable rule.
+- **Never touches `pointer-events` on anything, ever** — the one thing
+  already confirmed (on real hardware, in Phase 1) to silently break touch
+  dragging by making WebKit fire a spurious `pointercancel`. Only
+  `transform`/`width`/`height` ride on top of the tile's unchanged grid
+  placement; no ancestor's `position` or `pointer-events` scheme changes at
+  any point during a gesture.
+- Also added a small defensive CSS rule (`.widget-grid__cell` is now `flex`
+  with its child stretched) since inserting `<Liquid>`'s own wrapper div
+  between the grid cell and `WidgetTile` risked breaking `WidgetTile.css`'s
+  `height: 100%`, which needs a determinate-height ancestor to resolve
+  against and can't assume a third-party wrapper div provides one.
 
 Non-negotiable rules, restated as engineering constraints, not suggestions:
 - **Interaction-triggered only.** Mount/animate a `<Liquid>` wrapper only for
@@ -445,8 +515,12 @@ Non-negotiable rules, restated as engineering constraints, not suggestions:
 `SectionPanel.css`'s deleted base panel-content rules, a prerequisite this
 phase found rather than planned for; see Phase 3's own notes above).
 
-**New (Phase 4–5, not yet built):** `usePrefersReducedMotion.js`;
-`useWidgetGrid.test.js`.
+**New (Phase 4 steps 1–2, shipped):** `src/hooks/usePrefersReducedMotion.js`
+(promoted from the one-off copy already in `gooey-spike.jsx`). Added a
+`cellToPixel` export (the inverse of the existing `pixelDeltaToCellDelta`) to
+`useWidgetGrid.js` rather than a new file.
+
+**New (Phase 4 steps 3–5, not yet built):** `useWidgetGrid.test.js`.
 
 **Substantially rewritten (done):** `Board.tsx` (`.board__body` →
 `<WidgetGrid>`, header untouched; Phase 2 added the `home` renderTile
@@ -463,7 +537,11 @@ widgets" row from Phase 1; Phase 2 made the Home row a full `MenuRow`),
 sections to one shared on/off chip row, removing the Full/Compact choice —
 see Phase 3's notes above), `ChoresPanel.jsx`/`ShoppingPanel.jsx` (Phase 3:
 new `'micro'` render + loading-skeleton branches, default `mode = 'full'`,
-import the new `PanelContent.css`).
+import the new `PanelContent.css`), `WidgetGrid.tsx`/`.css` (Phase 4: the
+drag-settle/resize-bend mechanism described in Phase 4's own notes above —
+`settle` state, the per-tile transform/size-override branch, `<Liquid>`
+mounted in observe mode), `useWidgetDrag.js` (Phase 4: `startDrag` now
+captures a grab offset).
 
 **Lightly touched:** `useDetailLevel.ts` (unchanged internally, ref
 re-pointed — done), `Sheet.jsx` (untouched until Phase 4's morph needs a

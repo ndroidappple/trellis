@@ -14,13 +14,29 @@
 .widget-grid__cell {
   min-width: 0;
   min-height: 0;
+  /* A resting cell's only child is WidgetTile's own section, which already
+     sizes itself with height:100%. Made flex (single child either way) so
+     that ALSO holds when Phase 4's gesture path inserts <Liquid>'s own
+     wrapper div in between — a third-party div with no sizing opinion of
+     its own would otherwise collapse to content height, since percentage
+     heights don't resolve through an auto-height ancestor. flex-stretch
+     sidesteps that regardless of what the direct child turns out to be. */
+  display: flex;
 }
 
-/* No slide animation between committed positions in Phase 1 — grid-column/
-   grid-row aren't interpolatable properties, so a smooth "glide into place"
-   needs the FLIP technique or a real physics library, and Phase 4 already
-   owns exactly that (liquid-gooey's Move effect). An instant snap on commit
-   is the honest mechanism-only behavior for this phase. */
+.widget-grid__cell > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Phase 4 (steps 1-2): drag lift/settle and resize bend feedback. The
+   gesturing tile stays a normal grid item (gridColumn/gridRow, set inline
+   from WidgetGrid.tsx, are untouched during a gesture) — only an added
+   transform (drag) or an explicit pixel width/height (resize) rides on
+   top, so this never needs FLIP-style position-scheme switching or any
+   pointer-events mutation on an ancestor, which is what broke real touch
+   here once already (see WidgetGrid.tsx's own comment on that). */
 .widget-grid__cell[data-active='true'] {
   z-index: 2;
 }

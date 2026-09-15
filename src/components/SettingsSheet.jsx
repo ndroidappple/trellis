@@ -117,7 +117,7 @@ export default function SettingsSheet({
       <div className="sheet__section">
         <NavRow
           label="Board Layout"
-          meta={`To-Do ${MODE_LABELS[settings.chores]} · Shopping ${MODE_LABELS[settings.shopping]}`}
+          meta={`To-Do ${SECTION_MODE_LABELS[settings.chores]} · Shopping ${SECTION_MODE_LABELS[settings.shopping]}`}
           onOpen={() => setCategory('layout')}
         />
         <NavRow
@@ -153,12 +153,15 @@ function hourLabel(h) {
   return `${hour12} ${h < 12 ? 'AM' : 'PM'}`
 }
 
-const MODE_LABELS = { full: 'Full', compact: 'Compact', off: 'Off' }
-const MODE_OPTIONS = ['full', 'compact', 'off']
-const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping' }
-
-const HOME_MODE_LABELS = { on: 'On', off: 'Off' }
-const HOME_MODE_OPTIONS = ['on', 'off']
+/* On/off only, for all three sections — Full/Compact used to be a stored
+   *setting* for To-Do/Shopping here, but once a widget can be dragged to any
+   size that stops meaning anything: useWidgetSizeTier now decides
+   full/compact/micro from the tile's own measured content area (see
+   Board.tsx), the same way Home's small/large split has always been
+   automatic rather than chosen. All three sections are symmetric now. */
+const SECTION_MODE_LABELS = { on: 'On', off: 'Off' }
+const SECTION_MODE_OPTIONS = ['on', 'off']
+const SECTION_LABELS = { chores: 'To-Do', shopping: 'Shopping', home: 'Home' }
 
 function BoardLayoutCategory({ settings, onChange, homeUnplaced, chosen, atMax, maxFlourishes, onToggleFlourish }) {
   return (
@@ -167,36 +170,18 @@ function BoardLayoutCategory({ settings, onChange, homeUnplaced, chosen, atMax, 
         <div key={key} className="settings-row">
           <span className="settings-row__label">{SECTION_LABELS[key]}</span>
           <div className="chips">
-            {MODE_OPTIONS.map((opt) => (
+            {SECTION_MODE_OPTIONS.map((opt) => (
               <button
                 key={opt}
-                className={settings[key] === opt ? 'chip on' : 'chip'}
+                className={(settings[key] ?? 'off') === opt ? 'chip on' : 'chip'}
                 onClick={() => onChange(key, opt)}
               >
-                {MODE_LABELS[opt]}
+                {SECTION_MODE_LABELS[opt]}
               </button>
             ))}
           </div>
         </div>
       ))}
-
-      {/* Two chips, not three — Home has no Full/Compact *setting* the way
-          To-Do/Shopping do above; its small/large content split is
-          automatic (see HomeWidget.jsx), not chosen. */}
-      <div className="settings-row">
-        <span className="settings-row__label">Home</span>
-        <div className="chips">
-          {HOME_MODE_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              className={(settings.home ?? 'off') === opt ? 'chip on' : 'chip'}
-              onClick={() => onChange('home', opt)}
-            >
-              {HOME_MODE_LABELS[opt]}
-            </button>
-          ))}
-        </div>
-      </div>
       {homeUnplaced && (
         <p className="settings-row__hint">
           No room for it yet — free up space in Rearrange widgets and it'll appear.

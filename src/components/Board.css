@@ -267,6 +267,20 @@ p.board__sub {
   min-height: 200px;
 }
 
+/* Same role as .board__week below for the two widgets whose content is now
+   measured rather than a stored setting — the ref useWidgetSizeTier attaches
+   to, and the "must not regress" min-height floor (set inline from
+   Board.tsx, since it depends on orientation) that keeps WidgetTile's body
+   from silently clipping below the grid's own declared minimum. flex column
+   so ChoresPanel/ShoppingPanel's own .panel-rows/.panel-list (flex: 1 1 auto)
+   can grow to fill whatever's left after the pinned AddRow beside them. */
+.board__widget-measure {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .board__week {
   flex: 1 1 auto;
   display: flex;

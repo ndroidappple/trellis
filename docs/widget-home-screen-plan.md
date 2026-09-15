@@ -1,9 +1,13 @@
 # Widget-based home screen (Board redesign) + `liquid-gooey`
 
-**Status:** Phase 0 (de-risking spike), Phase 1 (widget-grid mechanism) and
+**Status:** Phase 0 (de-risking spike), Phase 1 (widget-grid mechanism),
 Phase 2 (Home-hub-controls widget, plus the phone-stack wiring Phase 1 left
-unfinished) are built and verified in a browser — see
-`worktree-widget-home-screen` branch. Phases 3–5 below are not started.
+unfinished) and Phase 3 (`ChoresPanel`/`ShoppingPanel` tile-shaping) are built
+— see `worktree-widget-home-screen` branch. Phase 3 passed `npm run build` and
+`npm run lint` and was smoke-tested in a browser (app boots with no console
+errors); the interactive resize/settings check below still needs a signed-in
+session, which an automated pass doesn't attempt against the live household
+account — see Phase 3's own note. Phases 4–5 below are not started.
 
 ## Context
 
@@ -269,7 +273,7 @@ Phase 2's own section for what shipped and how it was verified.
   `viewportClass` rather than a genuine narrow viewport — worth a real
   narrow-window and real-phone check before trusting it further.
 
-### Phase 3 — `ChoresPanel`/`ShoppingPanel` tile-shaping — NOT STARTED
+### Phase 3 — `ChoresPanel`/`ShoppingPanel` tile-shaping — DONE
 Today's `mode: 'full'|'compact'` is a **setting**, not a measurement — once a
 widget can be dragged to any size, that stops working (a tile set to "full"
 but dragged small would overflow). Phase 1 shipped with Board.tsx always
@@ -288,6 +292,51 @@ type:
   `compact`'s `.panel-strip`/`.panel-chip` kept for wide-short tiles (needs
   new wrap/truncate CSS — today it assumes full dock width, not a
   narrow-tall shape), `full`'s scrollable list kept for large tiles.
+
+**What shipped, and two things this phase found that the plan above didn't
+anticipate:**
+- `useWidgetSizeTier.ts` measures both axes of the tile's own content area
+  (not one derived scalar like `useDetailLevel`'s `rowHeight`) — height alone
+  decides `full` vs. not (`ENTER_TALL`/`EXIT_TALL` = 360/320px), and below
+  that, width decides `compact` vs. `micro` (`ENTER_WIDE`/`EXIT_WIDE` =
+  260/230px). First-guess thresholds, same status as this feature's other
+  unmeasured constants (`ROW_MIN_PX`, `GRID_CONFIG`) — not yet checked
+  against the real 11" iPad.
+- **Wiring problem this phase had to solve, not just the hook itself:**
+  `Wall.jsx` pre-instantiates `<ChoresPanel mode="full" .../>` as a rendered
+  element before `Board.tsx`/`WidgetTile` ever mount, but the measurement can
+  only happen on real DOM inside the tile. Solved the same way Calendar
+  already does it — `Board.tsx` wraps the child in its own
+  `.board__widget-measure` div (the `useWidgetSizeTier` ref target, mirroring
+  `.board__week`/`weekRef`) and overrides the already-instantiated element's
+  `mode` prop via `cloneElement`, rather than restructuring how `Wall.jsx`
+  hands widgets down. `Wall.jsx`'s hardcoded `mode="full"` is gone; `mode`
+  defaults to `'full'` inside `ChoresPanel`/`ShoppingPanel` themselves so
+  nothing breaks for `PanelSheets.jsx`'s full pages, which still pass it
+  explicitly and are otherwise untouched.
+- **Pre-existing gap found during this phase, unrelated to sizing but a real
+  prerequisite:** `SectionPanel.css`'s base container rules (`.panel-rows`,
+  `.panel-list`, `.panel-strip`, `.panel-chip`, `.panel-cart`) were deleted
+  wholesale in Phase 1 along with `SectionPanel.tsx` and nothing replaced
+  them — `ChoresPanel`/`ShoppingPanel` content had no layout CSS at all on
+  this branch, in both the widget tiles and `PanelSheets.jsx`'s full pages
+  (`Sheet.css` had two rules assuming these existed). Restored into a new
+  `src/components/PanelContent.css`, imported directly by both panel
+  components (neither imported a stylesheet of its own before), plus new
+  `.panel-micro` rules and chip truncation for the narrower `compact` shapes
+  a resizable tile can now have that the old fixed-width dock sidebar never
+  needed to handle.
+- **Settings surface change, confirmed with Nick before implementing:** the
+  Board Layout picker's Full/Compact/Off chips for To-Do/Shopping are gone —
+  size is now something you get by dragging the tile, not choosing from
+  Settings, so the picker collapsed to on/off only, matching how Home's
+  picker already worked (all three sections are symmetric now).
+  `board_settings` values are jsonb with no migration; `loadSettings`
+  normalizes any pre-existing `'full'`/`'compact'` value to `'on'` on read.
+- **Not verified**: real hardware, and the interactive resize/settings check
+  itself — both need a signed-in session against the live household account,
+  which this pass didn't attempt. `npm run build`/`npm run lint` are clean
+  and the app boots with no console errors.
 
 ### Phase 4 — `liquid-gooey` polish (only if Phase 0 said go) — NOT STARTED
 Attempted in this order, each shippable independently, CSS-transition
@@ -391,8 +440,13 @@ Non-negotiable rules, restated as engineering constraints, not suggestions:
 `firstFreeSlot` export (and exported the previously module-private
 `WIDGET_ORDER`) to the existing `useWidgetGrid.js` rather than a new file.
 
-**New (Phase 3–5, not yet built):** `useWidgetSizeTier.ts`,
-`usePrefersReducedMotion.js`; `useWidgetGrid.test.js`.
+**New (Phase 3, shipped):** `src/hooks/useWidgetSizeTier.ts`;
+`src/components/PanelContent.css` (not in the original file list — restores
+`SectionPanel.css`'s deleted base panel-content rules, a prerequisite this
+phase found rather than planned for; see Phase 3's own notes above).
+
+**New (Phase 4–5, not yet built):** `usePrefersReducedMotion.js`;
+`useWidgetGrid.test.js`.
 
 **Substantially rewritten (done):** `Board.tsx` (`.board__body` →
 `<WidgetGrid>`, header untouched; Phase 2 added the `home` renderTile
@@ -405,10 +459,11 @@ widgets" row from Phase 1; Phase 2 made the Home row a full `MenuRow`),
 `HomeSheet.jsx` (Phase 2: device state hoisted out to `useMockHomeState`,
 `Icon` imported from the new `homeIcons.jsx` instead of defined locally),
 `SettingsSheet.jsx` (Phase 2: Home on/off row + "no room yet" hint in
-`BoardLayoutCategory`).
-
-**Substantially rewritten (not yet done):** `ChoresPanel.jsx`/
-`ShoppingPanel.jsx` (new `'micro'` tier + tile-shape CSS — Phase 3).
+`BoardLayoutCategory`; Phase 3: collapsed `BoardLayoutCategory`'s three
+sections to one shared on/off chip row, removing the Full/Compact choice —
+see Phase 3's notes above), `ChoresPanel.jsx`/`ShoppingPanel.jsx` (Phase 3:
+new `'micro'` render + loading-skeleton branches, default `mode = 'full'`,
+import the new `PanelContent.css`).
 
 **Lightly touched:** `useDetailLevel.ts` (unchanged internally, ref
 re-pointed — done), `Sheet.jsx` (untouched until Phase 4's morph needs a

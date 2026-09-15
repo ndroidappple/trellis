@@ -74,8 +74,8 @@ const DEFAULT_WIDGET_LAYOUT = {
 }
 
 const DEFAULT_SETTINGS = {
-  chores: 'full',
-  shopping: 'full',
+  chores: 'on',
+  shopping: 'on',
   // Off by default and, unlike chores/shopping, ships with no default grid
   // placement either (see defaultLayout's own comment in useWidgetGrid.js)
   // — the board's appearance doesn't change for an existing household when
@@ -1208,7 +1208,17 @@ export default function Wall({ profile, people, onRenameSelf }) {
       .select('board_settings, weekly_budget_cents')
       .maybeSingle()
     if (error) return setError(error.message)
-    if (data?.board_settings) setSettings({ ...DEFAULT_SETTINGS, ...data.board_settings })
+    if (data?.board_settings) {
+      const merged = { ...DEFAULT_SETTINGS, ...data.board_settings }
+      // Pre-Phase 3 rows may still hold 'full'/'compact' from the old
+      // stored Full/Compact setting — size is measured now (see
+      // useWidgetSizeTier), so anything but 'off' just means the section is
+      // on. No migration needed, same defensive-read shape sanitizeLayout
+      // already uses for a stored widget layout.
+      merged.chores = merged.chores === 'off' ? 'off' : 'on'
+      merged.shopping = merged.shopping === 'off' ? 'off' : 'on'
+      setSettings(merged)
+    }
     if (data?.weekly_budget_cents != null) setBudget(data.weekly_budget_cents)
   }, [])
 
@@ -1917,7 +1927,7 @@ export default function Wall({ profile, people, onRenameSelf }) {
         days={days}
         loading={!booted}
         settings={settings}
-        chores={<ChoresPanel mode="full" {...choresPanelProps} />}
+        chores={<ChoresPanel {...choresPanelProps} />}
         choresCount={
           booted
             ? overdueCount > 0
@@ -1925,7 +1935,7 @@ export default function Wall({ profile, people, onRenameSelf }) {
               : `${choresDone} of ${trackableChores.length} done`
             : undefined
         }
-        shopping={<ShoppingPanel mode="full" {...shoppingPanelProps} />}
+        shopping={<ShoppingPanel {...shoppingPanelProps} />}
         shoppingCount={booted ? `${shoppingRemaining} to buy` : undefined}
         homeDevices={homeState.devices}
         onToggleHome={homeState.toggle}

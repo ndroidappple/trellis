@@ -1,19 +1,22 @@
-import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { cloneElement, Fragment, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { useDetailLevel, weightedRowsFor, weekFloorFor } from '../hooks/useDetailLevel';
+import { useWidgetSizeTier } from '../hooks/useWidgetSizeTier';
 import { useOrientation } from '../hooks/useOrientation';
 import { useViewportClass } from '../hooks/useViewportClass';
 import { WeekGrid, type DayData } from './WeekGrid';
-import { WidgetGrid, type Placement } from './WidgetGrid';
+import { WidgetGrid, WIDGET_GAP_PX, type Placement } from './WidgetGrid';
 import { WidgetTile } from './WidgetTile';
 import HomeWidget from './HomeWidget';
-import { MIN_CELL_SPAN, WIDGET_ORDER } from '../hooks/useWidgetGrid';
+import { MIN_CELL_SPAN, ROW_MIN_PX, WIDGET_ORDER } from '../hooks/useWidgetGrid';
 import type { Person } from './PersonBadge';
 import './Board.css';
 
-/** Still `'full' | 'compact' | 'off'` for now — Phase 3 owns replacing the
-    full/compact distinction with the new size-tier system; on/off is all
-    this phase reads (see the renderTile switch below). */
-export type SectionMode = 'full' | 'compact' | 'off';
+/** On/off only, same shape as `HomeMode` — Full/Compact used to be a stored
+    *setting* here, but once a widget can be dragged to any size that stops
+    meaning anything: `useWidgetSizeTier` now decides full/compact/micro from
+    the tile's own measured content area (see renderTile below), and Settings
+    only ever offers on/off for these three sections. */
+export type SectionMode = 'on' | 'off';
 
 /** Home has no Full/Compact *setting* the way To-Do/Shopping do — its
     small/large split is automatic (see HomeWidget.jsx), not chosen — so it
@@ -128,8 +131,19 @@ const NOOP_GESTURE = {
 
 export function Board(props: Props) {
   const [weekRef, level] = useDetailLevel(weightedRowsFor(props.days));
+  const [todoRef, todoTier] = useWidgetSizeTier();
+  const [shoppingRef, shoppingTier] = useWidgetSizeTier();
   const orientation = useOrientation();
   const viewportClass = useViewportClass();
+
+  // Same role as weekFloor below, for the two widgets whose content now
+  // adapts to a measured size instead of a stored setting — this is the
+  // "must not regress" min-height floor the widget-home-screen plan calls
+  // out by name, so a dragged-small tile's body never silently clips below
+  // the grid's own declared minimum.
+  const todoShoppingFloor =
+    MIN_CELL_SPAN[orientation].todo.h * ROW_MIN_PX +
+    (MIN_CELL_SPAN[orientation].todo.h - 1) * WIDGET_GAP_PX;
 
   const flourishes = props.flourishes ?? [];
   const cycleable = (props.flourishCycleable ?? true) && !!props.onCycleFlourish;
@@ -217,7 +231,15 @@ export function Board(props: Props) {
           onOpen={props.onOpenChores}
           {...tileProps}
         >
-          {props.chores}
+          {/* Measured here, not inside WidgetTile — same reasoning as
+              board__week above: the ref needs to sit on the element whose
+              size the tier is derived from, and props.chores was already
+              instantiated by Wall.jsx with its own default mode before this
+              component ever ran, so that has to be overridden rather than
+              set once. */}
+          <div className="board__widget-measure" ref={todoRef} style={{ minHeight: todoShoppingFloor }}>
+            {cloneElement(props.chores as ReactElement, { mode: todoTier })}
+          </div>
         </WidgetTile>
       );
     }
@@ -232,7 +254,9 @@ export function Board(props: Props) {
           onOpen={props.onOpenShopping}
           {...tileProps}
         >
-          {props.shopping}
+          <div className="board__widget-measure" ref={shoppingRef} style={{ minHeight: todoShoppingFloor }}>
+            {cloneElement(props.shopping as ReactElement, { mode: shoppingTier })}
+          </div>
         </WidgetTile>
       );
     }

@@ -4,6 +4,7 @@ import AddRow from './AddRow'
 import SwipeAway from './SwipeAway'
 import { formatCents } from '../lib/cost'
 import { groupByAisle, qtyLabel } from '../lib/shopping'
+import './PanelContent.css'
 
 /**
  * The cart footer answers three different questions depending on who's
@@ -165,7 +166,7 @@ export function ShoppingAisles({
  * live weekly grocery total computed from the meal plan — see cost.js.
  */
 export default function ShoppingPanel({
-  mode,
+  mode = 'full',
   loading,
   items,
   cost,
@@ -181,6 +182,13 @@ export default function ShoppingPanel({
   const [view, setView] = useState(0)
 
   if (loading) {
+    if (mode === 'micro') {
+      return (
+        <div className="panel-micro">
+          <SkeletonRows count={1} />
+        </div>
+      )
+    }
     return mode === 'compact' ? (
       <div className="panel-strip">
         <SkeletonRows count={1} />
@@ -193,6 +201,15 @@ export default function ShoppingPanel({
   }
 
   const remaining = items.filter((i) => !i.checked).length
+
+  if (mode === 'micro') {
+    return (
+      <div className="panel-micro">
+        <span className="panel-micro__figure">{remaining}</span>
+        <span className="panel-micro__label">to buy</span>
+      </div>
+    )
+  }
 
   if (mode === 'compact') {
     return (

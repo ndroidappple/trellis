@@ -3,6 +3,7 @@ import SwipeAway from './SwipeAway'
 import { SkeletonRows } from './Skeleton'
 import AddRow from './AddRow'
 import { priorityLabel } from '../lib/capture'
+import './PanelContent.css'
 
 /**
  * Assembles chores into the shapes SectionPanel.css already has rules for.
@@ -230,7 +231,7 @@ function EpisodicRow({
 }
 
 export default function ChoresPanel({
-  mode,
+  mode = 'full',
   loading,
   groups = [],
   choreCount = 0,
@@ -260,6 +261,13 @@ export default function ChoresPanel({
   allDone = false,
 }) {
   if (loading) {
+    if (mode === 'micro') {
+      return (
+        <div className="panel-micro">
+          <SkeletonRows count={1} />
+        </div>
+      )
+    }
     return mode === 'compact' ? (
       <div className="panel-strip">
         <SkeletonRows count={1} />
@@ -267,6 +275,15 @@ export default function ChoresPanel({
     ) : (
       <div className="panel-rows">
         <SkeletonRows count={4} />
+      </div>
+    )
+  }
+
+  if (mode === 'micro') {
+    return (
+      <div className="panel-micro">
+        <span className="panel-micro__figure">{allDone ? '✓' : pendingCount}</span>
+        <span className="panel-micro__label">{allDone ? 'All done' : 'to do'}</span>
       </div>
     )
   }

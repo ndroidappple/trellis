@@ -1,0 +1,252 @@
+/* Shared layouts for To-Do/Shopping panel contents. Restores the base rules
+   SectionPanel.css used to own before it was deleted for WidgetTile.tsx —
+   the tile chrome moved, but ChoresPanel.jsx/ShoppingPanel.jsx's own markup
+   (panel-rows, panel-list, panel-strip, panel-chip, panel-cart) still needs
+   a home, and neither file imported a stylesheet of its own before this.
+   Used by both the widget tiles and PanelSheets.jsx's full-page sheets
+   (via Sheet.css's own .sheet__panel overrides, which already assumed
+   these existed). */
+
+/* These were overflow:hidden, which silently amputated any list longer than
+   the panel — no scrollbar, no fade, no indication the rest existed.
+   overscroll-behavior keeps a flick inside the panel from rubber-banding the
+   whole board, which on a wall-mounted kiosk looks like the app coming
+   loose. */
+.panel-rows {
+  /* Grow into whatever the panel has spare and scroll past that. Without the
+     grow it sizes to content, so a short list leaves the pinned add row
+     floating mid-panel; without the min-height:0 a long one refuses to shrink
+     and pushes that row off the bottom instead of scrolling. */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  /* Keeps the row's × clear of the scrollbar. iPadOS draws overlay
+     scrollbars on top of content and reserves nothing for them, so
+     scrollbar-gutter does nothing there — real padding is the only thing
+     that moves the × out from under the bar you are dragging. */
+  padding-right: 12px;
+}
+
+/* A plain column now, not a grid.
+ *
+ * It used to be the grid that laid the shopping items out, two or four across.
+ * The list is grouped into aisles since 013, and a grid here made each *aisle*
+ * a grid cell rather than each item — so one column of aisles sat in the left
+ * half of the panel and the rest overflowed. The columns moved inside
+ * .shop-aisle__items, which is the element that actually holds items. */
+.panel-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Same reason as .panel-rows above — the shopping rows carry an × too. */
+  padding-right: 12px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* One-tap re-adding for chores this household has typed before. Quieter than
+   a chore row — these are a shortcut to creating one, not one themselves —
+   but still a real fingertip target at arm's length. */
+.panel-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Filled, not dashed — same reasoning as the board's own add buttons
+   (WeekGrid.css): a dashed outline reads as unfinished, not as quiet. Stays
+   the quietest tier of the three ("shortcut to creating one, not one
+   itself"), so it gets the plain ink tint rather than the warmer amber the
+   more prominent add controls picked up — this one shouldn't outrank them. */
+.panel-quick__chip {
+  min-height: 40px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--chip-face);
+  color: var(--ink-soft);
+  font-family: var(--font-text);
+  font-size: 18px;
+}
+
+.panel-quick__chip:active {
+  background: var(--row-face);
+  color: var(--ink);
+}
+
+/* Bounded rather than free to grow: a compact tile has a declared height
+   (see WidgetTile's fixed cell span), and an unusually long chore/shopping
+   list wrapping to several rows of chips would otherwise push past it with
+   no scroll to catch the overflow the way .panel-rows/.panel-list do. */
+.panel-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.panel-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--row-face);
+  border-radius: 999px;
+  padding: 8px 15px 8px 10px;
+  font-size: 19px;
+  min-height: 46px;
+  /* A wide-short widget tile can be narrower than the old fixed 380px dock
+     sidebar this was always tuned against — truncate rather than let a long
+     chore title force the strip to wrap somewhere ugly or overflow it. Both
+     current callers pass plain text with no wrapping element, so ellipsis on
+     the chip itself is enough; a future caller mixing text with a badge
+     would need to move this onto its own text span instead. */
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-chip .person-badge { width: 30px; height: 30px; font-size: 15px; }
+
+/* A button now — tapping cycles total / remaining / percent — but it has to
+   keep reading as a footer figure, not a control. */
+.panel-cart {
+  border-top: 1px solid var(--rule);
+  margin-top: 12px;
+  padding-top: 14px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+
+  width: 100%;
+  background: none;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+  min-height: 44px;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.panel-cart:active .panel-cart__figure {
+  color: var(--ink-soft);
+}
+
+/* Over budget is worth noticing, but this is a household grocery list, not
+   an alarm — colour only, no weight change or icon. */
+.panel-cart__figure.is-over {
+  color: var(--error);
+}
+
+/* Button left, caveat right, on one line. flex-shrink on the caveat and
+   nowrap on the button mean a long caveat truncates rather than pushing the
+   footer into a second row — the panel has a declared height, so a row
+   gained here is a row lost from the list above. */
+.panel-cart__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  min-height: 40px;
+}
+
+.panel-cart__caveat {
+  font-size: 16px;
+  color: var(--ink-faint);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sized for a fingertip at arm's length rather than a cursor. Quiet by
+   default: this is a convenience on a board people mostly read, and it sits
+   directly under the largest number on the panel. */
+.panel-cart__add {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--row-face);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 17px;
+  white-space: nowrap;
+}
+
+.panel-cart__add:active {
+  background: var(--chip-face);
+}
+
+/* Nothing left to add is the resting state most of the week, so it has to
+   read as finished rather than broken. */
+.panel-cart__add:disabled {
+  background: none;
+  border-color: transparent;
+  color: var(--ink-faint);
+}
+
+.panel-cart__label { font-size: 18px; color: var(--ink-soft); }
+
+.panel-cart__figure {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 30px;
+}
+
+.panel-cart__figure .of {
+  font-family: var(--font-text);
+  font-size: 19px;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* The 'micro' tier — a tile too small in both dimensions for even a chip
+   strip. One number is the whole widget, so it gets the tile's full body
+   rather than sharing it with anything else. */
+.panel-micro {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.panel-micro__figure {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.panel-micro__label {
+  font-size: 15px;
+  color: var(--ink-soft);
+}

@@ -1548,8 +1548,12 @@ export default function Wall({ profile, people, onRenameSelf }) {
     if (editing || glancing || mealEditing || dayViewing || settingsOpen || bookOpen || homeOpen || reschedulingChore) return
     if (menuOpen) return
     // Holding a "+" button shouldn't also summon settings behind the dialog
-    // it opens.
-    if (e.target.closest?.('button, input, a, label')) return
+    // it opens. `.widget-tile__head-plain` is Calendar's own long-press
+    // target (its size menu — see WidgetTile.tsx) and the only WidgetTile
+    // head that isn't a real `<button>`, so it needs the same exclusion or
+    // this board-wide gesture races it and wins, opening Settings instead
+    // of the size menu — confirmed on real hardware.
+    if (e.target.closest?.('button, input, a, label, .widget-tile__head-plain')) return
 
     pressOrigin.current = { x: e.clientX, y: e.clientY }
     pressTimer.current = setTimeout(() => {

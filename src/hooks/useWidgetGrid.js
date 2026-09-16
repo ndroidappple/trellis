@@ -323,19 +323,35 @@ function nearestPreset(orientation, widgetId, w, h) {
 }
 
 /**
- * Validates a whole layout against a grid config + each widget's
- * SIZE_PRESETS — used when loading a persisted layout (household default or
- * a device override) that may predate this file's move to discrete presets,
- * or have been saved against a different GRID_CONFIG than the one currently
- * rendering. Snaps anything that isn't an exact preset match to its nearest
- * one rather than clamping to a floor that may no longer be selectable, and
- * drops anything that still doesn't fit; callers should fall back to
- * `defaultLayout` for anything dropped.
+ * Validates a whole layout against a grid config — used when loading a
+ * persisted layout (household default or a device override) that may have
+ * been saved against a different GRID_CONFIG than the one currently
+ * rendering, or predate this file's move to discrete presets. Drops
+ * anything that doesn't fit; callers should fall back to `defaultLayout`
+ * for anything dropped.
+ *
+ * Deliberately does NOT snap a placement to its nearest preset just because
+ * it isn't an exact match — confirmed on real hardware to be actively
+ * harmful: a household's live layout predated even the numbers currently in
+ * SIZE_PRESETS (Calendar had shipped at portrait h:10 before a later tweak
+ * grew its "large" preset to h:11), and snapping every placement to its
+ * nearest preset on every read grew Calendar by a row, which now collided
+ * with To-Do/Shopping sitting exactly where the *old* Calendar height had
+ * left room for them — silently dropping both from the board. A stored
+ * size only gets touched if it's actually invalid (non-positive, or bigger
+ * than the grid itself); anything that already fits, colliding with nothing,
+ * is left exactly as it was, preset match or not — the same "only correct
+ * what's actually broken" contract this function had before presets existed
+ * (it used to clamp to a floor, never re-snap something already valid).
  */
 export function sanitizeLayout(layout, gridConfig, orientation) {
   const kept = []
   for (const placement of layout ?? []) {
-    const { w, h } = nearestPreset(orientation, placement.id, placement.w, placement.h)
+    const sizeIsSane =
+      placement.w > 0 && placement.h > 0 && placement.w <= gridConfig.cols && placement.h <= gridConfig.rows
+    const { w, h } = sizeIsSane
+      ? placement
+      : nearestPreset(orientation, placement.id, placement.w, placement.h)
     const candidate = clampOrigin({ ...placement, w, h }, gridConfig)
     if (!isWithinBounds(candidate, gridConfig)) continue
     if (findCollision(kept, placement.id, candidate)) continue

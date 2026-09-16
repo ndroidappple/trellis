@@ -549,6 +549,47 @@ way that test comes back is the actual, final piece of real-hardware data
 this feature needs before this can be called done — every number here is
 still first-guess otherwise.
 
+**Two real bugs the first actual on-device test of this revision found,
+both fixed same-day:**
+
+1. **Long-pressing Calendar opened Settings instead of its size menu.**
+   Root cause: this app already has a board-wide "hold anywhere → Settings"
+   gesture (`Wall.jsx`'s `handlePressStart`) that bails out on
+   `button, input, a, label` so it never fights a control's own gesture —
+   but Calendar's `.widget-tile__head-plain` (the only `WidgetTile` head
+   that isn't a real `<button>`, since Calendar has no page to open) wasn't
+   in that exclusion list, so both long-press handlers raced on the same
+   element and the board's own gesture won. Fixed by adding
+   `.widget-tile__head-plain` to the exclusion selector. To-Do/Shopping/Home
+   were never affected — their heads are real buttons, already excluded.
+2. **In portrait, only Calendar rendered — To-Do and Shopping vanished
+   despite being on.** This household's actual live `board_settings.
+   widgetLayout` predates even the numbers in this revision's own
+   `SIZE_PRESETS`: Calendar was stored at portrait `h:10`, not the `h:11`
+   "large" preset here (an even earlier tweak than this session gave
+   Calendar one extra row of drag slack), with To-Do/Shopping at `h:6`
+   sitting at `y:10` — sized and positioned against Calendar's *old*
+   height. `sanitizeLayout`'s rewrite for this revision snapped every
+   placement to its nearest preset unconditionally on every read; snapping
+   Calendar up to `h:11` grew it by one row into where the dock was already
+   sitting, and the (correctly-working) collision check silently dropped
+   both dock widgets. Fixed by only touching a stored size when it's
+   actually invalid (non-positive, or bigger than the grid) — anything that
+   already fits, colliding with nothing, is left exactly as it was, preset
+   match or not. This is the same restraint `sanitizeLayout` always had
+   before presets existed (it used to clamp to a floor, never re-snap
+   something already valid) and should have kept.
+
+**What this real data changes about the still-open clipping question
+above:** the "long-press Calendar → Medium" test this doc originally
+proposed won't actually demonstrate anything for this household's stored
+layout — To-Do/Shopping's own bottom edge (`y:10 + h:6` = row 16) already
+pins the grid to its full nominal height independent of whatever size
+Calendar is. The test that will actually move `occupiedExtent`'s number:
+shrink **To-Do and/or Shopping** (not Calendar) via their own size menus,
+since the dock, not Calendar, is what's currently binding portrait's
+reserved height in this specific layout.
+
 ### Phase 5 — Testing, hardening, final hardware verification — NOT STARTED
 - **vitest**, introduced here for real, closing a gap the project's own docs
   already flag as wanted (`cost.js`, `week.js`, `useToday` were already

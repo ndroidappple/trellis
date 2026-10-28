@@ -1193,7 +1193,6 @@ link. Settled the hard way; the constraints below are all load-bearing.
 - `public/favicon.svg` is still the purple template bolt, off-palette. The
   home-screen icon (`apple-touch-icon.png`) was redrawn in the real palette;
   the browser-tab favicon wasn't.
-- README is still Vite template boilerplate.
 - Decide whether to bring back a to-do list UI, and if so, where — no
   design surface currently exists for a third dock section, and
   `SectionDock` hardcodes two children.
